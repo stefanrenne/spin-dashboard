@@ -1,0 +1,11 @@
+.git
+.github
+unraid
+docs
+tests
+node_modules
+*.md
+package.json
+requirements-dev.txt
+pytest.ini
+**/__pycache__

@@ -1,0 +1,12 @@
+{
+  "name": "spin-dashboard",
+  "private": true,
+  "description": "Frontend tests for the Spin Dashboard",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/js/*.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.0"
+  }
+}

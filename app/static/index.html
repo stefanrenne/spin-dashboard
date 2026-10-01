@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spin-activiteit Unraid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E9EDF1; --panel:#F7F9FB; --ink:#17212B; --muted:#5B6875; --line:#CBD3DB;
+  --spin:#2458C6; --spin-fill:rgba(36,88,198,.14); --idle:#8C98A4; --up:#B97F00; --focus:#2458C6;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#10161D; --panel:#18212B; --ink:#E3E9EF; --muted:#93A1AE; --line:#2A3642;
+    --spin:#7EA8FF; --spin-fill:rgba(126,168,255,.16); --idle:#5E6B78; --up:#F2B53A; --focus:#7EA8FF;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10161D; --panel:#18212B; --ink:#E3E9EF; --muted:#93A1AE; --line:#2A3642;
+  --spin:#7EA8FF; --spin-fill:rgba(126,168,255,.16); --idle:#5E6B78; --up:#F2B53A; --focus:#7EA8FF;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.5 "Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 48px}
+h1{font-size:1.75rem;line-height:1.15;margin:0;font-weight:700;letter-spacing:-.01em}
+h2{font-size:1rem;margin:0 0 14px;font-weight:600}
+.muted{color:var(--muted)}
+button,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+.top{display:flex;flex-wrap:wrap;gap:16px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:24px}
+.top p{margin:4px 0 0}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:none;padding:7px 12px;cursor:pointer;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 14px;cursor:pointer}
+.btn.primary{background:var(--spin);border-color:var(--spin);color:#fff}
+:root[data-theme="dark"] .btn.primary{color:#0c1320}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .btn.primary{color:#0c1320}}
+
+/* status */
+.status{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;margin-bottom:24px;max-width:640px}
+.status h2{margin-bottom:6px}
+.status p{margin:0}
+.status code{font-size:13px}
+
+/* lanes */
+.lanes{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 18px 14px}
+.row{display:grid;grid-template-columns:5.5rem 1fr 11rem;gap:14px;align-items:center}
+.axis{height:30px;position:relative}
+.axis span{position:absolute;bottom:4px;transform:translateX(-50%);font-size:12px;color:var(--muted);white-space:nowrap}
+.lane{padding:6px 0;border-top:1px solid var(--line)}
+.lane:first-of-type{border-top:0}
+.lane-name{font-weight:600}
+.lane-name small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.trace{position:relative;height:40px;cursor:crosshair}
+.trace svg{display:block;width:100%;height:100%;overflow:visible}
+.trace .grid{stroke:var(--line);stroke-width:1}
+.trace .fill{fill:var(--spin-fill)}
+.trace .wave{fill:none;stroke:var(--spin);stroke-width:2;stroke-linejoin:round}
+.trace .marks{stroke:var(--up);stroke-width:2}
+.trace .guess{fill:var(--panel);opacity:.55}
+.lane-stats{display:flex;gap:14px;font-size:13px;color:var(--muted)}
+.lane-stats b{color:var(--ink);font-weight:600;font-size:15px}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:12px}
+.legend i{display:inline-block;width:18px;height:10px;margin-right:6px;vertical-align:-1px}
+.lg-spin{background:var(--spin-fill);border-top:2px solid var(--spin)}
+.lg-idle{border-bottom:2px solid var(--spin)}
+.lg-up{width:2px!important;height:12px!important;background:var(--up)}
+
+.lower{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}
+.events-panel{margin-top:20px}
+.filters{display:flex;gap:14px;align-items:center;font-size:13.5px;color:var(--muted)}
+.filters input{accent-color:var(--spin);margin:0 5px 0 0;vertical-align:-2px}
+.cause-row{display:grid;grid-template-columns:minmax(7rem,11rem) 1fr 2.2rem;gap:10px;align-items:center;padding:5px 0;font-size:13.5px}
+.cause-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cause-bar{height:10px;background:var(--bg);border-radius:3px;overflow:hidden}
+.cause-bar i{display:block;height:100%;background:var(--spin);border-radius:3px}
+.cause-row.unknown .cause-name{color:var(--muted)}
+.cause-row.unknown .cause-bar i{background:var(--idle)}
+.cause-row b{text-align:right;font-weight:600}
+td.cause{max-width:360px;overflow:hidden;text-overflow:ellipsis}
+td.disks{white-space:normal;min-width:6rem;max-width:14rem}
+tr.has-sess{cursor:pointer}
+tr.has-sess:hover td{background:var(--bg)}
+.sess{margin-left:10px;border:1px solid var(--line);background:var(--panel);border-radius:5px;padding:0 7px;font-size:12px;color:var(--muted);cursor:pointer}
+.sess[aria-expanded="true"]{border-color:var(--spin);color:var(--ink)}
+tr.sess-row td{background:var(--bg);white-space:normal;padding:8px 10px 10px}
+.files{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto;font-size:13px}
+.files li{display:grid;grid-template-columns:4.6rem 6.5rem 10rem 1fr;gap:10px;padding:2px 0;border-bottom:1px solid var(--line);align-items:center}
+.files li:last-child{border-bottom:0}
+.files time{color:var(--muted)}
+.files .ev{color:var(--muted)}
+.files .ev.w{color:var(--up)}
+.files .pool{color:var(--muted)}
+.files .path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr.sess-row p{margin:0 0 6px}
+.files .by{overflow:hidden}
+.who{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle;font-size:12px;line-height:1.5;padding:0 7px;border-radius:5px;border:1px solid var(--line);color:var(--ink)}
+.who.container{border-color:var(--spin);background:var(--spin-fill)}
+.who.gebruiker{border-color:var(--up);color:var(--up)}
+.who.unraid,.who.onbekend,.who.none{color:var(--muted)}
+h3.sub{font-size:13.5px;font-weight:600;margin:18px 0 6px}
+.kind-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:0;background:var(--idle)}
+.kind-dot.container{background:var(--spin)} .kind-dot.gebruiker{background:var(--up)}
+.cause-bar i.gebruiker{background:var(--up)} .cause-bar i.unraid,.cause-bar i.onbekend{background:var(--idle)}
+@media (max-width:600px){.files li{grid-template-columns:4.6rem 1fr}.files .ev,.files .by{display:none}}
+[hidden]{display:none!important}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+.hist{display:flex;align-items:flex-end;gap:3px;height:170px;padding-top:8px}
+.hist div{flex:1;background:var(--spin);border-radius:2px 2px 0 0;min-height:1px;position:relative}
+.hist div.peak{background:var(--up)}
+.hist-labels{display:flex;gap:3px;margin-top:6px;font-size:11.5px;color:var(--muted)}
+.hist-labels span{flex:1;text-align:center}
+.hist-note{font-size:13px;margin:12px 0 0}
+.panel-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.panel-head h2{margin:0}
+select{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:4px 8px}
+.tablewrap{max-height:340px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:600;color:var(--muted);position:sticky;top:0;background:var(--panel);padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:1px}
+.dot.up{background:var(--up)} .dot.down{background:var(--idle)}
+
+.tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12.5px;padding:6px 9px;border-radius:6px;z-index:10;max-width:260px;line-height:1.35}
+.demo-note{display:inline-block;font-size:12.5px;background:var(--spin-fill);color:var(--ink);padding:2px 8px;border-radius:5px;margin-left:8px}
+
+@media (max-width:820px){
+  .lower{grid-template-columns:1fr}
+  .row{grid-template-columns:4rem 1fr}
+  .lane-stats{grid-column:2;gap:12px}
+  .axis .spacer-r{display:none}
+}
+@media (prefers-reduced-motion:no-preference){
+  .wave{stroke-dasharray:4000;stroke-dashoffset:4000;animation:draw 1.1s ease-out forwards}
+  @keyframes draw{to{stroke-dashoffset:0}}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Wanneer draaien mijn schijven</h1>
+      <p id="sourceLine" class="muted">Data laden</p>
+    </div>
+    <div class="controls" id="controls" hidden>
+      <div class="seg" role="group" aria-label="Periode">
+        <button data-range="1">24 uur</button>
+        <button data-range="7">7 dagen</button>
+        <button data-range="30">30 dagen</button>
+        <button data-range="all">Alles</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="status" id="status" hidden>
+    <h2 id="statusTitle">Nog geen data</h2>
+    <p class="muted" id="statusText"></p>
+  </section>
+
+  <main id="dash" hidden>
+    <section class="lanes" aria-label="Tijdlijn per schijf">
+      <div class="row axis-row"><div></div><div class="axis" id="axis"></div><div class="spacer-r"></div></div>
+      <div id="laneList"></div>
+      <div class="legend">
+        <span><i class="lg-spin"></i>Draait</span>
+        <span><i class="lg-idle"></i>Standby</span>
+        <span><i class="lg-up"></i>Spin-up</span>
+      </div>
+    </section>
+
+    <section class="lower">
+      <div class="panel">
+        <h2>Spin-ups per uur van de dag</h2>
+        <div class="hist" id="hist"></div>
+        <div class="hist-labels" id="histLabels"></div>
+        <p class="hist-note muted" id="histNote"></p>
+      </div>
+      <div class="panel">
+        <h2>Wat maakt de schijven wakker</h2>
+        <div id="causes"></div>
+      </div>
+    </section>
+
+    <section class="panel events-panel">
+      <div class="panel-head">
+        <h2>Gebeurtenissen</h2>
+        <div class="filters">
+          <label><input type="checkbox" id="onlyUp"> Alleen spin-ups</label>
+          <select id="devFilter" aria-label="Filter op schijf"></select>
+        </div>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Tijdstip</th><th>Schijf</th><th>Gebeurtenis</th><th id="causeHead">Oorzaak</th><th>Duurde</th></tr></thead>
+          <tbody id="events"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+const HOUR = 3600e3, DAY = 24*HOUR;
+const LIVE = 'data/spin.csv';
+const LIVE_FILES = ['data/spin.csv', 'data/disks.csv', 'data/activity.csv', 'data/who.csv'];
+const WRITES = /MODIFY|CREATE|DELETE|MOVED_TO/;
+
+let data = null;   // {disks:{dev:[{t,st}]}, names:{dev:name}, act:[{t,disk,ev,path}], source, demo}
+let range = '7';
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- parsing: spin-regels, disks.csv en activity.csv door elkaar ---------- */
+function parseText(text){
+  const now = Date.now(), ev = [], act = [], names = {}, who = [];
+  for (const raw of text.split(/\r?\n/)){
+    const line = raw.trim(); if (!line) continue;
+
+    // who.csv: epoch,soort,naam,pid,actie,/mnt/pool/pad
+    let m = line.match(/^(\d{9,11}),(container|unraid|gebruiker|onbekend),([^,]*),(\d+),([a-z]+),(\/.*)$/);
+    if (m){ who.push({t:+m[1]*1000, kind:m[2], name:m[3], pid:+m[4], op:m[5], path:m[6]}); continue; }
+
+    // activity.csv: epoch,disk1,OPEN,/mnt/disk1/pad
+    m = line.match(/^(\d{9,11}),([\w-]+),([A-Z_+]+),(\/.*)$/);
+    if (m){ act.push({t:+m[1]*1000, disk:m[2], ev:m[3], path:m[4]}); continue; }
+
+    // disks.csv: sdc,disk1
+    m = line.match(/^(sd[a-z]+|nvme\d+n\d+),([\w-]+)$/);
+    if (m){ names[m[1]] = m[2]; continue; }
+
+    // spin.csv: 2026-09-28T03:12:00+02:00,/dev/sdc,standby
+    m = line.match(/^(\d{4}-\d{2}-\d{2}[T ][^,]+),\s*(?:\/dev\/)?([\w-]+),\s*([\w/]+)/);
+    if (m){
+      const t = Date.parse(m[1].replace(' ','T')); const s = m[3].toLowerCase();
+      const st = /standby|sleep/.test(s) ? 'down' : /active|idle/.test(s) ? 'up' : null;
+      if (!isNaN(t) && st) ev.push({t, dev:m[2], st});
+      continue;
+    }
+
+    // syslog
+    m = line.match(/(spinning down|spinning up|spun up|read SMART)\s+\/dev\/([\w-]+)/i);
+    if (!m) continue;
+    let t = NaN;
+    const iso = line.match(/^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)/);
+    if (iso) t = Date.parse(iso[1].replace(' ','T'));
+    else {
+      const s = line.match(/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})/);
+      if (s && s[1] in MONTHS){
+        const y = new Date().getFullYear();
+        t = new Date(y, MONTHS[s[1]], +s[2], +s[3], +s[4], +s[5]).getTime();
+        if (t > now + DAY) t = new Date(y-1, MONTHS[s[1]], +s[2], +s[3], +s[4], +s[5]).getTime();
+      }
+    }
+    if (isNaN(t)) continue;
+    ev.push({t, dev:m[2], st:/down/i.test(m[1]) ? 'down' : 'up'});
+  }
+  return {ev, act, names, who};
+}
+
+function toTransitions(ev){
+  ev.sort((a,b) => a.t - b.t);
+  const disks = {};
+  for (const e of ev){
+    const list = disks[e.dev] || (disks[e.dev] = []);
+    const last = list[list.length-1];
+    if (!last || last.st !== e.st) list.push({t:e.t, st:e.st});
+  }
+  return disks;
+}
+
+/* ---------- helpers ---------- */
+const fmtTime = new Intl.DateTimeFormat('nl-NL',{hour:'2-digit',minute:'2-digit'});
+const fmtSec  = new Intl.DateTimeFormat('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const fmtDay  = new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',month:'short'});
+const fmtFull = new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+function dur(ms){
+  const m = Math.round(ms/60000);
+  if (m < 60) return m + ' min';
+  const h = Math.floor(m/60), r = m%60;
+  if (h < 24) return r ? `${h} u ${r} min` : `${h} u`;
+  const d = Math.floor(h/24), rh = h%24;
+  return rh ? `${d} d ${rh} u` : `${d} d`;
+}
+const nameOf = dev => (data.names || {})[dev] || dev;
+function devOrder(a, b){
+  const na = nameOf(a), nb = nameOf(b);
+  const rank = n => /^parity/.test(n) ? 0 : /^disk\d/.test(n) ? 1 : /^sd/.test(n) ? 3 : 2;
+  return rank(na) - rank(nb) || na.localeCompare(nb, undefined, {numeric:true});
+}
+function evLabel(ev){
+  if (/SMB/.test(ev)) return 'via share';
+  if (/ISDIR/.test(ev)) return 'map geopend';
+  if (/MODIFY/.test(ev)) return 'geschreven';
+  if (/CREATE/.test(ev)) return 'aangemaakt';
+  if (/DELETE/.test(ev)) return 'verwijderd';
+  if (/MOVED_TO/.test(ev)) return 'verplaatst';
+  return 'gelezen';
+}
+// Groepering: /mnt/pool/Media/Series/x.mkv -> Media/Series, /mnt/pool/ -> "Root van pool"
+const partsOf = path => path.split('/').filter(Boolean);
+const isDir = e => /ISDIR/.test(e.ev);
+const isSmb = e => /SMB/.test(e.ev);
+const isRoot = e => partsOf(e.path).length <= 2;
+function shareOf(e){
+  const p = partsOf(e.path);
+  const dirs = (isDir(e) ? p : p.slice(0, -1)).slice(2);
+  return dirs.length ? dirs.slice(0, 2).join('/') : `Root van ${p[1] || e.disk}`;
+}
+function tailOf(e){
+  if (isRoot(e)) return 'alleen mappenlijst';
+  const p = partsOf(e.path);
+  return p[p.length - 1] + (isDir(e) ? '/' : '');
+}
+// Beste verklaring: eerste echte bestand; anders de diepste map die gelezen werd
+function pickCause(hits){
+  const file = hits.find(e => !isDir(e) || isSmb(e));
+  if (file) return file;
+  return hits.reduce((best, e) => partsOf(e.path).length > partsOf(best.path).length ? e : best, hits[0]);
+}
+
+/* ---------- oorzaak zoeken rond een spin-up ---------- */
+const hasAct = () => data.act && data.act.length > 0;
+// Welke activiteit hoort bij deze schijf? Poolleden (trunk2) horen bij de mount (trunk);
+// parity spint alleen op bij writes, dus daarvoor tellen writes op alle schijven.
+function matcherFor(dev){
+  const name = nameOf(dev), parity = /^parity/.test(name);
+  const base = /^disk\d+$/.test(name) ? name : name.replace(/\d+$/, '');
+  return {parity, test: e => parity ? WRITES.test(e.ev) : (e.disk === name || e.disk === base)};
+}
+function actBetween(from, to){
+  const act = data.act; let lo = 0, hi = act.length;
+  while (lo < hi){ const m = (lo+hi) >> 1; if (act[m].t < from) lo = m+1; else hi = m; }
+  const out = [];
+  for (let i = lo; i < act.length && act[i].t <= to; i++) out.push(act[i]);
+  return out;
+}
+function causeOf(dev, t){
+  if (!hasAct()) return null;
+  const m = matcherFor(dev);
+  // spin.csv wordt elke minuut gepeild, dus de trigger ligt tot ~3 min vóór de gelogde tijd
+  const hits = actBetween(t - 180e3, t + 30e3).filter(m.test).map(collapseShare);
+  return {first: hits.length ? pickCause(hits) : null, all: hits, parity: m.parity};
+}
+// Alle bestanden die tijdens een draai-sessie zijn aangesproken (van wekker tot standby)
+function sessionFiles(items){
+  if (!hasAct()) return [];
+  const ms = items.map(r => matcherFor(r.dev));
+  const from = Math.min(...items.map(r => r.t)) - 180e3;
+  const to = Math.max(...items.map(r => r.t + (r.d != null ? r.d : Date.now() - r.t)));
+  const seen = new Set();
+  return actBetween(from, to).filter(e => ms.some(m => m.test(e))).map(collapseShare).filter(e => {
+    const k = e.ev + '|' + e.path;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+}
+function causeTitle(c){
+  if (!c || !c.first) return '';
+  const lines = c.all.slice(0,8).map(e => `${fmtSec.format(e.t)}  ${evLabel(e.ev)}  ${e.path}`);
+  if (c.all.length > 8) lines.push(`en nog ${c.all.length - 8}`);
+  return lines.join('\n');
+}
+function causeHtml(c){
+  if (!c) return '';
+  if (!c.first) return '<span class="muted">Geen bestandsactiviteit gezien</span>';
+  const e = c.first;
+  const what = isRoot(e) ? 'alleen mappenlijst gelezen' : isSmb(e) ? 'via share' : `${evLabel(e.ev)}: ${tailOf(e)}`;
+  const w = whoFor(e);
+  return `<b>${esc(shareOf(e))}</b> <span class="muted">${esc(what)}${c.parity ? ` (via ${esc(e.disk)})` : ''}</span>` +
+    (hasWho() ? ` ${whoBadge(w)}` : '');
+}
+
+/* ---------- wie: bron van een toegang (who.csv van de spin-who container) ---------- */
+const normPath = p => p.replace(/\/+$/, '');
+function indexWho(list){
+  const byPath = new Map();
+  for (const w of list){
+    // SMB/NFS: ook oudere regels per bestand vallen onder de share
+    const k = normPath(isShareUser(w) ? (shareRootOf(w.path) || w.path) : w.path);
+    if (!byPath.has(k)) byPath.set(k, []);
+    byPath.get(k).push(w);
+  }
+  return byPath;
+}
+const hasWho = () => data.who && data.who.size > 0;
+// dichtstbijzijnde bron voor hetzelfde pad (inotify en fanotify zien dezelfde toegang)
+function nearestWho(path, t, filter){
+  const list = data.who.get(normPath(path)); if (!list) return null;
+  let best = null, bd = Infinity;
+  for (const w of list){
+    if (filter && !filter(w)) continue;
+    const d = Math.abs(w.t - t); if (d < bd){ bd = d; best = w; }
+  }
+  // who.csv dedupliceert per 10 minuten, dus een eerdere regel binnen die tijd telt ook
+  return bd <= 660e3 ? best : null;
+}
+const isShareUser = w => w.kind === 'gebruiker' && /^(SMB|NFS)/.test(w.name);
+function shareRootOf(path){
+  const p = path.split('/').filter(Boolean);
+  return p.length >= 3 ? '/' + p.slice(0, 3).join('/') + '/' : null;
+}
+function whoFor(e){
+  if (!e || !hasWho()) return null;
+  // SMB/NFS staat in who.csv als één regel per share; losse bestanden vallen daaronder
+  return nearestWho(e.path, e.t) || (shareRootOf(e.path) ? nearestWho(shareRootOf(e.path), e.t, isShareUser) : null);
+}
+// Toegang via een SMB/NFS-share: niet per bestand tonen, maar één regel per share
+function collapseShare(e){
+  if (isSmb(e) || !hasWho()) return e;
+  const w = whoFor(e), root = shareRootOf(e.path);
+  if (!w || !isShareUser(w) || !root) return e;
+  return {t: e.t, disk: e.disk, ev: 'SMB+ISDIR', path: root};
+}
+const whoLabel = w => w.name;   // soort blijft zichtbaar via kleur en hover
+function whoBadge(w){
+  if (!w) return '<span class="who none">onbekend</span>';
+  const kindNl = {container:'container', gebruiker:'gebruiker', unraid:'Unraid', onbekend:'onbekend'}[w.kind];
+  return `<span class="who ${esc(w.kind)}" title="${esc(kindNl)}, pid ${w.pid}">${esc(whoLabel(w))}</span>`;
+}
+
+/* ---------- activiteit: inotify (activity.csv) + fanotify (who.csv) samen ---------- */
+const OP_EV = {geopend:'OPEN', aangemaakt:'CREATE', verwijderd:'DELETE', verplaatst:'MOVED_TO'};
+// who.csv markeert mappen met een slash aan het eind; oudere regels hadden die nog niet,
+// daar geldt: laatste deel zonder punt, of de pool/share-root zelf, is een map.
+function whoIsDir(path){
+  if (path.endsWith('/')) return true;
+  const p = path.split('/').filter(Boolean);
+  return p.length <= 3 || !p[p.length - 1].includes('.');
+}
+function mergeActivity(act, who){
+  const seen = new Set();
+  const key = (path, t) => normPath(path) + '|' + Math.round(t / 1000);
+  for (const e of act) seen.add(key(e.path, e.t));
+  const extra = [];
+  for (const w of who){
+    // dezelfde toegang staat vaak in beide bestanden; binnen 2 seconden is hetzelfde
+    const s = Math.round(w.t / 1000);
+    let dup = false;
+    for (let d = -2; d <= 2 && !dup; d++) dup = seen.has(normPath(w.path) + '|' + (s + d));
+    if (dup) continue;
+    const dir = whoIsDir(w.path);
+    const pool = w.path.split('/').filter(Boolean)[1] || '';
+    const ev = isShareUser(w) ? 'SMB' : (OP_EV[w.op] || 'OPEN');
+    extra.push({t: w.t, disk: pool, ev: ev + (dir || ev === 'SMB' ? '+ISDIR' : ''),
+                path: ev === 'SMB' ? (shareRootOf(w.path) || w.path)
+                    : dir && !w.path.endsWith('/') ? w.path + '/' : w.path});
+    seen.add(key(w.path, w.t));
+  }
+  return act.concat(extra).sort((p,q) => p.t - q.t);
+}
+
+/* ---------- bereik ---------- */
+function bounds(){
+  let min = Infinity, max = -Infinity;
+  for (const l of Object.values(data.disks)) for (const x of l){ min = Math.min(min,x.t); max = Math.max(max,x.t); }
+  const end = (Date.now() - max < 2*DAY) ? Date.now() : max;
+  const start = range === 'all' ? min : Math.max(min, end - (+range)*DAY);
+  return [start, end];
+}
+function segments(list, a, b){
+  let i = 0, st, guessed = false;
+  while (i < list.length && list[i].t <= a) i++;
+  if (i > 0) st = list[i-1].st;
+  else { st = list[0].st === 'up' ? 'down' : 'up'; guessed = true; }
+  const segs = []; let from = a;
+  for (; i < list.length && list[i].t < b; i++){
+    if (list[i].st === st) continue;
+    segs.push({from, to:list[i].t, st, guessed}); guessed = false;
+    from = list[i].t; st = list[i].st;
+  }
+  segs.push({from, to:b, st, guessed});
+  return segs;
+}
+
+/* ---------- spin-ups die samen horen (zelfde moment, bijv. een pool) ---------- */
+function groupUps(ups){
+  const sorted = ups.slice().sort((p,q) => p.t - q.t), out = [];
+  for (const u of sorted){
+    const g = out[out.length - 1];
+    if (g && u.t - g.t <= 120e3){
+      // vroegste bekende oorzaak binnen de groep wint
+      const a = g.cause && g.cause.first, b = u.cause && u.cause.first;
+      if (b && (!a || b.t < a.t)) g.cause = u.cause;
+    } else out.push({t: u.t, cause: u.cause});
+  }
+  return out;
+}
+
+/* ---------- render ---------- */
+function render(){
+  const [a,b] = bounds(); const span = b - a || 1;
+  const X = t => ((t - a)/span*1000).toFixed(2);
+  const devs = Object.keys(data.disks).sort(devOrder);
+
+  document.querySelectorAll('.seg button').forEach(btn => btn.setAttribute('aria-pressed', btn.dataset.range === range));
+  $('sourceLine').innerHTML = `${devs.length} schijven, ${fmtFull.format(a)} tot ${fmtFull.format(b)}` +
+    (data.demo ? '<span class="demo-note">Voorbeelddata</span>' : '') +
+    (data.source === LIVE ? `<span class="demo-note">Live, bijgewerkt ${fmtTime.format(Date.now())}</span>` : '');
+
+  // as
+  const ticks = []; let step, lab;
+  if (span <= 1.6*DAY){ step = 3*HOUR; lab = t => fmtTime.format(t); }
+  else if (span <= 9*DAY){ step = DAY; lab = t => fmtDay.format(t); }
+  else { step = 7*DAY; lab = t => fmtDay.format(t); }
+  const d0 = new Date(a); d0.setMinutes(0,0,0);
+  if (step >= DAY) d0.setHours(0); else d0.setHours(Math.ceil(d0.getHours()/3)*3);
+  if (step === 7*DAY) d0.setDate(d0.getDate() + ((8 - d0.getDay()) % 7));
+  for (let t = d0.getTime(); t <= b; t += step){
+    const d = new Date(t); if (step >= DAY){ d.setHours(0,0,0,0); t = d.getTime(); }
+    if (t >= a) ticks.push(t);
+  }
+  const edge = ticks.filter(t => (t-a)/span > .03 && (t-a)/span < .97);
+  $('axis').innerHTML = edge.map(t => `<span style="left:${(t-a)/span*100}%">${lab(t)}</span>`).join('');
+  const gridPath = ticks.map(t => `M${X(t)} 0V40`).join('');
+
+  // banen
+  const allUps = [];
+  $('laneList').innerHTML = devs.map(dev => {
+    const segs = segments(data.disks[dev], a, b);
+    const y = st => st === 'up' ? 6 : 34;
+    let wave = `M0 ${y(segs[0].st)}`, fill = '', marks = '', guess = '';
+    let activeMs = 0, ups = 0;
+    segs.forEach((s,i) => {
+      wave += `H${X(s.to)}`;
+      if (segs[i+1]) wave += `V${y(segs[i+1].st)}`;
+      if (s.st === 'up'){ fill += `M${X(s.from)} 40V6H${X(s.to)}V40Z`; activeMs += s.to - s.from; }
+      if (s.guessed) guess += `M0 0H${X(s.to)}V40H0Z`;
+      if (s.st === 'up' && !s.guessed && s.from > a){
+        marks += `M${X(s.from)} 0V9`; ups++;
+        allUps.push({t:s.from, dev, cause: causeOf(dev, s.from)});
+      }
+    });
+    const pct = Math.round(activeMs/span*100), name = nameOf(dev);
+    return `<div class="row lane">
+      <div class="lane-name">${esc(name)}${name !== dev ? `<small>${esc(dev)}</small>` : ''}</div>
+      <div class="trace" data-dev="${esc(dev)}">
+        <svg viewBox="0 0 1000 40" preserveAspectRatio="none" aria-label="${esc(name)}: ${ups} spin-ups, ${pct}% actief">
+          <path class="grid" d="${gridPath}" vector-effect="non-scaling-stroke"/>
+          <path class="fill" d="${fill}"/>
+          <path class="wave" d="${wave}" vector-effect="non-scaling-stroke"/>
+          <path class="marks" d="${marks}" vector-effect="non-scaling-stroke"/>
+          <path class="guess" d="${guess}"/>
+        </svg>
+      </div>
+      <div class="lane-stats">
+        <span><b>${ups}</b> spin-ups</span>
+        <span><b>${pct}%</b> actief</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // histogram
+  const bins = new Array(24).fill(0);
+  allUps.forEach(u => bins[new Date(u.t).getHours()]++);
+  const max = Math.max(1, ...bins), peak = bins.indexOf(Math.max(...bins));
+  $('hist').innerHTML = bins.map((n,h) =>
+    `<div class="${h===peak && n ? 'peak':''}" style="height:${n/max*100}%" title="${String(h).padStart(2,'0')}:00 tot ${String(h+1).padStart(2,'0')}:00: ${n} spin-ups"></div>`).join('');
+  $('histLabels').innerHTML = bins.map((_,h) => `<span>${h%3===0 ? h : ''}</span>`).join('');
+  const days = Math.max(1, span/DAY);
+  $('histNote').textContent = allUps.length
+    ? `${allUps.length} spin-ups in deze periode, gemiddeld ${(allUps.length/days).toFixed(1)} per dag. Drukste uur: ${String(peak).padStart(2,'0')}:00 tot ${String(peak+1).padStart(2,'0')}:00.`
+    : 'Geen spin-ups in deze periode.';
+
+  // oorzaken
+  if (!hasAct()){
+    $('causes').innerHTML = '<p class="muted">Nog geen bestandsactiviteit. Zodra een HDD-pool of array-schijf wordt aangesproken, zie je hier welke mappen de schijven wakker maken.</p>';
+  } else {
+    // Ranglijsten tellen gebeurtenissen, niet schijven: poolleden die samen opspinnen tellen één keer
+    const wakeups = groupUps(allUps);
+    const counts = {}, examples = {};
+    wakeups.forEach(u => {
+      const k = u.cause && u.cause.first ? shareOf(u.cause.first) : '';
+      counts[k] = (counts[k] || 0) + 1;
+      if (!examples[k] && u.cause && u.cause.first) examples[k] = u.cause.first.path;
+    });
+    const rows = Object.entries(counts).sort((p,q) => q[1] - p[1]).slice(0, 8);
+    const mx = rows.length ? rows[0][1] : 1;
+    $('causes').innerHTML = rows.length ? rows.map(([k,n]) => `
+      <div class="cause-row${k ? '' : ' unknown'}" title="${esc(examples[k] || 'Geen bestandsactiviteit rond deze spin-ups')}">
+        <span class="cause-name">${k ? esc(k) : 'Onbekend'}</span>
+        <span class="cause-bar"><i style="width:${n/mx*100}%"></i></span>
+        <b>${n}</b>
+      </div>`).join('') + (rows.some(([k]) => k.startsWith('Root van')) ? '<p class="hist-note muted">Root van een pool betekent dat alleen de mappenlijst van de pool werd gelezen, zonder dat er daarna een bestand werd geopend. Meestal vraagt iets de share-lijst of /mnt/user op, zoals een SMB-verkenner, de webGUI of een container die /mnt/user scant. De plugin Dynamix Cache Directories houdt die lijsten in RAM, zodat de schijf ervoor niet hoeft op te spinnen.</p>' : '')
+      + (counts[''] ? '<p class="hist-note muted">Onbekend betekent geen bestandstoegang rond de spin-up, bijvoorbeeld een SMART-poll, handmatig opspinnen of een map die al uit de cache kwam.</p>' : '')
+      : '<p class="muted">Geen spin-ups in deze periode.</p>';
+
+    // door wie
+    if (hasWho() && wakeups.length){
+      const wc = {};
+      wakeups.forEach(u => {
+        const w = u.cause && u.cause.first ? whoFor(u.cause.first) : null;
+        const k = w ? `${w.kind}|${whoLabel(w)}` : 'none|Onbekend';
+        wc[k] = (wc[k] || 0) + 1;
+      });
+      const wr = Object.entries(wc).sort((p,q) => q[1] - p[1]).slice(0, 8), wm = wr[0][1];
+      $('causes').innerHTML += '<h3 class="sub">Door wie</h3>' + wr.map(([k,n]) => {
+        const [kind, label] = k.split('|');
+        return `<div class="cause-row${kind === 'none' ? ' unknown' : ''}">
+          <span class="cause-name"><span class="kind-dot ${esc(kind)}"></span>${esc(label)}</span>
+          <span class="cause-bar"><i class="${esc(kind)}" style="width:${n/wm*100}%"></i></span>
+          <b>${n}</b></div>`;
+      }).join('');
+    }
+  }
+
+  // filter + tabel
+  const sel = $('devFilter'), cur = sel.value || '';
+  sel.innerHTML = `<option value="">Alle schijven</option>` +
+    devs.map(d => `<option value="${esc(d)}" ${d===cur?'selected':''}>${esc(nameOf(d))}</option>`).join('');
+  renderEvents(a, b);
+  bindTips(a, b);
+}
+
+// Bij "Alle schijven": gebeurtenissen van dezelfde soort binnen 2 minuten van elkaar vormen één rij
+const GROUP_MS = 120e3;
+function groupRows(rows){
+  const groups = [];
+  for (const r of rows){                      // rows: nieuwste eerst
+    const g = groups[groups.length - 1];
+    if (g && g.st === r.st && g.anchor - r.t <= GROUP_MS) g.items.push(r);
+    else groups.push({st:r.st, anchor:r.t, items:[r]});
+  }
+  return groups;
+}
+function durText(items){
+  const ds = items.map(r => r.d).filter(d => d != null);
+  const running = ds.length < items.length;
+  if (!ds.length) return 'nog bezig';
+  const lo = dur(Math.min(...ds)), hi = dur(Math.max(...ds));
+  const span = lo === hi ? lo : `${lo} tot ${hi}`;
+  return running ? `${span}, deels nog bezig` : span;
+}
+function groupCause(items){
+  const cs = items.map(r => ({dev:r.dev, c:causeOf(r.dev, r.t)})).filter(x => x.c);
+  if (!cs.length) return {html:'', title:''};
+  // hoofdoorzaak: de vroegste bestandstoegang in de groep
+  const known = cs.filter(x => x.c.first).sort((p,q) => p.c.first.t - q.c.first.t);
+  const main = known[0] || cs[0];
+  const others = new Set(known.map(x => shareOf(x.c.first)));
+  if (main.c.first) others.delete(shareOf(main.c.first));
+  const extra = others.size ? ` <span class="muted">+${others.size} andere</span>` : '';
+  // schijven met dezelfde toegangen (bijv. leden van één pool) samen in de hover
+  const byText = new Map();
+  cs.forEach(x => {
+    const txt = causeTitle(x.c) || 'geen bestandsactiviteit';
+    byText.set(txt, [...(byText.get(txt) || []), nameOf(x.dev)]);
+  });
+  const title = [...byText].map(([txt, names]) => `${names.join(', ')}:\n${txt}`).join('\n\n');
+  return {html: causeHtml(main.c) + extra, title};
+}
+
+function renderEvents(a, b){
+  const f = $('devFilter').value, onlyUp = $('onlyUp').checked, rows = [];
+  for (const [dev, list] of Object.entries(data.disks)){
+    if (f && dev !== f) continue;
+    list.forEach((x,i) => {
+      if (x.t < a || x.t > b || (onlyUp && x.st !== 'up')) return;
+      const next = list[i+1];
+      rows.push({t:x.t, dev, st:x.st, d: next ? next.t - x.t : null});
+    });
+  }
+  rows.sort((p,q) => q.t - p.t);
+  const groups = f ? rows.map(r => ({st:r.st, anchor:r.t, items:[r]})) : groupRows(rows);
+  $('causeHead').hidden = !hasAct();
+  $('events').innerHTML = groups.slice(0,300).map(g => {
+    const items = g.items.slice().sort((p,q) => devOrder(p.dev, q.dev));
+    const t = Math.min(...items.map(r => r.t));
+    const cause = g.st === 'up' ? groupCause(items) : {html:'', title:''};
+    const key = items.map(r => r.dev).join(',') + '@' + t;
+    const files = g.st === 'up' ? sessionFiles(items) : [];
+    const nFiles = files.filter(e => !isDir(e) || isSmb(e)).length;
+    const open = expanded.has(key);
+    const toggle = files.length
+      ? `<button class="sess" data-key="${esc(key)}" aria-expanded="${open}">${open ? '▾' : '▸'} ${nFiles} ${nFiles === 1 ? 'bestand' : 'bestanden'}</button>` : '';
+    return `<tr${files.length ? ' class="has-sess"' : ''} data-key="${esc(key)}">
+      <td>${fmtFull.format(t)}</td>
+      <td class="disks">${items.map(r => esc(nameOf(r.dev))).join(', ')}</td>
+      <td><span class="dot ${g.st}"></span>${g.st==='up' ? 'Opgespind' : 'Naar standby'}${toggle}</td>
+      ${hasAct() ? `<td class="cause" title="${esc(cause.title)}">${cause.html}</td>` : ''}
+      <td class="muted">${durText(items)}</td></tr>` +
+      (open ? sessionRow(files, t) : '');
+  }).join('') || `<tr><td colspan="5" class="muted">Geen gebeurtenissen in deze periode.</td></tr>`;
+}
+
+const expanded = new Set();
+const relPath = e => '/' + partsOf(e.path).slice(2).join('/') + (isDir(e) ? '/' : '');
+function sessionRow(files, t0){
+  const shown = files.filter(e => !isDir(e) || isSmb(e));
+  const list = shown.length ? shown : files;   // alleen mappen gezien? toon die dan
+  const max = 500;
+  const rows = list.slice(0, max).map(e => `<li>
+      <time>${fmtSec.format(e.t)}</time>
+      <span class="ev ${WRITES.test(e.ev) ? 'w' : ''}">${esc(evLabel(e.ev))}</span>
+      <span class="by">${hasWho() ? whoBadge(whoFor(e)) : esc(e.disk)}</span>
+      <span class="path" title="${esc(e.path)}">${esc(relPath(e))}</span></li>`).join('');
+  const more = list.length > max ? `<p class="muted">en nog ${list.length - max}</p>` : '';
+  const note = !shown.length ? '<p class="muted">Geen bestanden geopend, alleen mappen gelezen.</p>' : '';
+  return `<tr class="sess-row"><td colspan="5">${note}<ol class="files">${rows}</ol>${more}</td></tr>`;
+}
+$('events').addEventListener('click', e => {
+  const tr = e.target.closest('tr.has-sess'); if (!tr) return;
+  const k = tr.dataset.key;
+  expanded.has(k) ? expanded.delete(k) : expanded.add(k);
+  const [a,b] = bounds(); renderEvents(a,b);
+});
+
+function bindTips(a, b){
+  const tip = $('tip');
+  document.querySelectorAll('.trace').forEach(el => {
+    const dev = el.dataset.dev, segs = segments(data.disks[dev], a, b);
+    el.onpointermove = e => {
+      const r = el.getBoundingClientRect();
+      const t = a + (e.clientX - r.left)/r.width*(b - a);
+      const s = segs.find(s => t >= s.from && t <= s.to); if (!s) return;
+      let html = `<strong>${esc(nameOf(dev))}</strong> ${s.st==='up' ? 'draait' : 'in standby'}${s.guessed ? ' (aangenomen)' : ''}<br>`+
+        `${fmtFull.format(s.from)} tot ${fmtTime.format(s.to)}, ${dur(s.to - s.from)}`;
+      if (s.st === 'up' && !s.guessed && s.from > a){
+        const c = causeOf(dev, s.from);
+        const w = c && c.first ? whoFor(c.first) : null;
+        if (c) html += c.first ? `<br>Gewekt door ${esc(shareOf(c.first))}: ${esc(isRoot(c.first) ? 'alleen mappenlijst' : isSmb(c.first) ? 'via share' : evLabel(c.first.ev) + ' ' + tailOf(c.first))}${w ? `, door ${esc(whoLabel(w))}` : ''}`
+                               : '<br>Geen bestandsactiviteit gezien';
+      }
+      tip.innerHTML = html; tip.hidden = false;
+      const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8);
+      tip.style.left = x + 'px'; tip.style.top = (e.clientY + 16) + 'px';
+    };
+    el.onpointerleave = () => tip.hidden = true;
+  });
+}
+
+/* ---------- laden ---------- */
+function load(text, source, demo=false, keepRange=false){
+  const {ev, act, names, who} = parseText(text);
+  if (!ev.length) return false;
+  data = {disks: toTransitions(ev), names, act: mergeActivity(act, who), who: indexWho(who), source, demo};
+  const ts = ev.map(e => e.t), span = Math.max(...ts) - Math.min(...ts);
+  if (!keepRange) range = span > 7*DAY ? '7' : 'all';
+  show();
+  return true;
+}
+function show(){
+  $('status').hidden = true;
+  $('dash').hidden = false; $('controls').hidden = false;
+  render();
+}
+
+document.querySelectorAll('.seg button').forEach(btn => btn.onclick = () => { range = btn.dataset.range; render(); });
+$('devFilter').onchange = $('onlyUp').onchange = () => { const [a,b] = bounds(); renderEvents(a,b); };
+addEventListener('resize', () => $('tip').hidden = true);
+
+/* ---------- voorbeelddata ---------- */
+function demoLog(){
+  const M = Object.keys(MONTHS), lines = [];
+  const stamp = t => { const d = new Date(t);
+    return `${M[d.getMonth()]} ${String(d.getDate()).padStart(2,' ')} ${[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':')}`; };
+  const end = Date.now(), start = end - 6*DAY;
+  const disks = {sdb:['parity',.1], sdc:['disk1',1], sdd:['disk2',.8], sde:['disk3',.4], sdf:['disk4',.15], sdg:['disk5',.6]};
+  let seed = 7; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
+  const pick = arr => arr[Math.floor(rnd()*arr.length)];
+  const films = ['Noorderlicht (2019)/Noorderlicht.mkv','De Vuurtoren (2021)/De Vuurtoren.mkv','Laag Water (2017)/Laag Water.mkv'];
+  const series = ['Polderland/S01/S01E03.mkv','Polderland/S01/S01E04.mkv','Kustwacht/S02/S02E07.mkv','Het Archief/S01/S01E01.mkv'];
+  const act = (t, disk, ev, path) => lines.push({t, l:`${Math.floor(t/1000)},${disk},${ev},${path}`});
+  for (const [dev, [name, busy]] of Object.entries(disks)){
+    lines.push({t:0, l:`${dev},${name}`});
+    const ups = [];
+    for (let d = new Date(start); d < end; d.setDate(d.getDate()+1)){
+      const m = new Date(d); m.setHours(3,40 + Math.floor(rnd()*3),0,0);
+      if (m > start && m < end) ups.push([m.getTime(), 35 + rnd()*40, 'mover']);
+    }
+    let t = start;
+    while (t < end){
+      t += (0.5 + rnd()*9) * HOUR / busy;
+      const h = new Date(t).getHours();
+      const p = (h >= 18 && h <= 23) ? .9 : (h >= 8 && h < 18) ? .4 : .08;
+      if (rnd() < p) ups.push([t, 20 + rnd()*(h >= 18 ? 150 : 50), h >= 18 ? 'avond' : h >= 8 ? 'dag' : 'nacht']);
+    }
+    ups.sort((x,y) => x[0]-y[0]);
+    let freeAt = 0;
+    for (const [u, mins, kind] of ups){
+      if (u < freeAt || u >= end) continue;
+      const down = u + (mins + 15)*60000;
+      lines.push({t:u, l:`${stamp(u)} Tower emhttpd: read SMART /dev/${dev}`});
+      if (down < end) lines.push({t:down, l:`${stamp(down)} Tower emhttpd: spinning down /dev/${dev}`});
+      freeAt = down + 60000;
+      const at = u - (10 + rnd()*50)*1000, disk = name === 'parity' ? 'disk1' : name;
+      const r = rnd();
+      if (kind === 'mover') act(at, disk, 'CREATE', `/mnt/${disk}/Media/Films/${pick(films)}`);
+      else if (name === 'parity'){ if (r < .7) act(at, pick(['disk1','disk2','disk5']), 'MODIFY', `/mnt/disk2/Documenten/Administratie/${pick(['jaaroverzicht.xlsx','scan-0412.pdf'])}`); }
+      else if (kind === 'avond'){ if (r < .9) act(at, disk, 'OPEN', `/mnt/${disk}/Media/Series/${pick(series)}`); }
+      else if (kind === 'dag'){
+        if (r < .4) act(at, disk, 'OPEN+ISDIR', `/mnt/${disk}/Media/Series/${pick(['Polderland','Kustwacht'])}/`);
+        else if (r < .75) act(at, disk, 'OPEN', `/mnt/${disk}/Foto's/2024/${pick(['IMG_2231.jpg','IMG_2240.heic'])}`);
+        else if (r < .9) act(at, disk, 'OPEN', `/mnt/${disk}/Backups/homey/${pick(['backup-0921.tar','backup-0922.tar'])}`);
+      }
+    }
+  }
+  return lines.sort((x,y) => x.t - y.t).map(x => x.l).join('\n');
+}
+
+/* ---------- live data van de server (docker) ---------- */
+let lastText = '';
+// 'ok' | 'missing' | 'empty'
+async function fetchLive(){
+  const texts = await Promise.all(LIVE_FILES.map(f =>
+    fetch(f, {cache:'no-cache'}).then(r => r.ok ? r.text() : null).catch(() => null)));
+  if (texts[0] === null) return 'missing';
+  const text = texts.map(t => t || '').join('\n');
+  if (data && data.source === LIVE && text === lastText) return 'ok';
+  const first = !data;
+  if (!load(text, LIVE, false, !first)) return 'empty';
+  lastText = text;
+  return 'ok';
+}
+function showStatus(result){
+  if (data) return;   // laatst geladen data blijft staan bij een tijdelijke fout
+  const msg = {
+    missing: 'Nog geen meting. De eerste peiling van de schijven volgt binnen een minuut na het starten van de container.',
+    empty: 'Er zijn nog geen draaiende schijven gevonden. Controleer in de containerlog of /dev en /var/local/emhttp bereikbaar zijn.'
+  }[result];
+  $('statusText').textContent = msg + ' De pagina probeert het elke minuut opnieuw.';
+  $('status').hidden = false;
+  $('sourceLine').textContent = 'Geen data';
+}
+async function tick(){
+  const result = await fetchLive();
+  if (result !== 'ok') showStatus(result);
+}
+
+(async () => {
+  if (new URLSearchParams(location.search).has('demo')){ load(demoLog(), 'voorbeeld', true); return; }
+  await tick();
+  setInterval(() => { if (!document.hidden) tick(); }, 60000);
+})();
+})();
+</script>
+</body>
+</html>

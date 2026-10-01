@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>spin-dashboard</Name>
+  <Repository>ghcr.io/stefanrenne/spin-dashboard:latest</Repository>
+  <Registry>https://github.com/stefanrenne/spin-dashboard/pkgs/container/spin-dashboard</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>true</Privileged>
+  <Support>https://forums.unraid.net/topic/YOUR_SUPPORT_THREAD/</Support>
+  <Project>https://github.com/stefanrenne/spin-dashboard</Project>
+  <Overview>Shows when your hard drives spin up and down, and why. A timeline per disk with every spin-up, the file that woke the drive, and which process opened it: a Docker container (Plex, Sonarr, Bazarr, ...), Unraid itself (mover, cron, webGUI) or a user (SMB share, shell). Works with the array and with HDD pools (XFS, Btrfs, ZFS).[br][br]
+How it works: drive state is polled with hdparm -C, which never wakes a sleeping drive. File access is traced with fanotify (fatrace). Because of that the container needs privileged mode, the host PID namespace, read-only access to /mnt and the Docker socket (to show container names). It never writes to your shares.[br][br]
+Tip: keep the appdata path on an SSD/cache pool, otherwise the dashboard itself keeps a drive awake.</Overview>
+  <Category>Tools: Status:Stable</Category>
+  <WebUI>http://[IP]:[PORT:8089]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/stefanrenne/spin-dashboard/main/unraid/spin-dashboard.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/stefanrenne/spin-dashboard/main/unraid/icon.png</Icon>
+  <ExtraParams>--pid=host</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Run on Unraid 6.12 or newer. Requires privileged mode and --pid=host (set in Extra Parameters).</Requires>
+
+  <Config Name="WebUI port" Target="8089" Default="8089" Mode="tcp" Description="Port of the dashboard." Type="Port" Display="always" Required="true" Mask="false">8089</Config>
+
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/spin-dashboard" Mode="rw" Description="Where spin.csv, disks.csv and who.csv are stored. Keep this on an SSD/cache pool." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/spin-dashboard</Config>
+
+  <Config Name="Mounts (read-only)" Target="/mnt" Default="/mnt" Mode="ro,slave" Description="Read-only access to the array and pools, needed to trace which files are opened. Slave propagation picks up pools that mount after the container started." Type="Path" Display="advanced" Required="true" Mask="false">/mnt</Config>
+
+  <Config Name="Unraid disk info (read-only)" Target="/emhttp" Default="/var/local/emhttp" Mode="ro" Description="Unraid's disk state (disks.ini), used for names like parity, disk1 and pool members." Type="Path" Display="advanced" Required="true" Mask="false">/var/local/emhttp</Config>
+
+  <Config Name="Docker socket (read-only)" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="ro" Description="Only used to look up container names for the processes that open files." Type="Path" Display="advanced" Required="false" Mask="false">/var/run/docker.sock</Config>
+
+  <Config Name="Poll interval" Target="POLL_INTERVAL" Default="60" Mode="" Description="Seconds between drive state checks." Type="Variable" Display="advanced" Required="false" Mask="false">60</Config>
+
+  <Config Name="Retention (days)" Target="RETENTION_DAYS" Default="30" Mode="" Description="How many days of history to keep." Type="Variable" Display="advanced" Required="false" Mask="false">30</Config>
+
+  <Config Name="Watch override" Target="WATCH" Default="" Mode="" Description="Optional, space separated. Leave empty to watch all HDD-backed disks and pools automatically, e.g. /mnt/disk1 /mnt/tank" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>
