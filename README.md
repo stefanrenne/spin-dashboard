@@ -18,6 +18,47 @@ See when your hard drives spin up and down, and **why**.
 https://raw.githubusercontent.com/stefanrenne/spin-dashboard/main/unraid/spin-dashboard.xml
 ```
 
+**docker run:**
+
+```bash
+docker run -d --name spin-dashboard \
+  --privileged --pid=host \
+  -p 8089:8089 \
+  -v /mnt/user/appdata/spin-dashboard:/data \
+  -v /mnt:/mnt:ro,slave \
+  -v /var/local/emhttp:/emhttp:ro \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  --restart unless-stopped \
+  ghcr.io/stefanrenne/spin-dashboard:latest
+```
+
+**Docker Compose:**
+
+```yaml
+services:
+  spin-dashboard:
+    image: ghcr.io/stefanrenne/spin-dashboard:latest
+    container_name: spin-dashboard
+    privileged: true
+    pid: host
+    ports:
+      - "8089:8089"
+    volumes:
+      - /mnt/user/appdata/spin-dashboard:/data
+      - /mnt:/mnt:ro,slave
+      - /var/local/emhttp:/emhttp:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      POLL_INTERVAL: "60"     # seconds between drive state checks
+      RETENTION_DAYS: "30"    # days of history to keep
+      # WATCH: "/mnt/disk1 /mnt/tank"  # optional, overrides automatic mount detection
+    restart: unless-stopped
+```
+
+Keep the `/data` path on an SSD/cache pool (see [Tips](#tips)). The `/mnt`, `/emhttp` and Docker
+socket mounts and the privileged/host-PID settings are explained under
+[Permissions, and why](#permissions-and-why).
+
 Open the WebUI on port 8089. The first drive check runs within a minute; file sources appear as soon as a disk is accessed.
 
 ## How it works
