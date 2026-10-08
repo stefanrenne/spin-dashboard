@@ -42,9 +42,20 @@ op `python:3.13-slim-trixie`, en de README waarschuwt.
 De plugin Dynamix Cache Directories houdt mapgegevens in het geheugen door continu `find` over de
 shares te draaien. Dat zijn opens die fatrace ziet, maar die geen schijf wekken; gelogd zouden ze
 `who.csv` vullen (één regel per map per `DEDUP_SECONDS`) en de ranglijsten domineren. Daarom slaat
-`classify()` processen uit `IGNORE_PROCS` en hun kinderen over. Beperking: is `find` al gestopt
-voordat het event verwerkt wordt, dan is de ouder niet meer te zien en verschijnt het als
-`find (al gestopt)`.
+`classify()` processen uit `IGNORE_PROCS` en hun nakomelingen over, op procesnaam of op de
+opdrachtregel (`bash /pad/cache_dirs`).
+
+In de praktijk (cache_dirs 2.2.9) is de keten `cache_dirs` → subshell → `timeout` → `find`, en loopt
+`find` in een fractie van een seconde door duizenden mappen. De consumer loopt dan seconden achter:
+het proces is al weg en de events verschenen massaal als `find (al gestopt)`, soms ook als
+`unraid,find` als de keten al half was afgebroken. Daarom drie lagen:
+
+1. `classify_early()` bepaalt de bron al in de leesthread, zodra een nieuwe PID binnenkomt.
+2. `classify()` onthoudt de uitkomst per PID (en procesnaam, tegen PID-hergebruik) `PID_TTL` (30 s).
+3. Vangnet: is in de laatste `IGNORE_TTL` (300 s) een proces met dezelfde naam genegeerd, dan wordt
+   een proces met die naam zonder herkenbare bron (`(al gestopt)` of alleen de procesnaam) ook
+   genegeerd. Een `find` vanuit een shell, SMB of cron heeft wel een bron en blijft zichtbaar; een
+   losse `find` zonder bron in die vijf minuten valt helaas mee weg.
 
 ## Tijdzones
 Unraid kan op UTC staan terwijl containers lokale tijd gebruiken; cron op de host rekent dan anders

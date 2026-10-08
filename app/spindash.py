@@ -37,6 +37,8 @@ WATCH_OVERRIDE = os.environ.get("WATCH", "").split()   # optioneel: vaste lijst 
 # processen (en hun kinderen) die niet gelogd worden; cache_dirs opent continu alle mappen
 IGNORE_PROCS = set(os.environ.get("IGNORE_PROCS", "cache_dirs").split())
 SHFS_DELAY = 0.4
+PID_TTL = 30          # uitkomst van classify() per PID zo lang onthouden
+IGNORE_TTL = 300      # zo lang na een genegeerd proces dezelfde naam zonder bron ook negeren
 
 # Paden naar het hostsysteem; in tests te vervangen
 PROC = "/proc"
@@ -211,6 +213,8 @@ events = queue.Queue(maxsize=20_000)
 procs = []
 recent = {}
 names = {}
+seen = {}             # pid -> (tijd, comm, uitkomst van classify)
+ignored_comms = {}    # comm -> laatste keer dat een proces met die naam genegeerd werd
 stats = {"written": 0, "dropped": 0}
 MY_PID = str(os.getpid())
 
@@ -229,6 +233,27 @@ def chain_of(pid, limit=15):
             break
         chain.append(comm)
     return chain
+
+
+def is_ignored(pid, limit=15):
+    """Hoort dit proces (of een voorouder) bij IGNORE_PROCS? Kijkt naar de procesnaam en naar de
+    opdrachtregel, voor scripts die als `bash /pad/naar/cache_dirs` gestart zijn."""
+    while pid and pid not in ("0", "1") and limit:
+        limit -= 1
+        try:
+            comm, ppid = proc_comm_ppid(pid)
+        except (OSError, ValueError, IndexError):
+            return False
+        if comm in IGNORE_PROCS:
+            return True
+        try:
+            args = open(f"{PROC}/{pid}/cmdline", "rb").read().split(b"\0")[:2]
+        except OSError:
+            args = []
+        if any(os.path.basename(a.decode(errors="replace")) in IGNORE_PROCS for a in args):
+            return True
+        pid = ppid
+    return False
 
 
 def container_id(pid):
@@ -260,16 +285,43 @@ def container_name(cid):
     return name
 
 
-def classify(pid, comm):
+def classify(pid, comm, now=None):
+    """Als classify_now(), maar onthoudt de uitkomst per PID. Een kortlevend proces (find van
+    cache_dirs) is vaak al gestopt voordat al zijn events verwerkt zijn; de latere events krijgen
+    zo dezelfde uitkomst als het eerste, toen het proces nog draaide.
+
+    Vangnet: is kort geleden een proces met dezelfde naam genegeerd, dan wordt een proces met die
+    naam zonder herkenbare bron (gestopt, of verweesd zodat de keten niet meer te volgen is) ook
+    genegeerd. Een find vanuit een shell, SMB of cron heeft wel een bron en wordt gewoon gelogd."""
+    now = time.time() if now is None else now
+    hit = seen.get(pid)
+    if hit and now - hit[0] < PID_TTL and hit[1] == comm:
+        return hit[2]
+    src = classify_now(pid, comm)
+    if src is None:
+        ignored_comms[comm] = now
+    elif (src in (("unraid", comm), ("onbekend", f"{comm} (al gestopt)"))
+          and now - ignored_comms.get(comm, -IGNORE_TTL) < IGNORE_TTL):
+        src = None
+    if src is None or src[0] != "onbekend":
+        seen[pid] = (now, comm, src)
+        if len(seen) > 10_000:
+            for k, v in list(seen.items()):
+                if now - v[0] >= PID_TTL:
+                    seen.pop(k, None)
+    return src
+
+
+def classify_now(pid, comm):
     """(soort, naam) van een proces, of None als het genegeerd wordt (IGNORE_PROCS)."""
     cid = container_id(pid)
     if cid:
         return "container", container_name(cid)
     if not os.path.exists(f"{PROC}/{pid}"):
         return "onbekend", f"{comm} (al gestopt)"
-    chain = [comm] + (chain_of(pid) or [comm])[1:]
-    if IGNORE_PROCS.intersection(chain):
+    if is_ignored(pid):
         return None
+    chain = [comm] + (chain_of(pid) or [comm])[1:]
     if "smbd" in chain:
         return "gebruiker", "SMB-share"
     if any(c.startswith("nfsd") for c in chain):
@@ -362,6 +414,14 @@ def resolve_shfs_later(ts, pid, op, path):
     threading.Thread(target=run, daemon=True).start()
 
 
+def classify_early(line):
+    """Direct bij binnenkomst (in de leesthread) de bron van een nieuwe PID bepalen, zolang het
+    proces nog draait. De consumer kan achterlopen; classify() geeft dan de onthouden uitkomst."""
+    m = LINE.match(line)
+    if m and m.group(3) not in seen and m.group(3) != MY_PID:
+        classify(m.group(3), m.group(2))
+
+
 def handle(line):
     m = LINE.match(line.rstrip("\n"))
     if not m:
@@ -402,6 +462,10 @@ def start_fatrace(mp):
 
     def pump_out():
         for line in p.stdout:
+            try:
+                classify_early(line)
+            except Exception as e:
+                log("fout bij vroege classificatie:", repr(e))
             try:
                 events.put_nowait(line)
             except queue.Full:

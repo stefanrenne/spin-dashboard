@@ -63,11 +63,73 @@ def test_classify_ignores_cache_dirs_and_children(sd, monkeypatch):
     make_proc(t, 901, "timeout", ppid=900)
     make_proc(t, 902, "find", ppid=901)
     make_proc(t, 903, "find")
-    assert sd.classify("900", "cache_dirs") is None
-    assert sd.classify("902", "find") is None
-    assert sd.classify("903", "find") == ("unraid", "find")
+    assert sd.classify_now("900", "cache_dirs") is None
+    assert sd.classify_now("902", "find") is None
+    assert sd.classify_now("903", "find") == ("unraid", "find")
     monkeypatch.setattr(sd, "IGNORE_PROCS", set())
-    assert sd.classify("902", "find") == ("unraid", "find")
+    assert sd.classify_now("902", "find") == ("unraid", "find")
+
+
+def test_classify_remembers_pid_after_process_stopped(sd):
+    import shutil
+    t = sd._tmp
+    make_proc(t, 900, "cache_dirs")
+    make_proc(t, 902, "find", ppid=900)
+    make_proc(t, 950, "du")
+    assert sd.classify("902", "find", now=1000) is None
+    assert sd.classify("950", "du", now=1000) == ("unraid", "du")
+    shutil.rmtree(t / "proc" / "902")
+    shutil.rmtree(t / "proc" / "950")
+    assert sd.classify("902", "find", now=1010) is None                   # gestopt, toch genegeerd
+    assert sd.classify("950", "du", now=1010) == ("unraid", "du")
+    assert sd.classify("950", "du", now=1040) == ("onbekend", "du (al gestopt)")       # na PID_TTL
+    assert sd.classify("950", "ls", now=1010) == ("onbekend", "ls (al gestopt)")       # PID hergebruikt
+    assert sd.classify("951", "x", now=1010) == ("onbekend", "x (al gestopt)")
+    assert "951" not in sd.seen                                            # onbekend niet onthouden
+
+
+def test_classify_ignores_script_started_via_bash(sd):
+    t = sd._tmp
+    d = make_proc(t, 900, "bash")
+    (d / "cmdline").write_bytes(b"/bin/bash\0/usr/local/emhttp/plugins/dynamix.cache.dirs/scripts/cache_dirs\0-i\0Media\0")
+    make_proc(t, 901, "timeout", ppid=900)
+    make_proc(t, 902, "find", ppid=901)
+    assert sd.classify_now("902", "find") is None
+
+
+def test_classify_safety_net_for_orphaned_and_stopped(sd):
+    t = sd._tmp
+    make_proc(t, 900, "cache_dirs")
+    make_proc(t, 901, "timeout", ppid=900)
+    make_proc(t, 902, "find", ppid=901)
+    make_proc(t, 911, "timeout")                       # ouder al weg: verweesd
+    make_proc(t, 912, "find", ppid=911)
+    make_proc(t, 800, "crond")
+    make_proc(t, 801, "find", ppid=800)
+    assert sd.classify("912", "find", now=1000) == ("unraid", "find")       # nog niets genegeerd
+    sd.seen.clear()
+    assert sd.classify("902", "find", now=1000) is None
+    assert sd.classify("912", "find", now=1001) is None                     # verweesd
+    assert sd.classify("999", "find", now=1002) is None                     # al gestopt
+    assert sd.classify("801", "find", now=1003) == ("unraid", "cron / User Scripts")
+    assert sd.classify("998", "ls", now=1004) == ("onbekend", "ls (al gestopt)")
+    assert sd.classify("997", "find", now=1400) == ("onbekend", "find (al gestopt)")  # na IGNORE_TTL
+
+
+def test_classify_early_then_handle_after_process_stopped(sd, monkeypatch):
+    import shutil
+    calls = []
+    monkeypatch.setattr(sd, "write_who", lambda *a: calls.append(a))
+    make_proc(sd._tmp, 900, "cache_dirs")
+    make_proc(sd._tmp, 901, "timeout", ppid=900)
+    make_proc(sd._tmp, 902, "find", ppid=901)
+    line = "1.0 find(902): O   /mnt/trunk/Media/series/\n"
+    sd.classify_early(line)
+    shutil.rmtree(sd._tmp / "proc" / "902")
+    shutil.rmtree(sd._tmp / "proc" / "901")
+    sd.handle(line)
+    sd.handle("1.0 find(902): O   /mnt/trunk/Media/films/\n")
+    assert calls == []
 
 
 def test_handle_skips_ignored_processes(sd, monkeypatch):

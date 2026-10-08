@@ -35,6 +35,9 @@ komt binnen. Elke minuut wordt gecontroleerd of de mounts veranderd zijn of een 
 voorouder, worden niet gelogd. Daarna de volgorde: container (cgroup) → gestopt proces → SMB/NFS → shell (sshd, ttyd,
 login) → shfs → btrfs → mover → cron → webGUI → procesnaam. Opens door `shfs` worden 0,4 s later
 opnieuw bekeken: welk ander proces heeft hetzelfde bestand via `/mnt/user` open (inode-vergelijking)?
+De bron van een nieuwe PID wordt al in de leesthread bepaald (`classify_early`) en per PID
+`PID_TTL` (30 s) onthouden, zodat events van een proces dat inmiddels gestopt is dezelfde bron
+krijgen; "gestopt" zelf wordt niet onthouden. Zie *Cache Dirs negeren* in `decisions.md`.
 
 **Deduplicatie.** Zelfde pad + soort + naam maar één keer per `DEDUP_SECONDS` (600). SMB/NFS wordt
 samengevat tot één regel per share.

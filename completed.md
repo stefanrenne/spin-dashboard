@@ -4,6 +4,8 @@ Nieuwste bovenaan.
 
 ## 2026-10-08: Cache Dirs
 - Processen uit `IGNORE_PROCS` (standaard `cache_dirs`) en hun kinderen worden niet gelogd
+- Bron per PID al bij binnenkomst bepalen en 30 s onthouden: events van kortlevende processen niet meer als `(al gestopt)`
+- Cache Dirs ook herkennen via de opdrachtregel en, als vangnet, aan dezelfde procesnaam zonder bron
 - README: `docker run`- en Docker Compose-voorbeeld, tip over Cache Dirs
 
 ## 2026-10-01: Unraid-app
