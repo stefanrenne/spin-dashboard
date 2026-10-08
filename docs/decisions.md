@@ -37,6 +37,15 @@ What's Up Docker met `THRESHOLD=all` zag `python:3.15-rc-windowsservercore-ltsc2
 `python:3.13-slim`, verwijderde de container en kon de nieuwe niet starten. Het image pint daarom
 op `python:3.13-slim-trixie`, en de README waarschuwt.
 
+## Cache Dirs negeren
+
+De plugin Dynamix Cache Directories houdt mapgegevens in het geheugen door continu `find` over de
+shares te draaien. Dat zijn opens die fatrace ziet, maar die geen schijf wekken; gelogd zouden ze
+`who.csv` vullen (één regel per map per `DEDUP_SECONDS`) en de ranglijsten domineren. Daarom slaat
+`classify()` processen uit `IGNORE_PROCS` en hun kinderen over. Beperking: is `find` al gestopt
+voordat het event verwerkt wordt, dan is de ouder niet meer te zien en verschijnt het als
+`find (al gestopt)`.
+
 ## Tijdzones
 Unraid kan op UTC staan terwijl containers lokale tijd gebruiken; cron op de host rekent dan anders
 dan de apps. spin.csv schrijft daarom altijd een expliciete offset, en who.csv epoch-seconden.

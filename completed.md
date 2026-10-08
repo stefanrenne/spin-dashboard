@@ -2,6 +2,10 @@
 
 Nieuwste bovenaan.
 
+## 2026-10-08: Cache Dirs
+- Processen uit `IGNORE_PROCS` (standaard `cache_dirs`) en hun kinderen worden niet gelogd
+- README: `docker run`- en Docker Compose-voorbeeld, tip over Cache Dirs
+
 ## 2026-10-01: Unraid-app
 - Alles samengevoegd in één container (`app/spindash.py`): poller, fatrace-watcher, webserver, onderhoud
 - Pools en schijfnamen uit `disks.ini` in plaats van `zpool`/`lsblk` op de host

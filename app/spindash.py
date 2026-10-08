@@ -34,6 +34,8 @@ POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
 RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", "30"))
 DEDUP_S = int(os.environ.get("DEDUP_SECONDS", "600"))   # zelfde pad + bron maar 1x per 10 min
 WATCH_OVERRIDE = os.environ.get("WATCH", "").split()   # optioneel: vaste lijst mounts
+# processen (en hun kinderen) die niet gelogd worden; cache_dirs opent continu alle mappen
+IGNORE_PROCS = set(os.environ.get("IGNORE_PROCS", "cache_dirs").split())
 SHFS_DELAY = 0.4
 
 # Paden naar het hostsysteem; in tests te vervangen
@@ -259,12 +261,15 @@ def container_name(cid):
 
 
 def classify(pid, comm):
+    """(soort, naam) van een proces, of None als het genegeerd wordt (IGNORE_PROCS)."""
     cid = container_id(pid)
     if cid:
         return "container", container_name(cid)
     if not os.path.exists(f"{PROC}/{pid}"):
         return "onbekend", f"{comm} (al gestopt)"
     chain = [comm] + (chain_of(pid) or [comm])[1:]
+    if IGNORE_PROCS.intersection(chain):
+        return None
     if "smbd" in chain:
         return "gebruiker", "SMB-share"
     if any(c.startswith("nfsd") for c in chain):
@@ -349,7 +354,9 @@ def resolve_shfs_later(ts, pid, op, path):
         time.sleep(SHFS_DELAY)
         hit = via_user_share(path)
         if hit:
-            write_who(ts, *classify(*hit), hit[0], op, path)
+            src = classify(*hit)
+            if src:
+                write_who(ts, *src, hit[0], op, path)
         else:
             write_who(ts, "unraid", "shfs (via /mnt/user)", pid, op, path)
     threading.Thread(target=run, daemon=True).start()
@@ -370,7 +377,9 @@ def handle(line):
     if comm == "shfs" and op == "geopend" and not path.endswith("/"):
         resolve_shfs_later(ts, pid, op, path)
         return
-    write_who(ts, *classify(pid, comm), pid, op, path)
+    src = classify(pid, comm)
+    if src:
+        write_who(ts, *src, pid, op, path)
 
 
 def consumer():

@@ -57,6 +57,28 @@ def test_classify_host_processes(sd):
     assert sd.classify("9999", "ghost") == ("onbekend", "ghost (al gestopt)")
 
 
+def test_classify_ignores_cache_dirs_and_children(sd, monkeypatch):
+    t = sd._tmp
+    make_proc(t, 900, "cache_dirs")
+    make_proc(t, 901, "timeout", ppid=900)
+    make_proc(t, 902, "find", ppid=901)
+    make_proc(t, 903, "find")
+    assert sd.classify("900", "cache_dirs") is None
+    assert sd.classify("902", "find") is None
+    assert sd.classify("903", "find") == ("unraid", "find")
+    monkeypatch.setattr(sd, "IGNORE_PROCS", set())
+    assert sd.classify("902", "find") == ("unraid", "find")
+
+
+def test_handle_skips_ignored_processes(sd, monkeypatch):
+    calls = []
+    monkeypatch.setattr(sd, "write_who", lambda *a: calls.append(a))
+    make_proc(sd._tmp, 900, "cache_dirs")
+    make_proc(sd._tmp, 902, "find", ppid=900)
+    sd.handle("1.0 find(902): O   /mnt/trunk/Media/series/\n")
+    assert calls == []
+
+
 def test_share_root():
     assert spindash.share_root("/mnt/trunk/Media/films/a.mkv") == "/mnt/trunk/Media/"
     assert spindash.share_root("/mnt/trunk/Media/") == "/mnt/trunk/Media/"

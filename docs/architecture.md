@@ -31,7 +31,8 @@ Per mount draait `fatrace -c` met filter `O+D<` (open, create, delete, move). `f
 `FAN_MARK_FILESYSTEM`, dus ook toegang vanuit andere mount-namespaces (host, andere containers)
 komt binnen. Elke minuut wordt gecontroleerd of de mounts veranderd zijn of een `fatrace` gestopt is.
 
-**Classificatie.** Volgorde: container (cgroup) → gestopt proces → SMB/NFS → shell (sshd, ttyd,
+**Classificatie.** Processen uit `IGNORE_PROCS` (standaard `cache_dirs`), of met zo'n proces als
+voorouder, worden niet gelogd. Daarna de volgorde: container (cgroup) → gestopt proces → SMB/NFS → shell (sshd, ttyd,
 login) → shfs → btrfs → mover → cron → webGUI → procesnaam. Opens door `shfs` worden 0,4 s later
 opnieuw bekeken: welk ander proces heeft hetzelfde bestand via `/mnt/user` open (inode-vergelijking)?
 

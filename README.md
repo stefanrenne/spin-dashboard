@@ -52,6 +52,7 @@ services:
       POLL_INTERVAL: "60"     # seconds between drive state checks
       RETENTION_DAYS: "30"    # days of history to keep
       # WATCH: "/mnt/disk1 /mnt/tank"  # optional, overrides automatic mount detection
+      # IGNORE_PROCS: "cache_dirs"     # processes (and their children) that are not logged
     restart: unless-stopped
 ```
 
@@ -85,6 +86,7 @@ Open the WebUI on port 8089. The first drive check runs within a minute; file so
 
 - **Keep appdata on an SSD/cache pool.** Otherwise the dashboard's own writes keep a drive awake.
 - **Exclusive shares** (*Settings → Global Share Settings → Permit exclusive shares*) let the dashboard see the real source of more accesses, because they bypass shfs.
+- **Cache Dirs** (*Dynamix Cache Directories*) keeps folder listings in memory, so apps like Sonarr and Radarr can check their root folders without waking a drive. Its scans are not logged (see *Ignore processes* / `IGNORE_PROCS`). Set *Scan user shares* to *No*, otherwise the scans show up as `shfs (via /mnt/user)`.
 - **Auto-updaters** such as What's Up Docker or Watchtower recreate containers. If yours uses a high update threshold, check that it handles privileged containers correctly.
 
 ## Troubleshooting

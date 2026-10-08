@@ -38,4 +38,5 @@ Tip: keep the appdata path on an SSD/cache pool, otherwise the dashboard itself 
   <Config Name="Retention (days)" Target="RETENTION_DAYS" Default="30" Mode="" Description="How many days of history to keep." Type="Variable" Display="advanced" Required="false" Mask="false">30</Config>
 
   <Config Name="Watch override" Target="WATCH" Default="" Mode="" Description="Optional, space separated. Leave empty to watch all HDD-backed disks and pools automatically, e.g. /mnt/disk1 /mnt/tank" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Ignore processes" Target="IGNORE_PROCS" Default="cache_dirs" Mode="" Description="Space separated process names whose file access is not logged, including their child processes. Default skips the Cache Dirs plugin, which constantly scans all folders." Type="Variable" Display="advanced" Required="false" Mask="false">cache_dirs</Config>
 </Container>
