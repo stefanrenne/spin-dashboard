@@ -107,3 +107,17 @@ def test_migrate_is_safe_to_repeat_and_keeps_new_data(sd):
 def test_migrate_without_old_files_does_nothing(sd):
     sd.migrate()
     assert sd.list_days() == [] and not os.path.exists(sd.LEGACY)
+
+
+def test_fatrace_version(sd, monkeypatch):
+    class R:
+        def __init__(self, code, out): self.returncode, self.stdout = code, out
+    monkeypatch.setattr(sd.subprocess, "run", lambda *a, **k: R(0, "0.17.0-1"))
+    assert sd.fatrace_version() == "0.17.0-1"
+    monkeypatch.setattr(sd.subprocess, "run", lambda *a, **k: R(1, ""))     # geen dpkg-pakket
+    monkeypatch.setattr(sd.shutil, "which", lambda name: "/usr/bin/fatrace")
+    assert sd.fatrace_version() == "found"
+    def missing(*a, **k): raise FileNotFoundError("dpkg-query")
+    monkeypatch.setattr(sd.subprocess, "run", missing)
+    monkeypatch.setattr(sd.shutil, "which", lambda name: None)
+    assert sd.fatrace_version() == "not found"

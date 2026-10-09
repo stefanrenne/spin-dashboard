@@ -20,6 +20,7 @@ import json
 import os
 import queue
 import re
+import shutil
 import socket
 import subprocess
 import threading
@@ -237,7 +238,7 @@ def poll_once(last, now=None):
     if lines:
         append_lines(lines)
     if not devs:
-        log("Geen HDD's gevonden. Is /var/local/emhttp gemount en draait de container privileged?")
+        log("No HDDs found. Is /var/local/emhttp mounted and is the container privileged?")
     return n
 
 
@@ -247,7 +248,7 @@ def poller():
         try:
             poll_once(last)
         except Exception as e:
-            log("poller-fout:", repr(e))
+            log("poller error:", repr(e))
         time.sleep(POLL_INTERVAL)
 
 
@@ -496,7 +497,7 @@ def consumer():
         try:
             handle(events.get())
         except Exception as e:
-            log("fout bij event:", repr(e))
+            log("error handling event:", repr(e))
 
 
 def start_fatrace(mp):
@@ -505,7 +506,7 @@ def start_fatrace(mp):
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              text=True, errors="replace", bufsize=1)
     except OSError as e:
-        log("fatrace start mislukt voor", mp, e)
+        log("could not start fatrace for", mp, e)
         return
     procs.append(p)
 
@@ -514,12 +515,12 @@ def start_fatrace(mp):
             try:
                 classify_early(line)
             except Exception as e:
-                log("fout bij vroege classificatie:", repr(e))
+                log("error in early classification:", repr(e))
             try:
                 events.put_nowait(line)
             except queue.Full:
                 stats["dropped"] += 1
-        log("fatrace gestopt voor", mp, "exitcode", p.wait())
+        log("fatrace stopped for", mp, "exit code", p.wait())
 
     def pump_err():
         for line in p.stderr:
@@ -541,18 +542,18 @@ def watcher():
                     p.terminate()
                 procs.clear()
                 if mounts:
-                    log("Bewaakt:", " ".join(mounts))
+                    log("Watching:", " ".join(mounts))
                     for mp in mounts:
                         start_fatrace(mp)
                 else:
-                    log("Geen HDD-mounts onder /mnt gevonden; nieuwe poging over een minuut")
+                    log("No HDD mounts found under /mnt; retrying in a minute")
                 current = mounts
         except Exception as e:
-            log("watcher-fout:", repr(e))
+            log("watcher error:", repr(e))
         beat += 1
         if beat % 10 == 0 and current:
-            log(f"actief: {len(procs)} fatrace, {stats['written']} regels, "
-                f"wachtrij {events.qsize()}, gemist {stats['dropped']}")
+            log(f"active: {len(procs)} fatrace, {stats['written']} lines, "
+                f"queue {events.qsize()}, dropped {stats['dropped']}")
         time.sleep(60)
 
 
@@ -580,7 +581,7 @@ def prune_days(now=None):
             except OSError:
                 pass
     if old:
-        log(f"{len(old)} dagbestand(en) ouder dan {RETENTION_DAYS} dagen verwijderd")
+        log(f"removed {len(old)} day file(s) older than {RETENTION_DAYS} days")
 
 
 def relabel_existing(now=None):
@@ -612,7 +613,7 @@ def relabel_existing(now=None):
             if changed:
                 open(path + ".tmp", "w").writelines(lines)
                 os.replace(path + ".tmp", path)
-                log(f"{day}: {changed} oudere regels alsnog aan een container gekoppeld")
+                log(f"{day}: linked {changed} older line(s) to a container")
 
 
 def housekeeping():
@@ -620,7 +621,7 @@ def housekeeping():
         try:
             prune_days()
         except Exception as e:
-            log("opruimen mislukt:", repr(e))
+            log("cleanup failed:", repr(e))
         time.sleep(6 * 3600)
 
 
@@ -708,9 +709,9 @@ def migrate():
             if os.path.exists(dest):
                 dest += f".{int(time.time())}"
             os.replace(f, dest)
-    log(f"Migratie: {len(recs)} regels uit {', '.join(os.path.basename(f) for f in sources)} "
-        f"verdeeld over {len(by_day)} dagbestanden; oude bestanden staan in {LEGACY}"
-        + (f"; {skipped} onleesbare regels overgeslagen" if skipped else ""))
+    log(f"Migration: {len(recs)} lines from {', '.join(os.path.basename(f) for f in sources)} "
+        f"split into {len(by_day)} day files; old files moved to {LEGACY}"
+        + (f"; skipped {skipped} unreadable line(s)" if skipped else ""))
 
 
 # =====================================================================================
@@ -746,24 +747,32 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 def web():
     srv = http.server.ThreadingHTTPServer(("", PORT), partial(Handler, directory=STATIC))
-    log(f"Dashboard op poort {PORT}")
+    log(f"Dashboard on port {PORT}")
     srv.serve_forever()
 
 
 # =====================================================================================
+def fatrace_version():
+    """fatrace heeft geen --version; de pakketversie uit dpkg, anders alleen of hij er is."""
+    try:
+        r = subprocess.run(["dpkg-query", "-W", "-f=${Version}", "fatrace"], capture_output=True, text=True)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except OSError:
+        pass
+    return "found" if shutil.which("fatrace") else "not found"
+
+
 def main():
     os.makedirs(DAYS, exist_ok=True)
     try:
         migrate()
     except Exception as e:
-        log("migratie mislukt, oude bestanden blijven staan:", repr(e))
-    try:
-        ver = subprocess.run(["fatrace", "--help"], capture_output=True, text=True).stdout.split("\n")[0]
-    except OSError:
-        ver = "niet gevonden"
-    log(f"Spin Dashboard start (data: {DATA}, peiling elke {POLL_INTERVAL}s, bewaren {RETENTION_DAYS} dagen, fatrace: {ver})")
+        log("migration failed, old files left in place:", repr(e))
+    log(f"Spin Dashboard starting (data: {DATA}, polling every {POLL_INTERVAL}s, "
+        f"keeping {RETENTION_DAYS} days, fatrace: {fatrace_version()})")
     relabel_existing()
-    threading.excepthook = lambda a: log("thread-fout:", repr(a.exc_value))
+    threading.excepthook = lambda a: log("thread error:", repr(a.exc_value))
     for target in (poller, watcher, housekeeping):
         threading.Thread(target=target, daemon=True).start()
     web()

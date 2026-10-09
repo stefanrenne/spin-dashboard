@@ -9,6 +9,7 @@ Newest first.
 - Retention per whole day; `/data/days.json` and `/data/days/<day>.csv` in the web server
 - Markdown documentation translated to English
 - Screenshot of the dashboard (sample data, light and dark) in the README
+- Log messages in English; the start line shows the installed fatrace version instead of its usage text
 
 ## 2026-10-09: languages and browsing
 - UI in English, Dutch, French, German and Spanish; defaults to the browser language, the choice is remembered

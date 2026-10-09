@@ -46,7 +46,7 @@ then builds the image.
 
 ## Conventions
 
-- Code comments and log lines are **Dutch**. Markdown documentation (this file, `docs/`, `todo.md`,
+- Code comments are **Dutch**. Log lines, Markdown documentation (this file, `docs/`, `todo.md`,
   `completed.md`), the README and the CA template are **English**.
 - The UI is multilingual (en, nl, fr, de, es): all texts live in `I18N` in `index.html` and go
   through `t('key')`. A new text gets a key in **every** language; a test checks this.

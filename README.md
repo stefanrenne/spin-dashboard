@@ -101,7 +101,7 @@ Open the WebUI on port 8089. The first drive check runs within a minute; file so
 | Symptom | Check |
 |---|---|
 | No disks in the dashboard | Container log: is `/var/local/emhttp` mounted and is the container privileged? |
-| Spin-ups but no sources | Log should show `Bewaakt: /mnt/…`. If not, set *Watch override* to your mounts, e.g. `/mnt/disk1 /mnt/tank`. |
+| Spin-ups but no sources | Log should show `Watching: /mnt/…`. If not, set *Watch override* to your mounts, e.g. `/mnt/disk1 /mnt/tank`. |
 | Everything shows as `shfs (via /mnt/user)` | The access was too short to trace through shfs. Exclusive shares help. |
 | Containers show as their process name | The Docker socket is not mounted. |
 
