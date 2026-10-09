@@ -2,6 +2,12 @@
 
 Nieuwste bovenaan.
 
+## 2026-10-09: één bestand per dag
+- Alle data in `days/YYYY-MM-DD.csv` met regels `epoch,soort,...` (disk, state, spin, who, activity)
+- `state`-regels bij dagbegin en na herstart, zodat elk dagbestand op zichzelf leesbaar is; geen valse spin-ups
+- Automatische migratie van `spin.csv`, `disks.csv`, `who.csv` en `activity.csv`; oude bestanden naar `legacy/`
+- Bewaartermijn per hele dag; `/data/days.json` en `/data/days/<dag>.csv` in de webserver
+
 ## 2026-10-09: talen en bladeren
 - UI in het Engels, Nederlands, Frans, Duits en Spaans; standaard de browsertaal, keuze wordt onthouden
 - Bladeren door de tijd: per dag (24 uur), per week (7 dagen) en per 30 dagen, met knop "Nu"

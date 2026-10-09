@@ -72,7 +72,7 @@ Open the WebUI on port 8089. The first drive check runs within a minute; file so
 | Disk names | Read from Unraid's `/var/local/emhttp/disks.ini` (parity, disk1, pool members). |
 | File access | `fatrace` (fanotify) on every HDD-backed mount, including ZFS datasets. |
 | Source | The process behind each access is looked up in the host process table. Containers are recognised by cgroup and named via the Docker socket. Access through `/mnt/user` passes through shfs; the dashboard then looks up which process has the file open via `/mnt/user`. |
-| Storage | Plain CSV files in the appdata folder: `spin.csv`, `disks.csv`, `who.csv`. History is kept for 30 days by default. |
+| Storage | One plain CSV file per day in `days/` in the appdata folder, with drive states and file access together. History is kept for 30 days by default. Files from older versions (`spin.csv`, `who.csv`, …) are converted automatically on start and moved to `legacy/`. |
 
 ## Permissions, and why
 

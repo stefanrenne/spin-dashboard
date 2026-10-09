@@ -234,10 +234,8 @@ td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
 <script>
 (() => {
 const $ = id => document.getElementById(id);
-const MONTHS = {Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
 const HOUR = 3600e3, DAY = 24*HOUR;
-const LIVE = 'data/spin.csv';
-const LIVE_FILES = ['data/spin.csv', 'data/disks.csv', 'data/activity.csv', 'data/who.csv'];
+const LIVE = 'live';
 const WRITES = /MODIFY|CREATE|DELETE|MOVED_TO/;
 
 let data = null;   // {disks:{dev:[{t,st}]}, names:{dev:name}, act:[{t,disk,ev,path}], source, demo}
@@ -486,60 +484,41 @@ function applyStatic(){
 }
 setFormatters();
 
-/* ---------- parsing: spin-regels, disks.csv en activity.csv door elkaar ---------- */
+/* ---------- parsing: dagbestanden, regels `epoch,soort,...` (zie docs/data-formats.md) ---------- */
 function parseText(text){
-  const now = Date.now(), ev = [], act = [], names = {}, who = [];
+  const ev = [], act = [], names = {}, who = [];
   for (const raw of text.split(/\r?\n/)){
-    const line = raw.trim(); if (!line) continue;
-
-    // who.csv: epoch,soort,naam,pid,actie,/mnt/pool/pad
-    let m = line.match(/^(\d{9,11}),(container|unraid|gebruiker|onbekend),([^,]*),(\d+),([a-z]+),(\/.*)$/);
-    if (m){ who.push({t:+m[1]*1000, kind:m[2], name:m[3], pid:+m[4], op:m[5], path:m[6]}); continue; }
-
-    // activity.csv: epoch,disk1,OPEN,/mnt/disk1/pad
-    m = line.match(/^(\d{9,11}),([\w-]+),([A-Z_+]+),(\/.*)$/);
-    if (m){ act.push({t:+m[1]*1000, disk:m[2], ev:m[3], path:m[4]}); continue; }
-
-    // disks.csv: sdc,disk1
-    m = line.match(/^(sd[a-z]+|nvme\d+n\d+),([\w-]+)$/);
-    if (m){ names[m[1]] = m[2]; continue; }
-
-    // spin.csv: 2026-09-28T03:12:00+02:00,/dev/sdc,standby
-    m = line.match(/^(\d{4}-\d{2}-\d{2}[T ][^,]+),\s*(?:\/dev\/)?([\w-]+),\s*([\w/]+)/);
-    if (m){
-      const t = Date.parse(m[1].replace(' ','T')); const s = m[3].toLowerCase();
-      const st = /standby|sleep/.test(s) ? 'down' : /active|idle/.test(s) ? 'up' : null;
-      if (!isNaN(t) && st) ev.push({t, dev:m[2], st});
-      continue;
-    }
-
-    // syslog
-    m = line.match(/(spinning down|spinning up|spun up|read SMART)\s+\/dev\/([\w-]+)/i);
+    const m = raw.trim().match(/^(\d{9,11}),(disk|state|spin|who|activity),(.*)$/);
     if (!m) continue;
-    let t = NaN;
-    const iso = line.match(/^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)/);
-    if (iso) t = Date.parse(iso[1].replace(' ','T'));
-    else {
-      const s = line.match(/^([A-Z][a-z]{2})\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})/);
-      if (s && s[1] in MONTHS){
-        const y = new Date().getFullYear();
-        t = new Date(y, MONTHS[s[1]], +s[2], +s[3], +s[4], +s[5]).getTime();
-        if (t > now + DAY) t = new Date(y-1, MONTHS[s[1]], +s[2], +s[3], +s[4], +s[5]).getTime();
-      }
+    const t = +m[1]*1000, rest = m[3];
+    if (m[2] === 'disk'){
+      const [dev, name] = rest.split(',');
+      if (dev && name) names[dev] = name;
+    } else if (m[2] === 'state' || m[2] === 'spin'){
+      // state: status op dat moment (dagbegin, na herstart), geen wijziging en dus geen spin-up
+      const [dev, s] = rest.split(',');
+      const st = /standby|sleep/.test(s) ? 'down' : /active|idle/.test(s) ? 'up' : null;
+      if (dev && st) ev.push({t, dev, st, snap: m[2] === 'state'});
+    } else if (m[2] === 'who'){
+      const w = rest.match(/^(container|unraid|gebruiker|onbekend),([^,]*),(\d+),([a-z]+),(\/.*)$/);
+      if (w) who.push({t, kind:w[1], name:w[2], pid:+w[3], op:w[4], path:w[5]});
+    } else {
+      const a = rest.match(/^([\w-]+),([A-Z_+]+),(\/.*)$/);
+      if (a) act.push({t, disk:a[1], ev:a[2], path:a[3]});
     }
-    if (isNaN(t)) continue;
-    ev.push({t, dev:m[2], st:/down/i.test(m[1]) ? 'down' : 'up'});
   }
   return {ev, act, names, who};
 }
 
+// Per schijf alleen de momenten waarop de status verandert. Een `state` die afwijkt van de
+// vorige status houdt `snap`: de status klopt vanaf dan, maar wanneer hij veranderde weten we niet.
 function toTransitions(ev){
   ev.sort((a,b) => a.t - b.t);
   const disks = {};
   for (const e of ev){
     const list = disks[e.dev] || (disks[e.dev] = []);
     const last = list[list.length-1];
-    if (!last || last.st !== e.st) list.push({t:e.t, st:e.st});
+    if (!last || last.st !== e.st) list.push(e.snap ? {t:e.t, st:e.st, snap:true} : {t:e.t, st:e.st});
   }
   return disks;
 }
@@ -609,7 +588,7 @@ function actBetween(from, to){
 function causeOf(dev, t){
   if (!hasAct()) return null;
   const m = matcherFor(dev);
-  // spin.csv wordt elke minuut gepeild, dus de trigger ligt tot ~3 min vóór de gelogde tijd
+  // de status wordt elke minuut gepeild, dus de trigger ligt tot ~3 min vóór de gelogde tijd
   const hits = actBetween(t - 180e3, t + 30e3).filter(m.test).map(collapseShare);
   return {first: hits.length ? pickCause(hits) : null, all: hits, parity: m.parity};
 }
@@ -642,7 +621,7 @@ function causeHtml(c){
     (hasWho() ? ` ${whoBadge(w)}` : '');
 }
 
-/* ---------- wie: bron van een toegang (who.csv van de spin-who container) ---------- */
+/* ---------- wie: bron van een toegang (who-regels) ---------- */
 const normPath = p => p.replace(/\/+$/, '');
 function indexWho(list){
   const byPath = new Map();
@@ -663,7 +642,7 @@ function nearestWho(path, t, filter){
     if (filter && !filter(w)) continue;
     const d = Math.abs(w.t - t); if (d < bd){ bd = d; best = w; }
   }
-  // who.csv dedupliceert per 10 minuten, dus een eerdere regel binnen die tijd telt ook
+  // who-regels worden per 10 minuten gededupliceerd, dus een eerdere regel binnen die tijd telt ook
   return bd <= 660e3 ? best : null;
 }
 const isShareUser = w => w.kind === 'gebruiker' && /^(SMB|NFS)/.test(w.name);
@@ -673,7 +652,7 @@ function shareRootOf(path){
 }
 function whoFor(e){
   if (!e || !hasWho()) return null;
-  // SMB/NFS staat in who.csv als één regel per share; losse bestanden vallen daaronder
+  // SMB/NFS staat als één who-regel per share; losse bestanden vallen daaronder
   return nearestWho(e.path, e.t) || (shareRootOf(e.path) ? nearestWho(shareRootOf(e.path), e.t, isShareUser) : null);
 }
 // Toegang via een SMB/NFS-share: niet per bestand tonen, maar één regel per share
@@ -683,16 +662,16 @@ function collapseShare(e){
   if (!w || !isShareUser(w) || !root) return e;
   return {t: e.t, disk: e.disk, ev: 'SMB+ISDIR', path: root};
 }
-// soort blijft zichtbaar via kleur en hover; "(al gestopt)" komt zo uit who.csv
+// soort blijft zichtbaar via kleur en hover; "(al gestopt)" komt zo uit de who-regels
 const whoLabel = w => w.name.replace(/ \(al gestopt\)$/, ' ' + t('stopped'));
 function whoBadge(w){
   if (!w) return `<span class="who none">${esc(t('kind_none'))}</span>`;
   return `<span class="who ${esc(w.kind)}" title="${esc(t('kind_' + w.kind))}, pid ${w.pid}">${esc(whoLabel(w))}</span>`;
 }
 
-/* ---------- activiteit: inotify (activity.csv) + fanotify (who.csv) samen ---------- */
+/* ---------- activiteit: inotify (activity-regels, oud) + fanotify (who-regels) samen ---------- */
 const OP_EV = {geopend:'OPEN', aangemaakt:'CREATE', verwijderd:'DELETE', verplaatst:'MOVED_TO'};
-// who.csv markeert mappen met een slash aan het eind; oudere regels hadden die nog niet,
+// who-regels markeren mappen met een slash aan het eind; oudere regels hadden die nog niet,
 // daar geldt: laatste deel zonder punt, of de pool/share-root zelf, is een map.
 function whoIsDir(path){
   if (path.endsWith('/')) return true;
@@ -734,18 +713,19 @@ function bounds(){
   const len = (+range)*DAY, end = end0 - offset*len;
   return [Math.max(min, end - len), end];
 }
+// snap: het segment begint met een gemeten status, niet met een spin-up
 function segments(list, a, b){
-  let i = 0, st, guessed = false;
+  let i = 0, st, guessed = false, snap = false;
   while (i < list.length && list[i].t <= a) i++;
   if (i > 0) st = list[i-1].st;
-  else { st = list[0].st === 'up' ? 'down' : 'up'; guessed = true; }
+  else { st = list[0].snap ? list[0].st : list[0].st === 'up' ? 'down' : 'up'; guessed = true; }
   const segs = []; let from = a;
   for (; i < list.length && list[i].t < b; i++){
-    if (list[i].st === st) continue;
-    segs.push({from, to:list[i].t, st, guessed}); guessed = false;
-    from = list[i].t; st = list[i].st;
+    if (list[i].st === st && !(guessed && list[i].snap)) continue;
+    segs.push({from, to:list[i].t, st, guessed, snap}); guessed = false;
+    from = list[i].t; st = list[i].st; snap = !!list[i].snap;
   }
-  segs.push({from, to:b, st, guessed});
+  segs.push({from, to:b, st, guessed, snap});
   return segs;
 }
 
@@ -816,7 +796,7 @@ function render(){
       if (segs[i+1]) wave += `V${y(segs[i+1].st)}`;
       if (s.st === 'up'){ fill += `M${X(s.from)} 40V6H${X(s.to)}V40Z`; activeMs += s.to - s.from; }
       if (s.guessed) guess += `M0 0H${X(s.to)}V40H0Z`;
-      if (s.st === 'up' && !s.guessed && s.from > a){
+      if (s.st === 'up' && !s.guessed && !s.snap && s.from > a){
         marks += `M${X(s.from)} 0V9`; ups++;
         allUps.push({t:s.from, dev, cause: causeOf(dev, s.from)});
       }
@@ -981,7 +961,7 @@ function renderEvents(a, b){
   for (const [dev, list] of Object.entries(data.disks)){
     if (f && dev !== f) continue;
     list.forEach((x,i) => {
-      if (x.t < a || x.t > b || (onlyUp && x.st !== 'up')) return;
+      if (x.snap || x.t < a || x.t > b || (onlyUp && x.st !== 'up')) return;
       const next = list[i+1];
       rows.push({t:x.t, dev, st:x.st, d: next ? next.t - x.t : null});
     });
@@ -1041,7 +1021,7 @@ function bindTips(a, b){
       const s = segs.find(s => at >= s.from && at <= s.to); if (!s) return;
       let html = `<strong>${esc(nameOf(dev))}</strong> ${esc(t(s.st === 'up' ? 'tipUp' : 'tipDown'))}${s.guessed ? ' ' + esc(t('assumed')) : ''}<br>`+
         esc(t('tipSpan', {from: fmtFull.format(s.from), to: fmtTime.format(s.to), dur: dur(s.to - s.from)}));
-      if (s.st === 'up' && !s.guessed && s.from > a){
+      if (s.st === 'up' && !s.guessed && !s.snap && s.from > a){
         const c = causeOf(dev, s.from);
         const w = c && c.first ? whoFor(c.first) : null;
         const what = c && c.first ? (isRoot(c.first) ? t('dirListOnly') : isSmb(c.first) ? t('viaShare') : evLabel(c.first.ev) + ' ' + tailOf(c.first)) : '';
@@ -1093,18 +1073,18 @@ addEventListener('resize', () => {
 
 /* ---------- voorbeelddata ---------- */
 function demoLog(){
-  const M = Object.keys(MONTHS), lines = [];
-  const stamp = t => { const d = new Date(t);
-    return `${M[d.getMonth()]} ${String(d.getDate()).padStart(2,' ')} ${[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':')}`; };
+  const lines = [];
+  const add = (t, l) => lines.push({t, l:`${Math.floor(t/1000)},${l}`});
   const end = Date.now(), start = end - 6*DAY;
   const disks = {sdb:['parity',.1], sdc:['disk1',1], sdd:['disk2',.8], sde:['disk3',.4], sdf:['disk4',.15], sdg:['disk5',.6]};
   let seed = 7; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
   const pick = arr => arr[Math.floor(rnd()*arr.length)];
   const films = ['Noorderlicht (2019)/Noorderlicht.mkv','De Vuurtoren (2021)/De Vuurtoren.mkv','Laag Water (2017)/Laag Water.mkv'];
   const series = ['Polderland/S01/S01E03.mkv','Polderland/S01/S01E04.mkv','Kustwacht/S02/S02E07.mkv','Het Archief/S01/S01E01.mkv'];
-  const act = (t, disk, ev, path) => lines.push({t, l:`${Math.floor(t/1000)},${disk},${ev},${path}`});
+  const act = (t, disk, ev, path) => add(t, `activity,${disk},${ev},${path}`);
   for (const [dev, [name, busy]] of Object.entries(disks)){
-    lines.push({t:0, l:`${dev},${name}`});
+    add(start, `disk,${dev},${name}`);
+    add(start, `state,${dev},standby`);
     const ups = [];
     for (let d = new Date(start); d < end; d.setDate(d.getDate()+1)){
       const m = new Date(d); m.setHours(3,40 + Math.floor(rnd()*3),0,0);
@@ -1122,8 +1102,8 @@ function demoLog(){
     for (const [u, mins, kind] of ups){
       if (u < freeAt || u >= end) continue;
       const down = u + (mins + 15)*60000;
-      lines.push({t:u, l:`${stamp(u)} Tower emhttpd: read SMART /dev/${dev}`});
-      if (down < end) lines.push({t:down, l:`${stamp(down)} Tower emhttpd: spinning down /dev/${dev}`});
+      add(u, `spin,${dev},active`);
+      if (down < end) add(down, `spin,${dev},standby`);
       freeAt = down + 60000;
       const at = u - (10 + rnd()*50)*1000, disk = name === 'parity' ? 'disk1' : name;
       const r = rnd();
@@ -1143,11 +1123,13 @@ function demoLog(){
 /* ---------- live data van de server (docker) ---------- */
 let lastText = '';
 // 'ok' | 'missing' | 'empty'
+// Eén CSV per dag; de browser vraagt ze voorwaardelijk op (304 als een dag niet veranderd is)
 async function fetchLive(){
-  const texts = await Promise.all(LIVE_FILES.map(f =>
-    fetch(f, {cache:'no-cache'}).then(r => r.ok ? r.text() : null).catch(() => null)));
-  if (texts[0] === null) return 'missing';
-  const text = texts.map(t => t || '').join('\n');
+  const idx = await fetch('data/days.json', {cache:'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
+  if (!idx || !idx.days || !idx.days.length) return 'missing';
+  const texts = await Promise.all(idx.days.map(d =>
+    fetch(`data/days/${encodeURIComponent(d)}.csv`, {cache:'no-cache'}).then(r => r.ok ? r.text() : '').catch(() => '')));
+  const text = texts.join('\n');
   if (data && data.source === LIVE && text === lastText) return 'ok';
   const first = !data;
   if (!load(text, LIVE, false, !first)) return 'empty';

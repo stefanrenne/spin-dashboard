@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 
 import pytest
 
@@ -17,6 +18,11 @@ def sd(tmp_path, monkeypatch):
     monkeypatch.setattr(spindash, "SPIN", str(data / "spin.csv"))
     monkeypatch.setattr(spindash, "DISKS", str(data / "disks.csv"))
     monkeypatch.setattr(spindash, "WHO", str(data / "who.csv"))
+    monkeypatch.setattr(spindash, "ACTIVITY", str(data / "activity.csv"))
+    monkeypatch.setattr(spindash, "DAYS", str(data / "days"))
+    monkeypatch.setattr(spindash, "LEGACY", str(data / "legacy"))
+    monkeypatch.setenv("TZ", "Europe/Amsterdam")      # dagen en dagstart vast voor de tests
+    time.tzset()
     monkeypatch.setattr(spindash, "EMHTTP", str(tmp_path / "emhttp"))
     monkeypatch.setattr(spindash, "SYS_BLOCK", str(tmp_path / "sys"))
     monkeypatch.setattr(spindash, "PROC", str(tmp_path / "proc"))
@@ -32,7 +38,9 @@ def sd(tmp_path, monkeypatch):
     (tmp_path / "sys").mkdir()
     (tmp_path / "proc").mkdir()
     spindash._tmp = tmp_path
-    return spindash
+    yield spindash
+    monkeypatch.undo()
+    time.tzset()
 
 
 def make_disk(tmp_path, dev, rotational=True):

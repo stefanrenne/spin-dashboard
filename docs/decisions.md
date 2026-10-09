@@ -41,7 +41,7 @@ op `python:3.13-slim-trixie`, en de README waarschuwt.
 
 De plugin Dynamix Cache Directories houdt mapgegevens in het geheugen door continu `find` over de
 shares te draaien. Dat zijn opens die fatrace ziet, maar die geen schijf wekken; gelogd zouden ze
-`who.csv` vullen (één regel per map per `DEDUP_SECONDS`) en de ranglijsten domineren. Daarom slaat
+de dagbestanden vullen (één regel per map per `DEDUP_SECONDS`) en de ranglijsten domineren. Daarom slaat
 `classify()` processen uit `IGNORE_PROCS` en hun nakomelingen over, op procesnaam of op de
 opdrachtregel (`bash /pad/cache_dirs`).
 
@@ -59,4 +59,13 @@ het proces is al weg en de events verschenen massaal als `find (al gestopt)`, so
 
 ## Tijdzones
 Unraid kan op UTC staan terwijl containers lokale tijd gebruiken; cron op de host rekent dan anders
-dan de apps. spin.csv schrijft daarom altijd een expliciete offset, en who.csv epoch-seconden.
+dan de apps. Alle regels gebruiken daarom epoch-seconden; alleen de bestandsnaam (de dag) hangt
+af van `TZ` van de container.
+
+## Eén bestand per dag
+Eerst waren er vier losse bestanden (`spin.csv`, `disks.csv`, `who.csv`, `activity.csv`) met elk
+een eigen tijdformaat, die bij elke opruimronde helemaal herschreven werden. Nu staat alles per dag
+in één bestand met een soort per regel: opruimen is een bestand verwijderen, een dag is los te
+bekijken of te exporteren, en de browser haalt oude dagen voorwaardelijk op (304). Elke dag begint
+met `disk`- en `state`-regels zodat hij ook zonder de vorige dag leesbaar is; `state` is uitdrukkelijk
+geen spin-up, zodat een herstart of de dagwissel geen valse spin-ups oplevert.

@@ -154,13 +154,20 @@ def test_write_who_dedup_and_smb_collapse(sd):
     sd.write_who("103", "gebruiker", "SMB-share", "2", "geopend", "/mnt/trunk/Media/x/1.mkv", now=1000)
     sd.write_who("104", "gebruiker", "SMB-share", "2", "geopend", "/mnt/trunk/Media/y/2.mkv", now=1001)
     sd.write_who("105", "container", "a,b", "3", "geopend", "/mnt/trunk/z", now=1000)
-    lines = open(sd.WHO).read().splitlines()
+    lines = open(sd.day_path("1970-01-01")).read().splitlines()
     assert lines == [
-        "100,container,plex,1,geopend,/mnt/trunk/Media/a.mkv",
-        "102,container,plex,1,geopend,/mnt/trunk/Media/a.mkv",
-        "103,gebruiker,SMB-share,2,geopend,/mnt/trunk/Media/",
-        "105,container,a b,3,geopend,/mnt/trunk/z",
+        "100,who,container,plex,1,geopend,/mnt/trunk/Media/a.mkv",
+        "102,who,container,plex,1,geopend,/mnt/trunk/Media/a.mkv",
+        "103,who,gebruiker,SMB-share,2,geopend,/mnt/trunk/Media/",
+        "105,who,container,a b,3,geopend,/mnt/trunk/z",
     ]
+
+
+def test_own_day_files_are_not_logged(sd):
+    assert sd.is_own_file("/mnt/cache/appdata/spin-dashboard/days/2026-10-09.csv")
+    assert sd.is_own_file("/mnt/cache/appdata/spin-dashboard/days/2026-10-09.csv.tmp")
+    assert sd.is_own_file("/mnt/cache/appdata/spin-dashboard/who.csv")
+    assert not sd.is_own_file("/mnt/trunk/Media/2026-10-09.mkv")
 
 
 def test_handle_skips_own_writes_and_marks_dirs(sd, monkeypatch):

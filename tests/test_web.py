@@ -1,3 +1,5 @@
+import json
+import os
 import threading
 import urllib.error
 import urllib.request
@@ -12,7 +14,10 @@ def server(sd, tmp_path):
     static.mkdir()
     (static / "index.html").write_text("<html>ok</html>")
     (tmp_path / "secret.txt").write_text("nee")
-    open(sd.SPIN, "w").write("x\n")
+    os.makedirs(sd.DAYS)
+    open(sd.day_path("2026-10-09"), "w").write("1791496800,spin,sdd,active\n")
+    open(sd.day_path("2026-10-08"), "w").write("x\n")
+    open(os.path.join(sd.DAYS, "notes.txt"), "w").write("nee")
     srv = sd.http.server.ThreadingHTTPServer(("127.0.0.1", 0), partial(sd.Handler, directory=str(static)))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{srv.server_address[1]}"
@@ -27,18 +32,23 @@ def get(url):
         return e.code, "", e.headers
 
 
-def test_serves_dashboard_and_data(server):
+def test_serves_dashboard_day_list_and_day_files(server):
     assert get(server + "/")[:2] == (200, "<html>ok</html>")
-    status, body, headers = get(server + "/data/spin.csv")
-    assert (status, body) == (200, "x\n")
+    status, body, headers = get(server + "/data/days.json")
+    assert status == 200 and json.loads(body) == {"days": ["2026-10-08", "2026-10-09"]}
+    assert headers["Cache-Control"] == "no-cache"
+    status, body, headers = get(server + "/data/days/2026-10-09.csv")
+    assert (status, body) == (200, "1791496800,spin,sdd,active\n")
     assert headers["Cache-Control"] == "no-cache"
 
 
-def test_missing_csv_is_404(server):
-    assert get(server + "/data/activity.csv")[0] == 404
+def test_missing_day_is_404(server):
+    assert get(server + "/data/days/2026-01-01.csv")[0] == 404
 
 
-def test_only_csv_from_data_dir(server):
+def test_only_day_files_from_data_dir(server):
     assert get(server + "/data/../secret.txt")[0] == 404
     assert get(server + "/data/%2e%2e/secret.txt")[0] == 404
-    assert get(server + "/data/secret.txt")[0] == 404
+    assert get(server + "/data/days/notes.txt")[0] == 404
+    assert get(server + "/data/days/../../secret.txt")[0] == 404
+    assert get(server + "/data/spin.csv")[0] == 404

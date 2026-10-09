@@ -6,8 +6,12 @@ import { JSDOM } from 'jsdom';
 
 const HTML = readFileSync(new URL('../../app/static/index.html', import.meta.url), 'utf8');
 const now = Date.now();
-const iso = (minAgo) => new Date(now - minAgo * 60e3).toISOString();
 const ep = (minAgo) => Math.floor((now - minAgo * 60e3) / 1000);
+// days.json + dagbestanden zoals de server ze levert: served({'2026-10-09': [regels]})
+const served = (days) => Object.fromEntries([
+  ['days.json', JSON.stringify({ days: Object.keys(days) })],
+  ...Object.entries(days).map(([d, lines]) => [`days/${d}.csv`, lines.join('\n') + '\n']),
+]);
 
 function load(files, url = 'http://dash/?lang=nl', languages = ['en-US'], stored = null) {
   const dom = new JSDOM(HTML, {
@@ -19,7 +23,8 @@ function load(files, url = 'http://dash/?lang=nl', languages = ['en-US'], stored
       w.fetch = (u) => {
         const key = Object.keys(files).find((k) => u.includes(k));
         if (!key || files[key] === null) return Promise.resolve({ ok: false });
-        return Promise.resolve({ ok: true, text: () => Promise.resolve(files[key]) });
+        return Promise.resolve({ ok: true, text: () => Promise.resolve(files[key]),
+                                 json: () => Promise.resolve(JSON.parse(files[key])) });
       };
     },
   });
@@ -28,24 +33,19 @@ function load(files, url = 'http://dash/?lang=nl', languages = ['en-US'], stored
 const text = (el) => el.textContent.replace(/\s+/g, ' ').trim();
 const rows = (doc) => [...doc.querySelectorAll('#events tr')].map(text);
 
-const POOL = {
-  'disks.csv': 'sdd,trunk\nsde,trunk2\n',
-  'spin.csv': [
-    `${iso(300)},/dev/sdd,standby`, `${iso(300)},/dev/sde,standby`,
-    `${iso(120)},/dev/sdd,active`, `${iso(119.5)},/dev/sde,active`,
-    `${iso(60)},/dev/sdd,standby`, `${iso(60)},/dev/sde,standby`,
-  ].join('\n'),
-  'activity.csv': null,
-  'who.csv': [
-    `${ep(121)},unraid,shfs (via /mnt/user),1,geopend,/mnt/trunk/`,
-    `${ep(121)},container,bazarr,2,geopend,/mnt/trunk/Media/series/a.mkv`,
-    `${ep(110)},gebruiker,SMB-share,3,geopend,/mnt/trunk/Media/films/b.mkv`,
-    `${ep(100)},container,plex,4,geopend,/mnt/trunk/Media/series/c.mkv`,
-  ].join('\n'),
-};
+const POOL = served({ d1: [
+  `${ep(300)},disk,sdd,trunk`, `${ep(300)},disk,sde,trunk2`,
+  `${ep(300)},state,sdd,standby`, `${ep(300)},state,sde,standby`,
+  `${ep(121)},who,unraid,shfs (via /mnt/user),1,geopend,/mnt/trunk/`,
+  `${ep(121)},who,container,bazarr,2,geopend,/mnt/trunk/Media/series/a.mkv`,
+  `${ep(120)},spin,sdd,active`, `${ep(119.5)},spin,sde,active`,
+  `${ep(110)},who,gebruiker,SMB-share,3,geopend,/mnt/trunk/Media/films/b.mkv`,
+  `${ep(100)},who,container,plex,4,geopend,/mnt/trunk/Media/series/c.mkv`,
+  `${ep(60)},spin,sdd,standby`, `${ep(60)},spin,sde,standby`,
+] });
 
 test('missing data shows a status message instead of the dashboard', async () => {
-  const dom = await load({ 'spin.csv': null });
+  const dom = await load({ 'days.json': null });
   const d = dom.window.document;
   assert.equal(d.getElementById('status').hidden, false);
   assert.equal(d.getElementById('dash').hidden, true);
@@ -165,13 +165,8 @@ test('every language has the same keys as English', async () => {
 
 // ---------- bladeren ----------
 const day = 24 * 60;
-const SPREAD = {
-  'disks.csv': 'sdd,disk1\n',
-  'spin.csv': [40, 35, 9, 8.9, 1.5, 1.4, 0.2, 0.1].map((d, i) =>
-    `${iso(d * day)},/dev/sdd,${i % 2 ? 'standby' : 'active'}`).join('\n'),
-  'activity.csv': null,
-  'who.csv': null,
-};
+const SPREAD = served({ d1: [`${ep(40 * day)},disk,sdd,disk1`, ...[40, 35, 9, 8.9, 1.5, 1.4, 0.2, 0.1].map((d, i) =>
+  `${ep(d * day)},spin,sdd,${i % 2 ? 'standby' : 'active'}`)] });
 const click = (d, sel) => d.querySelector(sel).click();
 const upTimes = (d) => rows(d).filter((x) => /Opgespind/.test(x)).length;
 
@@ -219,14 +214,13 @@ test('week and month views step a whole period, and "now" jumps back', async () 
 });
 
 // ---------- info-icoontjes ----------
-const ROOT = {
-  'disks.csv': 'sdd,trunk\n',
-  'spin.csv': [`${iso(300)},/dev/sdd,standby`, `${iso(120)},/dev/sdd,active`, `${iso(60)},/dev/sdd,standby`,
-               `${iso(50)},/dev/sdd,active`, `${iso(40)},/dev/sdd,standby`].join('\n'),
-  'activity.csv': null,
-  'who.csv': [`${ep(121)},unraid,shfs (via /mnt/user),1,geopend,/mnt/trunk/`,
-              `${ep(51)},onbekend,find (al gestopt),9,geopend,/mnt/trunk/Media/x.nfo`].join('\n'),
-};
+const ROOT = served({ d1: [
+  `${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`,
+  `${ep(121)},who,unraid,shfs (via /mnt/user),1,geopend,/mnt/trunk/`,
+  `${ep(120)},spin,sdd,active`, `${ep(60)},spin,sdd,standby`,
+  `${ep(51)},who,onbekend,find (al gestopt),9,geopend,/mnt/trunk/Media/x.nfo`,
+  `${ep(50)},spin,sdd,active`, `${ep(40)},spin,sdd,standby`,
+] });
 
 test('ranking rows that need explaining get an info icon with a tooltip', async () => {
   const dom = await load(ROOT);
@@ -260,5 +254,22 @@ test('tooltip text follows the chosen language', async () => {
   assert.equal(text(btn.closest('.cause-name').querySelector('.cn')), 'find (bereits beendet)');
   btn.click();
   assert.match(d.getElementById('tip').textContent, /^Der Prozess war bereits beendet/);
+  dom.window.close();
+});
+
+// ---------- dagbestanden ----------
+test('day files are combined, and a state line is not a spin-up', async () => {
+  const dom = await load(served({
+    '2026-10-08': [`${ep(30 * 60)},disk,sdd,trunk`, `${ep(30 * 60)},state,sdd,standby`,
+                   `${ep(26 * 60)},spin,sdd,active`, `${ep(25 * 60)},spin,sdd,standby`],
+    '2026-10-09': [`${ep(20 * 60)},disk,sdd,trunk`, `${ep(20 * 60)},state,sdd,standby`,
+                   `${ep(3 * 60)},state,sdd,active`,                 // na een herstart: draait al
+                   `${ep(60)},spin,sdd,standby`],
+  }));
+  const d = dom.window.document;
+  const r = rows(d);
+  assert.equal(r.filter((x) => /Opgespind/.test(x)).length, 1, r.join('\n'));   // alleen die van gisteren
+  assert.equal(r.filter((x) => /Naar standby/.test(x)).length, 2);
+  assert.match(text(d.querySelector('.lane-stats')), /^1 spin-ups/);
   dom.window.close();
 });

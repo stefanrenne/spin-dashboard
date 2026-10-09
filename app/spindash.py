@@ -10,7 +10,9 @@ Eén proces met drie onderdelen:
            welk bestand opent: een container, Unraid zelf of een gebruiker (SMB/shell).
   web      serveert het dashboard en de CSV's.
 
-Alles staat in DATA_DIR: spin.csv, disks.csv en who.csv.
+Alles staat in DATA_DIR/days: één CSV per dag (YYYY-MM-DD.csv, lokale datum) met regels
+`epoch,soort,...` (disk, state, spin, who, activity). Oudere losse bestanden (spin.csv, disks.csv,
+who.csv, activity.csv) worden bij het starten eenmalig naar dagbestanden gemigreerd.
 """
 import http.client
 import http.server
@@ -47,16 +49,61 @@ MOUNTS_FILE = "/proc/self/mounts"
 USER_SHARES = "/mnt/user"
 DOCKER_SOCK = "/var/run/docker.sock"
 
+DAYS = os.path.join(DATA, "days")
+LEGACY = os.path.join(DATA, "legacy")
+# oude losse bestanden; alleen nog gelezen door migrate()
 SPIN = os.path.join(DATA, "spin.csv")
 DISKS = os.path.join(DATA, "disks.csv")
 WHO = os.path.join(DATA, "who.csv")
-OWN_FILES = {"spin.csv", "disks.csv", "who.csv", "who.csv.tmp", "spin.csv.tmp"}
+ACTIVITY = os.path.join(DATA, "activity.csv")
+OWN_FILES = {"spin.csv", "disks.csv", "who.csv", "activity.csv"}
+DAY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}\.csv(?:\.tmp)?$")
+TYPES = ("disk", "state", "spin", "who", "activity")     # volgorde binnen dezelfde seconde
 
 write_lock = threading.Lock()
 
 
 def log(*a):
     print(time.strftime("%F %T"), *a, flush=True)
+
+
+# =====================================================================================
+# Dagbestanden
+# =====================================================================================
+def day_of(ts):
+    return time.strftime("%Y-%m-%d", time.localtime(float(ts)))
+
+
+def day_path(day):
+    return os.path.join(DAYS, f"{day}.csv")
+
+
+def day_start(day):
+    return int(time.mktime(time.strptime(day, "%Y-%m-%d")))
+
+
+def append_lines(lines):
+    """Regels `epoch,soort,...` toevoegen aan het dagbestand van hun eigen tijdstip."""
+    by_day = {}
+    for line in lines:
+        by_day.setdefault(day_of(line.split(",", 1)[0]), []).append(line + "\n")
+    with write_lock:
+        os.makedirs(DAYS, exist_ok=True)
+        for day, ls in by_day.items():
+            with open(day_path(day), "a") as f:
+                f.writelines(ls)
+
+
+def list_days():
+    try:
+        return sorted(n[:-4] for n in os.listdir(DAYS) if DAY_FILE.match(n) and n.endswith(".csv"))
+    except OSError:
+        return []
+
+
+def is_own_file(path):
+    name = os.path.basename(path.rstrip("/"))
+    return name in OWN_FILES or bool(DAY_FILE.match(name))
 
 
 # =====================================================================================
@@ -160,35 +207,38 @@ def drive_state(dev):
     return None
 
 
-def write_if_changed(path, content):
-    try:
-        if open(path).read() == content:
-            return
-    except OSError:
-        pass
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        f.write(content)
-    os.replace(tmp, path)
-
-
-def poll_once(last):
-    """Eén peiling: disks.csv bijwerken en statuswijzigingen aan spin.csv toevoegen.
-    `last` ({device: status}) wordt bijgewerkt. Geeft het aantal geschreven regels terug."""
-    devs = hdd_devices()
-    write_if_changed(DISKS, "".join(f"{d},{n}\n" for d, n in sorted(devs.items())))
+def poll_once(last, now=None):
+    """Eén peiling. Schrijft naar het dagbestand:
+    - `disk`-regels bij de eerste peiling van een dag of als de schijfnamen veranderen;
+    - `spin` bij een statuswijziging;
+    - `state` met de huidige status bij de eerste peiling van een dag of na het starten,
+      zodat elk dagbestand op zichzelf leesbaar is. Een `state` is geen spin-up.
+    `last` houdt de vorige status bij. Geeft het aantal spin- en state-regels terug."""
+    now = int(time.time() if now is None else now)
+    day, devs = day_of(now), hdd_devices()
+    known = last.setdefault("st", {})
+    new_day = last.get("day") != day
     lines = []
+    if new_day or devs != last.get("disks"):
+        lines += [f"{now},disk,{d},{n}" for d, n in sorted(devs.items())]
+    n = 0
     for dev in sorted(devs):
         st = drive_state(dev)
-        if st and st != last.get(dev):
-            lines.append(f"{datetime.now().astimezone().isoformat(timespec='seconds')},/dev/{dev},{st}\n")
-            last[dev] = st
+        if not st:
+            continue
+        if dev in known and st != known[dev]:
+            lines.append(f"{now},spin,{dev},{st}")
+            n += 1
+        elif dev not in known or new_day:
+            lines.append(f"{now},state,{dev},{st}")
+            n += 1
+        known[dev] = st
+    last["day"], last["disks"] = day, dict(devs)
     if lines:
-        with write_lock, open(SPIN, "a") as f:
-            f.writelines(lines)
+        append_lines(lines)
     if not devs:
         log("Geen HDD's gevonden. Is /var/local/emhttp gemount en draait de container privileged?")
-    return len(lines)
+    return n
 
 
 def poller():
@@ -396,9 +446,8 @@ def write_who(ts, kind, name, pid, op, path, now=None):
         if len(recent) > 50_000:
             for kk in [kk for kk, t in recent.items() if now - t > DEDUP_S]:
                 del recent[kk]
-        with open(WHO, "a") as f:
-            f.write(f"{ts},{kind},{name.replace(',', ' ')},{pid},{op},{path}\n")
-        stats["written"] += 1
+    append_lines([f"{ts},who,{kind},{name.replace(',', ' ')},{pid},{op},{path}"])
+    stats["written"] += 1
 
 
 def resolve_shfs_later(ts, pid, op, path):
@@ -427,7 +476,7 @@ def handle(line):
     if not m:
         return
     ts, comm, pid, types, path = m.groups()
-    if pid == MY_PID or os.path.basename(path.rstrip("/")) in OWN_FILES:
+    if pid == MY_PID or is_own_file(path):
         return                               # eigen schrijfacties niet loggen
     if not path.endswith("/") and "D" not in types and os.path.isdir(path):
         path += "/"
@@ -520,68 +569,171 @@ def epoch_of(line):
         return None
 
 
-def trim(path, now=None):
-    cutoff = (time.time() if now is None else now) - RETENTION_DAYS * 86400
+def prune_days(now=None):
+    """Dagbestanden ouder dan RETENTION_DAYS verwijderen (hele dagen)."""
+    cutoff = day_of((time.time() if now is None else now) - RETENTION_DAYS * 86400)
+    old = [d for d in list_days() if d < cutoff]
     with write_lock:
-        try:
-            lines = open(path).readlines()
-        except OSError:
-            return
-        keep = [l for l in lines if (epoch_of(l) or cutoff) >= cutoff]
-        if len(keep) != len(lines):
-            tmp = path + ".tmp"
-            open(tmp, "w").writelines(keep)
-            os.replace(tmp, path)
-            log(f"{os.path.basename(path)}: {len(lines) - len(keep)} regels ouder dan {RETENTION_DAYS} dagen verwijderd")
-
-
-def relabel_existing():
-    """Regels met 'unraid'/'onbekend' alsnog aan een container koppelen als het proces nog draait."""
-    with write_lock:
-        try:
-            lines = open(WHO).readlines()
-        except OSError:
-            return
-        changed = 0
-        for i, line in enumerate(lines):
-            p = line.rstrip("\n").split(",", 5)
-            if len(p) < 6 or p[1] not in ("unraid", "onbekend"):
-                continue
+        for d in old:
             try:
-                comm, _ = proc_comm_ppid(p[3])
-            except (OSError, ValueError, IndexError):
+                os.remove(day_path(d))
+            except OSError:
+                pass
+    if old:
+        log(f"{len(old)} dagbestand(en) ouder dan {RETENTION_DAYS} dagen verwijderd")
+
+
+def relabel_existing(now=None):
+    """who-regels met 'unraid'/'onbekend' van vandaag en gisteren alsnog aan een container
+    koppelen als het proces nog draait."""
+    now = time.time() if now is None else now
+    for day in {day_of(now - 86400), day_of(now)}:
+        path = day_path(day)
+        with write_lock:
+            try:
+                lines = open(path).readlines()
+            except OSError:
                 continue
-            cid = container_id(p[3])
-            if not cid or comm != p[2].replace(" (al gestopt)", ""):
-                continue
-            p[1], p[2] = "container", container_name(cid).replace(",", " ")
-            lines[i] = ",".join(p) + "\n"
-            changed += 1
-        if changed:
-            open(WHO + ".tmp", "w").writelines(lines)
-            os.replace(WHO + ".tmp", WHO)
-            log(f"{changed} oudere regels alsnog aan een container gekoppeld")
+            changed = 0
+            for i, line in enumerate(lines):
+                p = line.rstrip("\n").split(",", 6)
+                if len(p) < 7 or p[1] != "who" or p[2] not in ("unraid", "onbekend"):
+                    continue
+                try:
+                    comm, _ = proc_comm_ppid(p[4])
+                except (OSError, ValueError, IndexError):
+                    continue
+                cid = container_id(p[4])
+                if not cid or comm != p[3].replace(" (al gestopt)", ""):
+                    continue
+                p[2], p[3] = "container", container_name(cid).replace(",", " ")
+                lines[i] = ",".join(p) + "\n"
+                changed += 1
+            if changed:
+                open(path + ".tmp", "w").writelines(lines)
+                os.replace(path + ".tmp", path)
+                log(f"{day}: {changed} oudere regels alsnog aan een container gekoppeld")
 
 
 def housekeeping():
     while True:
-        for f in (SPIN, WHO):
-            try:
-                trim(f)
-            except Exception as e:
-                log("opruimen mislukt:", repr(e))
+        try:
+            prune_days()
+        except Exception as e:
+            log("opruimen mislukt:", repr(e))
         time.sleep(6 * 3600)
+
+
+# =====================================================================================
+# Migratie van de losse bestanden (spin.csv, disks.csv, who.csv, activity.csv)
+# =====================================================================================
+def _legacy_records():
+    """(epoch, regel) in het nieuwe formaat uit de oude bestanden, de statuswijzigingen
+    [(epoch, device, status)] en de schijfnamen."""
+    recs, spins, disks, skipped = [], [], [], 0
+    for line in _read(DISKS):
+        p = line.split(",")
+        if len(p) == 2 and p[0] and p[1]:
+            disks.append((p[0], p[1]))
+    for line in _read(SPIN):                 # 2026-10-01T04:15:07+02:00,/dev/sdd,active
+        p = line.split(",")
+        ts = epoch_of(line)
+        if len(p) == 3 and ts is not None and p[2] in ("active", "standby"):
+            ts, dev = int(ts), p[1].replace("/dev/", "")
+            recs.append((ts, f"{ts},spin,{dev},{p[2]}"))
+            spins.append((ts, dev, p[2]))
+        else:
+            skipped += 1
+    for line in _read(WHO):                  # epoch,soort,naam,pid,actie,pad
+        p = line.split(",", 5)
+        if len(p) == 6 and p[0].isdigit() and p[5].startswith("/"):
+            recs.append((int(p[0]), f"{p[0]},who,{line.split(',', 1)[1]}"))
+        else:
+            skipped += 1
+    for line in _read(ACTIVITY):             # epoch,disk,EV,pad
+        p = line.split(",", 3)
+        if len(p) == 4 and p[0].isdigit() and p[3].startswith("/"):
+            recs.append((int(p[0]), f"{p[0]},activity,{line.split(',', 1)[1]}"))
+        else:
+            skipped += 1
+    return recs, sorted(spins), disks, skipped
+
+
+def _read(path):
+    try:
+        return [l.rstrip("\n") for l in open(path) if l.strip()]
+    except OSError:
+        return []
+
+
+def _sort_key(line):
+    p = line.split(",", 2)
+    try:
+        return int(p[0]), TYPES.index(p[1]), line
+    except (ValueError, IndexError):
+        return 0, 0, line
+
+
+def migrate():
+    """Losse bestanden eenmalig omzetten naar dagbestanden. Veilig om te herhalen: bestaande
+    dagregels blijven staan en dubbele regels worden samengevoegd. De oude bestanden gaan naar
+    DATA_DIR/legacy, zodat er niets verloren gaat."""
+    sources = [f for f in (SPIN, DISKS, WHO, ACTIVITY) if os.path.exists(f)]
+    if not sources:
+        return
+    recs, spins, disks, skipped = _legacy_records()
+    by_day = {}
+    for ts, line in recs:
+        by_day.setdefault(day_of(ts), []).append(line)
+    with write_lock:
+        os.makedirs(DAYS, exist_ok=True)
+        for day, lines in by_day.items():
+            t0 = day_start(day)
+            head = [f"{t0},disk,{d},{n}" for d, n in disks]
+            state = {}
+            for ts, dev, st in spins:        # status van elke schijf bij het begin van de dag
+                if ts >= t0:
+                    break
+                state[dev] = st
+            head += [f"{t0},state,{d},{st}" for d, st in sorted(state.items())]
+            path = day_path(day)
+            merged = set(_read(path)) | set(head) | set(lines)
+            tmp = path + ".tmp"
+            with open(tmp, "w") as f:
+                f.writelines(l + "\n" for l in sorted(merged, key=_sort_key))
+            os.replace(tmp, path)
+        os.makedirs(LEGACY, exist_ok=True)
+        for f in sources:
+            dest = os.path.join(LEGACY, os.path.basename(f))
+            if os.path.exists(dest):
+                dest += f".{int(time.time())}"
+            os.replace(f, dest)
+    log(f"Migratie: {len(recs)} regels uit {', '.join(os.path.basename(f) for f in sources)} "
+        f"verdeeld over {len(by_day)} dagbestanden; oude bestanden staan in {LEGACY}"
+        + (f"; {skipped} onleesbare regels overgeslagen" if skipped else ""))
 
 
 # =====================================================================================
 # Web
 # =====================================================================================
 class Handler(http.server.SimpleHTTPRequestHandler):
+    """/ → dashboard, /data/days.json → lijst van dagen, /data/days/YYYY-MM-DD.csv → dagbestand."""
+    def do_GET(self):
+        if self.path.split("?", 1)[0] == "/data/days.json":
+            body = json.dumps({"days": list_days()}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        super().do_GET()
+
     def translate_path(self, path):
         clean = path.split("?", 1)[0].split("#", 1)[0]
         if clean.startswith("/data/"):
-            name = os.path.basename(clean)
-            return os.path.join(DATA, name) if name.endswith(".csv") else os.path.join(DATA, "_")
+            m = re.fullmatch(r"/data/days/(\d{4}-\d{2}-\d{2}\.csv)", clean)
+            return os.path.join(DAYS, m.group(1)) if m else os.path.join(DAYS, "_")
         return super().translate_path(path)
 
     def end_headers(self):
@@ -600,9 +752,11 @@ def web():
 
 # =====================================================================================
 def main():
-    os.makedirs(DATA, exist_ok=True)
-    for f in (SPIN, WHO):
-        open(f, "a").close()
+    os.makedirs(DAYS, exist_ok=True)
+    try:
+        migrate()
+    except Exception as e:
+        log("migratie mislukt, oude bestanden blijven staan:", repr(e))
     try:
         ver = subprocess.run(["fatrace", "--help"], capture_output=True, text=True).stdout.split("\n")[0]
     except OSError:

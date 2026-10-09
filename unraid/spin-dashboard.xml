@@ -25,7 +25,7 @@ Tip: keep the appdata path on an SSD/cache pool, otherwise the dashboard itself 
 
   <Config Name="WebUI port" Target="8089" Default="8089" Mode="tcp" Description="Port of the dashboard." Type="Port" Display="always" Required="true" Mask="false">8089</Config>
 
-  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/spin-dashboard" Mode="rw" Description="Where spin.csv, disks.csv and who.csv are stored. Keep this on an SSD/cache pool." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/spin-dashboard</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/spin-dashboard" Mode="rw" Description="Where the daily CSV files (days/YYYY-MM-DD.csv) are stored. Keep this on an SSD/cache pool." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/spin-dashboard</Config>
 
   <Config Name="Mounts (read-only)" Target="/mnt" Default="/mnt" Mode="ro,slave" Description="Read-only access to the array and pools, needed to trace which files are opened. Slave propagation picks up pools that mount after the container started." Type="Path" Display="advanced" Required="true" Mask="false">/mnt</Config>
 

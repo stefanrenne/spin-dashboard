@@ -3,10 +3,10 @@
 ```
 ┌──────────────────────── container (privileged, --pid=host) ────────────────────────┐
 │                                                                                    │
-│  poller ── hdparm -C / smartctl -n standby ──► spin.csv   (alleen wijzigingen)     │
-│     └── /emhttp/disks.ini + /sys/block/*/rotational ──► disks.csv                  │
+│  poller ── hdparm -C / smartctl -n standby ──► days/<dag>.csv  (spin, state)       │
+│     └── /emhttp/disks.ini + /sys/block/*/rotational ──► days/<dag>.csv  (disk)     │
 │                                                                                    │
-│  watcher ── fatrace -c per HDD-mount ──► wachtrij ──► handle() ──► who.csv          │
+│  watcher ── fatrace -c per HDD-mount ──► wachtrij ──► handle() ──► days/<dag>.csv  │
 │                                         classify(pid): /proc/<pid>/cgroup, stat     │
 │                                         container_name(): docker.sock              │
 │                                         shfs → via_user_share(): /proc/*/fd       │
@@ -43,11 +43,11 @@ krijgen; "gestopt" zelf wordt niet onthouden. Zie *Cache Dirs negeren* in `decis
 samengevat tot één regel per share.
 
 **Frontend.** Haalt elke minuut de CSV's op (conditioneel, 304 bij geen wijziging), voegt
-`activity.csv` (oude inotify-data, optioneel) en `who.csv` samen tot één activiteitenstroom en
+`activity`-regels (oude inotify-data) en `who`-regels samen tot één activiteitenstroom en
 koppelt die aan spin-ups. Zie `docs/data-formats.md`. De periode is 24 uur, 7 dagen, 30 dagen of
 alles; `offset` schuift het venster een hele periode terug. Teksten komen uit `I18N` (en, nl, fr,
 de, es) via `t()`; datums via `Intl` in de locale van de gekozen taal. De `(al gestopt)` uit
-`who.csv` wordt bij het tonen vertaald; het dataformaat zelf blijft ongewijzigd.
+de who-regels wordt bij het tonen vertaald; het dataformaat zelf blijft ongewijzigd.
 
 ## Waarom één proces
 
