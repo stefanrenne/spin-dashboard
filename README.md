@@ -2,6 +2,11 @@
 
 See when your hard drives spin up and down, and **why**.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-dark.png">
+  <img alt="Spin Dashboard: a timeline per disk with every spin-up, spin-ups per hour of day, what wakes the drives and a table of events with the cause of each spin-up" src="docs/images/screenshot-light.png">
+</picture>
+
 - A timeline per disk: every spin-up, how long it ran, how much of the day the disk was active.
 - The cause of each spin-up: the first file that was opened, and **who** opened it: a Docker container (Plex, Sonarr, Bazarr, …), Unraid itself (mover, cron / User Scripts, webGUI, shfs) or a user (SMB/NFS share, shell).
 - Click a spin-up to see every file that was opened during that session, with time and source.

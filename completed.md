@@ -8,6 +8,7 @@ Newest first.
 - Automatic migration of `spin.csv`, `disks.csv`, `who.csv` and `activity.csv`; old files moved to `legacy/`
 - Retention per whole day; `/data/days.json` and `/data/days/<day>.csv` in the web server
 - Markdown documentation translated to English
+- Screenshot of the dashboard (sample data, light and dark) in the README
 
 ## 2026-10-09: languages and browsing
 - UI in English, Dutch, French, German and Spanish; defaults to the browser language, the choice is remembered

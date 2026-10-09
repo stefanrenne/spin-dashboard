@@ -7,7 +7,6 @@ Open work, roughly by priority. Move finished items to `completed.md`.
 - [ ] Test on a system with a classic array and parity (`/mnt/diskN`, `/dev/mdXpY`)
 - [ ] Test with a ZFS pool with a dataset per share
 - [ ] Fill in the support link (`<Support>` in the template) once the forum thread exists
-- [ ] Screenshots in the README
 - [ ] Support thread on the Unraid forum and submission to Community Applications
 
 ## Features
