@@ -46,8 +46,11 @@ daarna pas het image.
 
 ## Conventies
 
-- Commentaar, logregels en de UI zijn **Nederlands**. README en het CA-template zijn **Engels**
-  (internationaal publiek). Tweetalige UI staat in `todo.md`.
+- Commentaar en logregels zijn **Nederlands**. README en het CA-template zijn **Engels**
+  (internationaal publiek).
+- De UI is meertalig (en, nl, fr, de, es): alle teksten staan in `I18N` in `index.html` en gaan
+  via `t('sleutel')`. Een nieuwe tekst krijgt een sleutel in **alle** talen; een test controleert dat.
+  Gebruik `t` niet als lokale variabelenaam in code die ook vertaalt.
 - Tijden: spin.csv in ISO 8601 met offset, who.csv in epoch-seconden. De frontend toont lokale tijd.
 - Kleine, gerichte wijzigingen. Nieuwe logica krijgt een test.
 - Frontend: geen frameworks, geen externe assets behalve Google Fonts met fallback.

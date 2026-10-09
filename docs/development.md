@@ -30,6 +30,8 @@ PATH=/tmp/sd/bin:$PATH DATA_DIR=/tmp/sd/data EMHTTP_DIR=/tmp/sd/emhttp \
 
 `fatrace` vereist root en een Linux-kernel; zonder `fatrace` logt de watcher een fout en blijft
 de rest werken. Voor alleen de frontend: open `http://localhost:8089/?demo`.
+Een taal forceren kan met `?lang=de` (en, nl, fr, de, es); anders volgt de UI de browsertaal of de
+laatst gekozen taal (`localStorage`).
 
 ## Op Unraid testen
 

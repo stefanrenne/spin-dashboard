@@ -6,6 +6,8 @@ See when your hard drives spin up and down, and **why**.
 - The cause of each spin-up: the first file that was opened, and **who** opened it: a Docker container (Plex, Sonarr, Bazarr, …), Unraid itself (mover, cron / User Scripts, webGUI, shfs) or a user (SMB/NFS share, shell).
 - Click a spin-up to see every file that was opened during that session, with time and source.
 - Rankings of what wakes your drives, by folder and by source.
+- Browse back and forward through history: a day at a time in the 24-hour view, a week in the 7-day view, a month (30 days) in the 30-day view.
+- Available in English, Dutch, French, German and Spanish. Follows your browser language; pick another one at the top right.
 - Works with the array and with HDD pools (XFS, Btrfs, ZFS). SSD/NVMe pools are ignored.
 
 ## Install

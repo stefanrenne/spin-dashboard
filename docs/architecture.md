@@ -44,7 +44,10 @@ samengevat tot één regel per share.
 
 **Frontend.** Haalt elke minuut de CSV's op (conditioneel, 304 bij geen wijziging), voegt
 `activity.csv` (oude inotify-data, optioneel) en `who.csv` samen tot één activiteitenstroom en
-koppelt die aan spin-ups. Zie `docs/data-formats.md`.
+koppelt die aan spin-ups. Zie `docs/data-formats.md`. De periode is 24 uur, 7 dagen, 30 dagen of
+alles; `offset` schuift het venster een hele periode terug. Teksten komen uit `I18N` (en, nl, fr,
+de, es) via `t()`; datums via `Intl` in de locale van de gekozen taal. De `(al gestopt)` uit
+`who.csv` wordt bij het tonen vertaald; het dataformaat zelf blijft ongewijzigd.
 
 ## Waarom één proces
 

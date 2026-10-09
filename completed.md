@@ -2,6 +2,13 @@
 
 Nieuwste bovenaan.
 
+## 2026-10-09: talen en bladeren
+- UI in het Engels, Nederlands, Frans, Duits en Spaans; standaard de browsertaal, keuze wordt onthouden
+- Bladeren door de tijd: per dag (24 uur), per week (7 dagen) en per 30 dagen, met knop "Nu"
+- Aslabels korter en uitgedund op smalle schermen
+- Info-icoontjes met tooltip in "Wat maakt de schijven wakker" (Root van een pool, Onbekend, shfs, al gestopt) in plaats van uitlegalinea's
+- Frontendtests met `--test-force-exit`, zodat een mislukte test niet blijft hangen op de verversingstimer
+
 ## 2026-10-08: Cache Dirs
 - Processen uit `IGNORE_PROCS` (standaard `cache_dirs`) en hun kinderen worden niet gelogd
 - Bron per PID al bij binnenkomst bepalen en 30 s onthouden: events van kortlevende processen niet meer als `(al gestopt)`

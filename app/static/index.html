@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Spin-activiteit Unraid</title>
+<title>Unraid spin activity</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -43,6 +43,8 @@ button,select{font:inherit;color:inherit}
 .seg button{border:0;background:none;padding:7px 12px;cursor:pointer;color:var(--muted)}
 .seg button+button{border-left:1px solid var(--line)}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.seg button:disabled{opacity:.4;cursor:default}
+.nav button{padding:7px 11px}
 .btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:7px 14px;cursor:pointer}
 .btn.primary{background:var(--spin);border-color:var(--spin);color:#fff}
 :root[data-theme="dark"] .btn.primary{color:#0c1320}
@@ -83,7 +85,11 @@ button,select{font:inherit;color:inherit}
 .filters{display:flex;gap:14px;align-items:center;font-size:13.5px;color:var(--muted)}
 .filters input{accent-color:var(--spin);margin:0 5px 0 0;vertical-align:-2px}
 .cause-row{display:grid;grid-template-columns:minmax(7rem,11rem) 1fr 2.2rem;gap:10px;align-items:center;padding:5px 0;font-size:13.5px}
-.cause-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cause-name{display:flex;align-items:center;gap:6px;min-width:0}
+.cause-name .cn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.info{flex:none;width:16px;height:16px;padding:0;border:1px solid var(--muted);border-radius:50%;background:none;
+  color:var(--muted);font:italic 600 10.5px/14px Georgia,serif;text-align:center;cursor:help}
+.info:hover,.info[aria-expanded="true"]{border-color:var(--ink);color:var(--ink)}
 .cause-bar{height:10px;background:var(--bg);border-radius:3px;overflow:hidden}
 .cause-bar i{display:block;height:100%;background:var(--spin);border-radius:3px}
 .cause-row.unknown .cause-name{color:var(--muted)}
@@ -111,7 +117,7 @@ tr.sess-row p{margin:0 0 6px}
 .who.gebruiker{border-color:var(--up);color:var(--up)}
 .who.unraid,.who.onbekend,.who.none{color:var(--muted)}
 h3.sub{font-size:13.5px;font-weight:600;margin:18px 0 6px}
-.kind-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:7px;vertical-align:0;background:var(--idle)}
+.kind-dot{flex:none;display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:1px;background:var(--idle)}
 .kind-dot.container{background:var(--spin)} .kind-dot.gebruiker{background:var(--up)}
 .cause-bar i.gebruiker{background:var(--up)} .cause-bar i.unraid,.cause-bar i.onbekend{background:var(--idle)}
 @media (max-width:600px){.files li{grid-template-columns:4.6rem 1fr}.files .ev,.files .by{display:none}}
@@ -152,59 +158,71 @@ td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Wanneer draaien mijn schijven</h1>
-      <p id="sourceLine" class="muted">Data laden</p>
+      <h1 data-i18n="heading">When do my drives spin</h1>
+      <p id="sourceLine" class="muted" data-i18n="loading">Loading data</p>
     </div>
-    <div class="controls" id="controls" hidden>
-      <div class="seg" role="group" aria-label="Periode">
-        <button data-range="1">24 uur</button>
-        <button data-range="7">7 dagen</button>
-        <button data-range="30">30 dagen</button>
-        <button data-range="all">Alles</button>
+    <div class="controls">
+      <div class="seg" role="group" data-i18n-aria="period" id="ranges" hidden>
+        <button data-range="1" data-i18n="r1">24 hours</button>
+        <button data-range="7" data-i18n="r7">7 days</button>
+        <button data-range="30" data-i18n="r30">30 days</button>
+        <button data-range="all" data-i18n="rall">All</button>
       </div>
+      <div class="seg nav" role="group" id="nav" hidden>
+        <button id="prev">‹</button>
+        <button id="now" data-i18n="now">Now</button>
+        <button id="next">›</button>
+      </div>
+      <select id="lang" data-i18n-aria="language">
+        <option value="en">English</option>
+        <option value="nl">Nederlands</option>
+        <option value="fr">Français</option>
+        <option value="de">Deutsch</option>
+        <option value="es">Español</option>
+      </select>
     </div>
   </header>
 
   <section class="status" id="status" hidden>
-    <h2 id="statusTitle">Nog geen data</h2>
+    <h2 id="statusTitle" data-i18n="noDataYet">No data yet</h2>
     <p class="muted" id="statusText"></p>
   </section>
 
   <main id="dash" hidden>
-    <section class="lanes" aria-label="Tijdlijn per schijf">
+    <section class="lanes" data-i18n-aria="lanes">
       <div class="row axis-row"><div></div><div class="axis" id="axis"></div><div class="spacer-r"></div></div>
       <div id="laneList"></div>
       <div class="legend">
-        <span><i class="lg-spin"></i>Draait</span>
-        <span><i class="lg-idle"></i>Standby</span>
-        <span><i class="lg-up"></i>Spin-up</span>
+        <span><i class="lg-spin"></i><span data-i18n="legSpin">Spinning</span></span>
+        <span><i class="lg-idle"></i><span data-i18n="legIdle">Standby</span></span>
+        <span><i class="lg-up"></i><span data-i18n="legUp">Spin-up</span></span>
       </div>
     </section>
 
     <section class="lower">
       <div class="panel">
-        <h2>Spin-ups per uur van de dag</h2>
+        <h2 data-i18n="histTitle">Spin-ups by hour of day</h2>
         <div class="hist" id="hist"></div>
         <div class="hist-labels" id="histLabels"></div>
         <p class="hist-note muted" id="histNote"></p>
       </div>
       <div class="panel">
-        <h2>Wat maakt de schijven wakker</h2>
+        <h2 data-i18n="causesTitle">What wakes the drives</h2>
         <div id="causes"></div>
       </div>
     </section>
 
     <section class="panel events-panel">
       <div class="panel-head">
-        <h2>Gebeurtenissen</h2>
+        <h2 data-i18n="eventsTitle">Events</h2>
         <div class="filters">
-          <label><input type="checkbox" id="onlyUp"> Alleen spin-ups</label>
-          <select id="devFilter" aria-label="Filter op schijf"></select>
+          <label><input type="checkbox" id="onlyUp"> <span data-i18n="onlyUp">Spin-ups only</span></label>
+          <select id="devFilter" data-i18n-aria="devFilter"></select>
         </div>
       </div>
       <div class="tablewrap">
         <table>
-          <thead><tr><th>Tijdstip</th><th>Schijf</th><th>Gebeurtenis</th><th id="causeHead">Oorzaak</th><th>Duurde</th></tr></thead>
+          <thead><tr><th data-i18n="thTime">Time</th><th data-i18n="thDisk">Disk</th><th data-i18n="thEvent">Event</th><th id="causeHead" data-i18n="thCause">Cause</th><th data-i18n="thDur">Lasted</th></tr></thead>
           <tbody id="events"></tbody>
         </table>
       </div>
@@ -224,8 +242,249 @@ const WRITES = /MODIFY|CREATE|DELETE|MOVED_TO/;
 
 let data = null;   // {disks:{dev:[{t,st}]}, names:{dev:name}, act:[{t,disk,ev,path}], source, demo}
 let range = '7';
+let offset = 0;    // aantal periodes terug in de tijd (0 = tot nu)
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- talen ---------- */
+// Nieuwe teksten in alle talen toevoegen; ontbreekt een sleutel, dan valt t() terug op Engels.
+const I18N = {
+  en: {
+    title:'Unraid spin activity', heading:'When do my drives spin', loading:'Loading data', language:'Language',
+    period:'Period', r1:'24 hours', r7:'7 days', r30:'30 days', rall:'All', now:'Now',
+    prev_1:'Previous day', next_1:'Next day', prev_7:'Previous week', next_7:'Next week',
+    prev_30:'Previous month', next_30:'Next month',
+    noDataYet:'No data yet', noData:'No data', lanes:'Timeline per disk',
+    legSpin:'Spinning', legIdle:'Standby', legUp:'Spin-up',
+    histTitle:'Spin-ups by hour of day', causesTitle:'What wakes the drives', eventsTitle:'Events',
+    onlyUp:'Spin-ups only', devFilter:'Filter by disk', allDisks:'All disks',
+    thTime:'Time', thDisk:'Disk', thEvent:'Event', thCause:'Cause', thDur:'Lasted',
+    summary:'{n} disks, {from} to {to}', demo:'Sample data', live:'Live, updated {time}',
+    laneAria:'{name}: {ups} spin-ups, {pct}% active', spinUps:'spin-ups', active:'active',
+    histBar:'{from} to {to}: {n} spin-ups',
+    histNote:'{n} spin-ups in this period, {avg} per day on average. Busiest hour: {from} to {to}.',
+    noUps:'No spin-ups in this period.',
+    noActivity:'No file activity yet. As soon as an HDD pool or array disk is accessed, you will see here which folders wake the drives.',
+    rootNote:'Root of a pool means only the folder list of the pool was read, without a file being opened afterwards. Usually something requests the share list or /mnt/user, such as an SMB browser, the webGUI or a container scanning /mnt/user. The Dynamix Cache Directories plugin keeps those lists in RAM, so the drive does not have to spin up for them.',
+    unknownNote:'Unknown means no file access around the spin-up, for example a SMART poll, a manual spin-up or a folder that was already served from cache.',
+    noActivityAround:'No file activity around these spin-ups', unknown:'Unknown', byWho:'By whom',
+    rootOf:'Root of {pool}', dirListOnly:'folder list only', dirListRead:'folder list read only',
+    andMore:'and {n} more', noFileActivity:'No file activity seen', noFileActivityLc:'no file activity',
+    viaShare:'via share', dirOpened:'folder opened', written:'written', created:'created',
+    deleted:'deleted', moved:'moved', read:'read', viaDisk:'via {disk}',
+    kind_container:'container', kind_gebruiker:'user', kind_unraid:'Unraid', kind_onbekend:'unknown', kind_none:'unknown',
+    stopped:'(already stopped)',
+    tipUp:'spinning', tipDown:'in standby', assumed:'(assumed)', tipSpan:'{from} to {to}, {dur}',
+    wokenBy:'Woken by {share}: {what}', byWhom:', by {who}',
+    others:'+{n} other', running:'still running', partlyRunning:'{span}, partly still running', durRange:'{lo} to {hi}',
+    file_one:'{n} file', file_other:'{n} files', spunUp:'Spun up', toStandby:'To standby',
+    noEvents:'No events in this period.', onlyDirs:'No files opened, only folders read.',
+    statusMissing:'No measurement yet. The first drive check runs within a minute after the container starts.',
+    statusEmpty:'No spinning drives found yet. Check the container log to see whether /dev and /var/local/emhttp are reachable.',
+    retry:'The page retries every minute.',
+    info:'More information',
+    shfsNote:'The file was accessed through /mnt/user (shfs), and the process behind it could not be traced in time. Exclusive shares or a direct pool path in the container show the real source.',
+    stoppedNote:'The process had already ended before the dashboard could see who started it. Short-lived commands such as find or ls often show up like this.',
+    whoUnknownNote:'No source known: there was no file access around the spin-up, or it could not be linked to a process.',
+    u_min:'min', u_h:'h', u_d:'d',
+  },
+  nl: {
+    title:'Spin-activiteit Unraid', heading:'Wanneer draaien mijn schijven', loading:'Data laden', language:'Taal',
+    period:'Periode', r1:'24 uur', r7:'7 dagen', r30:'30 dagen', rall:'Alles', now:'Nu',
+    prev_1:'Vorige dag', next_1:'Volgende dag', prev_7:'Vorige week', next_7:'Volgende week',
+    prev_30:'Vorige maand', next_30:'Volgende maand',
+    noDataYet:'Nog geen data', noData:'Geen data', lanes:'Tijdlijn per schijf',
+    legSpin:'Draait', legIdle:'Standby', legUp:'Spin-up',
+    histTitle:'Spin-ups per uur van de dag', causesTitle:'Wat maakt de schijven wakker', eventsTitle:'Gebeurtenissen',
+    onlyUp:'Alleen spin-ups', devFilter:'Filter op schijf', allDisks:'Alle schijven',
+    thTime:'Tijdstip', thDisk:'Schijf', thEvent:'Gebeurtenis', thCause:'Oorzaak', thDur:'Duurde',
+    summary:'{n} schijven, {from} tot {to}', demo:'Voorbeelddata', live:'Live, bijgewerkt {time}',
+    laneAria:'{name}: {ups} spin-ups, {pct}% actief', spinUps:'spin-ups', active:'actief',
+    histBar:'{from} tot {to}: {n} spin-ups',
+    histNote:'{n} spin-ups in deze periode, gemiddeld {avg} per dag. Drukste uur: {from} tot {to}.',
+    noUps:'Geen spin-ups in deze periode.',
+    noActivity:'Nog geen bestandsactiviteit. Zodra een HDD-pool of array-schijf wordt aangesproken, zie je hier welke mappen de schijven wakker maken.',
+    rootNote:'Root van een pool betekent dat alleen de mappenlijst van de pool werd gelezen, zonder dat er daarna een bestand werd geopend. Meestal vraagt iets de share-lijst of /mnt/user op, zoals een SMB-verkenner, de webGUI of een container die /mnt/user scant. De plugin Dynamix Cache Directories houdt die lijsten in RAM, zodat de schijf ervoor niet hoeft op te spinnen.',
+    unknownNote:'Onbekend betekent geen bestandstoegang rond de spin-up, bijvoorbeeld een SMART-poll, handmatig opspinnen of een map die al uit de cache kwam.',
+    noActivityAround:'Geen bestandsactiviteit rond deze spin-ups', unknown:'Onbekend', byWho:'Door wie',
+    rootOf:'Root van {pool}', dirListOnly:'alleen mappenlijst', dirListRead:'alleen mappenlijst gelezen',
+    andMore:'en nog {n}', noFileActivity:'Geen bestandsactiviteit gezien', noFileActivityLc:'geen bestandsactiviteit',
+    viaShare:'via share', dirOpened:'map geopend', written:'geschreven', created:'aangemaakt',
+    deleted:'verwijderd', moved:'verplaatst', read:'gelezen', viaDisk:'via {disk}',
+    kind_container:'container', kind_gebruiker:'gebruiker', kind_unraid:'Unraid', kind_onbekend:'onbekend', kind_none:'onbekend',
+    stopped:'(al gestopt)',
+    tipUp:'draait', tipDown:'in standby', assumed:'(aangenomen)', tipSpan:'{from} tot {to}, {dur}',
+    wokenBy:'Gewekt door {share}: {what}', byWhom:', door {who}',
+    others:'+{n} andere', running:'nog bezig', partlyRunning:'{span}, deels nog bezig', durRange:'{lo} tot {hi}',
+    file_one:'{n} bestand', file_other:'{n} bestanden', spunUp:'Opgespind', toStandby:'Naar standby',
+    noEvents:'Geen gebeurtenissen in deze periode.', onlyDirs:'Geen bestanden geopend, alleen mappen gelezen.',
+    statusMissing:'Nog geen meting. De eerste peiling van de schijven volgt binnen een minuut na het starten van de container.',
+    statusEmpty:'Er zijn nog geen draaiende schijven gevonden. Controleer in de containerlog of /dev en /var/local/emhttp bereikbaar zijn.',
+    retry:'De pagina probeert het elke minuut opnieuw.',
+    info:'Meer informatie',
+    shfsNote:'Het bestand werd via /mnt/user (shfs) benaderd en het proces erachter kon niet op tijd worden achterhaald. Exclusive shares of een direct poolpad in de container laten de echte bron zien.',
+    stoppedNote:'Het proces was al gestopt voordat het dashboard kon zien wie het startte. Kortlopende commando’s zoals find of ls verschijnen vaak zo.',
+    whoUnknownNote:'Geen bron bekend: er was geen bestandstoegang rond de spin-up, of die kon niet aan een proces worden gekoppeld.',
+    u_min:'min', u_h:'u', u_d:'d',
+  },
+  fr: {
+    title:'Activité des disques Unraid', heading:'Quand mes disques tournent-ils', loading:'Chargement des données', language:'Langue',
+    period:'Période', r1:'24 heures', r7:'7 jours', r30:'30 jours', rall:'Tout', now:'Maintenant',
+    prev_1:'Jour précédent', next_1:'Jour suivant', prev_7:'Semaine précédente', next_7:'Semaine suivante',
+    prev_30:'Mois précédent', next_30:'Mois suivant',
+    noDataYet:'Pas encore de données', noData:'Aucune donnée', lanes:'Chronologie par disque',
+    legSpin:'En rotation', legIdle:'Veille', legUp:'Démarrage',
+    histTitle:'Démarrages par heure de la journée', causesTitle:'Ce qui réveille les disques', eventsTitle:'Événements',
+    onlyUp:'Démarrages uniquement', devFilter:'Filtrer par disque', allDisks:'Tous les disques',
+    thTime:'Heure', thDisk:'Disque', thEvent:'Événement', thCause:'Cause', thDur:'Durée',
+    summary:'{n} disques, du {from} au {to}', demo:'Données d’exemple', live:'En direct, mis à jour à {time}',
+    laneAria:'{name} : {ups} démarrages, {pct} % actif', spinUps:'démarrages', active:'actif',
+    histBar:'{from} à {to} : {n} démarrages',
+    histNote:'{n} démarrages sur cette période, {avg} par jour en moyenne. Heure la plus chargée : {from} à {to}.',
+    noUps:'Aucun démarrage sur cette période.',
+    noActivity:'Pas encore d’activité de fichiers. Dès qu’un pool HDD ou un disque de l’array est sollicité, vous verrez ici quels dossiers réveillent les disques.',
+    rootNote:'Racine d’un pool signifie que seule la liste des dossiers du pool a été lue, sans qu’un fichier soit ouvert ensuite. En général, quelque chose demande la liste des partages ou /mnt/user, comme un explorateur SMB, la webGUI ou un conteneur qui parcourt /mnt/user. Le plugin Dynamix Cache Directories garde ces listes en RAM, pour que le disque n’ait pas à démarrer.',
+    unknownNote:'Inconnu signifie aucun accès aux fichiers autour du démarrage, par exemple une lecture SMART, un démarrage manuel ou un dossier déjà servi depuis le cache.',
+    noActivityAround:'Aucune activité de fichiers autour de ces démarrages', unknown:'Inconnu', byWho:'Par qui',
+    rootOf:'Racine de {pool}', dirListOnly:'liste des dossiers seulement', dirListRead:'seule la liste des dossiers a été lue',
+    andMore:'et {n} de plus', noFileActivity:'Aucune activité de fichiers', noFileActivityLc:'aucune activité de fichiers',
+    viaShare:'via partage', dirOpened:'dossier ouvert', written:'écrit', created:'créé',
+    deleted:'supprimé', moved:'déplacé', read:'lu', viaDisk:'via {disk}',
+    kind_container:'conteneur', kind_gebruiker:'utilisateur', kind_unraid:'Unraid', kind_onbekend:'inconnu', kind_none:'inconnu',
+    stopped:'(déjà arrêté)',
+    tipUp:'en rotation', tipDown:'en veille', assumed:'(supposé)', tipSpan:'{from} à {to}, {dur}',
+    wokenBy:'Réveillé par {share} : {what}', byWhom:', par {who}',
+    others:'+{n} autre(s)', running:'en cours', partlyRunning:'{span}, partiellement en cours', durRange:'{lo} à {hi}',
+    file_one:'{n} fichier', file_other:'{n} fichiers', spunUp:'Démarré', toStandby:'Mis en veille',
+    noEvents:'Aucun événement sur cette période.', onlyDirs:'Aucun fichier ouvert, seulement des dossiers lus.',
+    statusMissing:'Pas encore de mesure. La première vérification des disques a lieu dans la minute qui suit le démarrage du conteneur.',
+    statusEmpty:'Aucun disque en rotation trouvé pour l’instant. Vérifiez dans le journal du conteneur que /dev et /var/local/emhttp sont accessibles.',
+    retry:'La page réessaie chaque minute.',
+    info:'Plus d’informations',
+    shfsNote:'Le fichier a été lu via /mnt/user (shfs) et le processus à l’origine n’a pas pu être identifié à temps. Les partages exclusifs ou un chemin direct vers le pool dans le conteneur révèlent la vraie source.',
+    stoppedNote:'Le processus était déjà terminé avant que le tableau de bord puisse voir qui l’avait lancé. Les commandes brèves comme find ou ls apparaissent souvent ainsi.',
+    whoUnknownNote:'Aucune source connue : aucun accès aux fichiers autour du démarrage, ou il n’a pas pu être relié à un processus.',
+    u_min:'min', u_h:'h', u_d:'j',
+  },
+  de: {
+    title:'Unraid-Spin-Aktivität', heading:'Wann laufen meine Festplatten', loading:'Daten werden geladen', language:'Sprache',
+    period:'Zeitraum', r1:'24 Stunden', r7:'7 Tage', r30:'30 Tage', rall:'Alles', now:'Jetzt',
+    prev_1:'Vorheriger Tag', next_1:'Nächster Tag', prev_7:'Vorherige Woche', next_7:'Nächste Woche',
+    prev_30:'Vorheriger Monat', next_30:'Nächster Monat',
+    noDataYet:'Noch keine Daten', noData:'Keine Daten', lanes:'Zeitleiste pro Festplatte',
+    legSpin:'Läuft', legIdle:'Standby', legUp:'Spin-up',
+    histTitle:'Spin-ups nach Tageszeit', causesTitle:'Was weckt die Festplatten', eventsTitle:'Ereignisse',
+    onlyUp:'Nur Spin-ups', devFilter:'Nach Festplatte filtern', allDisks:'Alle Festplatten',
+    thTime:'Zeitpunkt', thDisk:'Festplatte', thEvent:'Ereignis', thCause:'Ursache', thDur:'Dauer',
+    summary:'{n} Festplatten, {from} bis {to}', demo:'Beispieldaten', live:'Live, aktualisiert {time}',
+    laneAria:'{name}: {ups} Spin-ups, {pct} % aktiv', spinUps:'Spin-ups', active:'aktiv',
+    histBar:'{from} bis {to}: {n} Spin-ups',
+    histNote:'{n} Spin-ups in diesem Zeitraum, durchschnittlich {avg} pro Tag. Aktivste Stunde: {from} bis {to}.',
+    noUps:'Keine Spin-ups in diesem Zeitraum.',
+    noActivity:'Noch keine Dateiaktivität. Sobald auf einen HDD-Pool oder eine Array-Festplatte zugegriffen wird, siehst du hier, welche Ordner die Festplatten wecken.',
+    rootNote:'Wurzel eines Pools bedeutet, dass nur die Ordnerliste des Pools gelesen wurde, ohne dass danach eine Datei geöffnet wurde. Meist fragt etwas die Share-Liste oder /mnt/user ab, etwa ein SMB-Explorer, die WebGUI oder ein Container, der /mnt/user durchsucht. Das Plugin Dynamix Cache Directories hält diese Listen im RAM, damit die Festplatte dafür nicht anlaufen muss.',
+    unknownNote:'Unbekannt bedeutet: kein Dateizugriff rund um den Spin-up, zum Beispiel eine SMART-Abfrage, ein manueller Spin-up oder ein Ordner, der bereits aus dem Cache kam.',
+    noActivityAround:'Keine Dateiaktivität rund um diese Spin-ups', unknown:'Unbekannt', byWho:'Durch wen',
+    rootOf:'Wurzel von {pool}', dirListOnly:'nur Ordnerliste', dirListRead:'nur Ordnerliste gelesen',
+    andMore:'und {n} weitere', noFileActivity:'Keine Dateiaktivität gesehen', noFileActivityLc:'keine Dateiaktivität',
+    viaShare:'über Share', dirOpened:'Ordner geöffnet', written:'geschrieben', created:'erstellt',
+    deleted:'gelöscht', moved:'verschoben', read:'gelesen', viaDisk:'über {disk}',
+    kind_container:'Container', kind_gebruiker:'Benutzer', kind_unraid:'Unraid', kind_onbekend:'unbekannt', kind_none:'unbekannt',
+    stopped:'(bereits beendet)',
+    tipUp:'läuft', tipDown:'im Standby', assumed:'(angenommen)', tipSpan:'{from} bis {to}, {dur}',
+    wokenBy:'Geweckt durch {share}: {what}', byWhom:', durch {who}',
+    others:'+{n} weitere', running:'läuft noch', partlyRunning:'{span}, teilweise noch aktiv', durRange:'{lo} bis {hi}',
+    file_one:'{n} Datei', file_other:'{n} Dateien', spunUp:'Angelaufen', toStandby:'In Standby',
+    noEvents:'Keine Ereignisse in diesem Zeitraum.', onlyDirs:'Keine Dateien geöffnet, nur Ordner gelesen.',
+    statusMissing:'Noch keine Messung. Die erste Abfrage der Festplatten erfolgt innerhalb einer Minute nach dem Start des Containers.',
+    statusEmpty:'Noch keine laufenden Festplatten gefunden. Prüfe im Container-Log, ob /dev und /var/local/emhttp erreichbar sind.',
+    retry:'Die Seite versucht es jede Minute erneut.',
+    info:'Weitere Informationen',
+    shfsNote:'Auf die Datei wurde über /mnt/user (shfs) zugegriffen, und der Prozess dahinter konnte nicht rechtzeitig ermittelt werden. Exklusive Shares oder ein direkter Pool-Pfad im Container zeigen die echte Quelle.',
+    stoppedNote:'Der Prozess war bereits beendet, bevor das Dashboard sehen konnte, wer ihn gestartet hat. Kurzlebige Befehle wie find oder ls erscheinen oft so.',
+    whoUnknownNote:'Keine Quelle bekannt: Rund um den Spin-up gab es keinen Dateizugriff, oder er ließ sich keinem Prozess zuordnen.',
+    u_min:'Min.', u_h:'Std.', u_d:'T.',
+  },
+  es: {
+    title:'Actividad de discos Unraid', heading:'Cuándo giran mis discos', loading:'Cargando datos', language:'Idioma',
+    period:'Periodo', r1:'24 horas', r7:'7 días', r30:'30 días', rall:'Todo', now:'Ahora',
+    prev_1:'Día anterior', next_1:'Día siguiente', prev_7:'Semana anterior', next_7:'Semana siguiente',
+    prev_30:'Mes anterior', next_30:'Mes siguiente',
+    noDataYet:'Todavía no hay datos', noData:'Sin datos', lanes:'Cronología por disco',
+    legSpin:'Girando', legIdle:'Reposo', legUp:'Arranque',
+    histTitle:'Arranques por hora del día', causesTitle:'Qué despierta los discos', eventsTitle:'Eventos',
+    onlyUp:'Solo arranques', devFilter:'Filtrar por disco', allDisks:'Todos los discos',
+    thTime:'Hora', thDisk:'Disco', thEvent:'Evento', thCause:'Causa', thDur:'Duró',
+    summary:'{n} discos, del {from} al {to}', demo:'Datos de ejemplo', live:'En directo, actualizado {time}',
+    laneAria:'{name}: {ups} arranques, {pct} % activo', spinUps:'arranques', active:'activo',
+    histBar:'{from} a {to}: {n} arranques',
+    histNote:'{n} arranques en este periodo, {avg} al día de media. Hora con más actividad: {from} a {to}.',
+    noUps:'No hay arranques en este periodo.',
+    noActivity:'Todavía no hay actividad de archivos. En cuanto se acceda a un pool HDD o a un disco del array, verás aquí qué carpetas despiertan los discos.',
+    rootNote:'Raíz de un pool significa que solo se leyó la lista de carpetas del pool, sin que después se abriera ningún archivo. Normalmente algo consulta la lista de recursos compartidos o /mnt/user, como un explorador SMB, la webGUI o un contenedor que recorre /mnt/user. El plugin Dynamix Cache Directories mantiene esas listas en RAM, para que el disco no tenga que arrancar.',
+    unknownNote:'Desconocido significa que no hubo acceso a archivos alrededor del arranque, por ejemplo una consulta SMART, un arranque manual o una carpeta que ya venía de la caché.',
+    noActivityAround:'Sin actividad de archivos alrededor de estos arranques', unknown:'Desconocido', byWho:'Por quién',
+    rootOf:'Raíz de {pool}', dirListOnly:'solo lista de carpetas', dirListRead:'solo se leyó la lista de carpetas',
+    andMore:'y {n} más', noFileActivity:'No se vio actividad de archivos', noFileActivityLc:'sin actividad de archivos',
+    viaShare:'vía recurso compartido', dirOpened:'carpeta abierta', written:'escrito', created:'creado',
+    deleted:'eliminado', moved:'movido', read:'leído', viaDisk:'vía {disk}',
+    kind_container:'contenedor', kind_gebruiker:'usuario', kind_unraid:'Unraid', kind_onbekend:'desconocido', kind_none:'desconocido',
+    stopped:'(ya terminado)',
+    tipUp:'girando', tipDown:'en reposo', assumed:'(supuesto)', tipSpan:'{from} a {to}, {dur}',
+    wokenBy:'Despertado por {share}: {what}', byWhom:', por {who}',
+    others:'+{n} más', running:'todavía en curso', partlyRunning:'{span}, en parte todavía en curso', durRange:'{lo} a {hi}',
+    file_one:'{n} archivo', file_other:'{n} archivos', spunUp:'Arrancado', toStandby:'A reposo',
+    noEvents:'No hay eventos en este periodo.', onlyDirs:'No se abrieron archivos, solo se leyeron carpetas.',
+    statusMissing:'Todavía no hay mediciones. La primera comprobación de los discos se hace en el primer minuto tras iniciar el contenedor.',
+    statusEmpty:'Todavía no se han encontrado discos girando. Comprueba en el registro del contenedor si /dev y /var/local/emhttp son accesibles.',
+    retry:'La página lo vuelve a intentar cada minuto.',
+    info:'Más información',
+    shfsNote:'Se accedió al archivo a través de /mnt/user (shfs) y no se pudo identificar a tiempo el proceso responsable. Los recursos compartidos exclusivos o una ruta directa al pool en el contenedor muestran la fuente real.',
+    stoppedNote:'El proceso ya había terminado antes de que el panel pudiera ver quién lo inició. Los comandos breves como find o ls suelen aparecer así.',
+    whoUnknownNote:'Sin fuente conocida: no hubo acceso a archivos alrededor del arranque, o no se pudo vincular a ningún proceso.',
+    u_min:'min', u_h:'h', u_d:'d',
+  },
+};
+const LOCALES = {en:'en-GB', nl:'nl-NL', fr:'fr-FR', de:'de-DE', es:'es-ES'};
+const LANG_KEY = 'spindash.lang';
+function pickLang(){
+  const q = new URLSearchParams(location.search).get('lang');
+  if (q in I18N) return q;
+  try { const s = localStorage.getItem(LANG_KEY); if (s in I18N) return s; } catch (e) {}
+  for (const l of navigator.languages || [navigator.language || '']){
+    const c = String(l).slice(0, 2).toLowerCase();
+    if (c in I18N) return c;
+  }
+  return 'en';
+}
+let lang = pickLang();
+function t(key, vars){
+  const s = (I18N[lang] && I18N[lang][key]) ?? I18N.en[key] ?? key;
+  return vars ? s.replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m) : s;
+}
+const tn = (key, n) => t(key + (n === 1 ? '_one' : '_other'), {n});
+// browsertaal met regio (en-US) als die bij de gekozen taal hoort, anders een vaste regio
+function locale(){
+  const nav = (navigator.languages || [navigator.language || '']).find(l => String(l).slice(0, 2).toLowerCase() === lang);
+  return nav || LOCALES[lang];
+}
+let fmtTime, fmtSec, fmtFull, fmtWeekday, fmtDate;
+function setFormatters(){
+  const loc = locale();
+  fmtTime = new Intl.DateTimeFormat(loc,{hour:'2-digit',minute:'2-digit'});
+  fmtSec  = new Intl.DateTimeFormat(loc,{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  fmtFull = new Intl.DateTimeFormat(loc,{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  fmtWeekday = new Intl.DateTimeFormat(loc,{weekday:'short',day:'numeric'});   // as: maand staat in de kop
+  fmtDate = new Intl.DateTimeFormat(loc,{day:'numeric',month:'short'});
+}
+function applyStatic(){
+  document.documentElement.lang = lang;
+  document.title = t('title');
+  document.querySelectorAll('[data-i18n]').forEach(el => el.textContent = t(el.dataset.i18n));
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => el.setAttribute('aria-label', t(el.dataset.i18nAria)));
+  $('lang').value = lang;
+}
+setFormatters();
 
 /* ---------- parsing: spin-regels, disks.csv en activity.csv door elkaar ---------- */
 function parseText(text){
@@ -286,17 +545,13 @@ function toTransitions(ev){
 }
 
 /* ---------- helpers ---------- */
-const fmtTime = new Intl.DateTimeFormat('nl-NL',{hour:'2-digit',minute:'2-digit'});
-const fmtSec  = new Intl.DateTimeFormat('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-const fmtDay  = new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',month:'short'});
-const fmtFull = new Intl.DateTimeFormat('nl-NL',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
 function dur(ms){
-  const m = Math.round(ms/60000);
-  if (m < 60) return m + ' min';
+  const m = Math.round(ms/60000), M = t('u_min'), H = t('u_h'), D = t('u_d');
+  if (m < 60) return `${m} ${M}`;
   const h = Math.floor(m/60), r = m%60;
-  if (h < 24) return r ? `${h} u ${r} min` : `${h} u`;
+  if (h < 24) return r ? `${h} ${H} ${r} ${M}` : `${h} ${H}`;
   const d = Math.floor(h/24), rh = h%24;
-  return rh ? `${d} d ${rh} u` : `${d} d`;
+  return rh ? `${d} ${D} ${rh} ${H}` : `${d} ${D}`;
 }
 const nameOf = dev => (data.names || {})[dev] || dev;
 function devOrder(a, b){
@@ -305,13 +560,13 @@ function devOrder(a, b){
   return rank(na) - rank(nb) || na.localeCompare(nb, undefined, {numeric:true});
 }
 function evLabel(ev){
-  if (/SMB/.test(ev)) return 'via share';
-  if (/ISDIR/.test(ev)) return 'map geopend';
-  if (/MODIFY/.test(ev)) return 'geschreven';
-  if (/CREATE/.test(ev)) return 'aangemaakt';
-  if (/DELETE/.test(ev)) return 'verwijderd';
-  if (/MOVED_TO/.test(ev)) return 'verplaatst';
-  return 'gelezen';
+  if (/SMB/.test(ev)) return t('viaShare');
+  if (/ISDIR/.test(ev)) return t('dirOpened');
+  if (/MODIFY/.test(ev)) return t('written');
+  if (/CREATE/.test(ev)) return t('created');
+  if (/DELETE/.test(ev)) return t('deleted');
+  if (/MOVED_TO/.test(ev)) return t('moved');
+  return t('read');
 }
 // Groepering: /mnt/pool/Media/Series/x.mkv -> Media/Series, /mnt/pool/ -> "Root van pool"
 const partsOf = path => path.split('/').filter(Boolean);
@@ -321,10 +576,10 @@ const isRoot = e => partsOf(e.path).length <= 2;
 function shareOf(e){
   const p = partsOf(e.path);
   const dirs = (isDir(e) ? p : p.slice(0, -1)).slice(2);
-  return dirs.length ? dirs.slice(0, 2).join('/') : `Root van ${p[1] || e.disk}`;
+  return dirs.length ? dirs.slice(0, 2).join('/') : t('rootOf', {pool: p[1] || e.disk});
 }
 function tailOf(e){
-  if (isRoot(e)) return 'alleen mappenlijst';
+  if (isRoot(e)) return t('dirListOnly');
   const p = partsOf(e.path);
   return p[p.length - 1] + (isDir(e) ? '/' : '');
 }
@@ -374,16 +629,16 @@ function sessionFiles(items){
 function causeTitle(c){
   if (!c || !c.first) return '';
   const lines = c.all.slice(0,8).map(e => `${fmtSec.format(e.t)}  ${evLabel(e.ev)}  ${e.path}`);
-  if (c.all.length > 8) lines.push(`en nog ${c.all.length - 8}`);
+  if (c.all.length > 8) lines.push(t('andMore', {n: c.all.length - 8}));
   return lines.join('\n');
 }
 function causeHtml(c){
   if (!c) return '';
-  if (!c.first) return '<span class="muted">Geen bestandsactiviteit gezien</span>';
+  if (!c.first) return `<span class="muted">${esc(t('noFileActivity'))}</span>`;
   const e = c.first;
-  const what = isRoot(e) ? 'alleen mappenlijst gelezen' : isSmb(e) ? 'via share' : `${evLabel(e.ev)}: ${tailOf(e)}`;
+  const what = isRoot(e) ? t('dirListRead') : isSmb(e) ? t('viaShare') : `${evLabel(e.ev)}: ${tailOf(e)}`;
   const w = whoFor(e);
-  return `<b>${esc(shareOf(e))}</b> <span class="muted">${esc(what)}${c.parity ? ` (via ${esc(e.disk)})` : ''}</span>` +
+  return `<b>${esc(shareOf(e))}</b> <span class="muted">${esc(what)}${c.parity ? ` (${esc(t('viaDisk', {disk: e.disk}))})` : ''}</span>` +
     (hasWho() ? ` ${whoBadge(w)}` : '');
 }
 
@@ -428,11 +683,11 @@ function collapseShare(e){
   if (!w || !isShareUser(w) || !root) return e;
   return {t: e.t, disk: e.disk, ev: 'SMB+ISDIR', path: root};
 }
-const whoLabel = w => w.name;   // soort blijft zichtbaar via kleur en hover
+// soort blijft zichtbaar via kleur en hover; "(al gestopt)" komt zo uit who.csv
+const whoLabel = w => w.name.replace(/ \(al gestopt\)$/, ' ' + t('stopped'));
 function whoBadge(w){
-  if (!w) return '<span class="who none">onbekend</span>';
-  const kindNl = {container:'container', gebruiker:'gebruiker', unraid:'Unraid', onbekend:'onbekend'}[w.kind];
-  return `<span class="who ${esc(w.kind)}" title="${esc(kindNl)}, pid ${w.pid}">${esc(whoLabel(w))}</span>`;
+  if (!w) return `<span class="who none">${esc(t('kind_none'))}</span>`;
+  return `<span class="who ${esc(w.kind)}" title="${esc(t('kind_' + w.kind))}, pid ${w.pid}">${esc(whoLabel(w))}</span>`;
 }
 
 /* ---------- activiteit: inotify (activity.csv) + fanotify (who.csv) samen ---------- */
@@ -467,12 +722,17 @@ function mergeActivity(act, who){
 }
 
 /* ---------- bereik ---------- */
-function bounds(){
+function extent(){
   let min = Infinity, max = -Infinity;
   for (const l of Object.values(data.disks)) for (const x of l){ min = Math.min(min,x.t); max = Math.max(max,x.t); }
-  const end = (Date.now() - max < 2*DAY) ? Date.now() : max;
-  const start = range === 'all' ? min : Math.max(min, end - (+range)*DAY);
-  return [start, end];
+  return [min, (Date.now() - max < 2*DAY) ? Date.now() : max];
+}
+// Venster van één periode (1, 7 of 30 dagen), `offset` periodes terug vanaf nu
+function bounds(){
+  const [min, end0] = extent();
+  if (range === 'all') return [min, end0];
+  const len = (+range)*DAY, end = end0 - offset*len;
+  return [Math.max(min, end - len), end];
 }
 function segments(list, a, b){
   let i = 0, st, guessed = false;
@@ -505,20 +765,30 @@ function groupUps(ups){
 
 /* ---------- render ---------- */
 function render(){
+  hideInfo();
   const [a,b] = bounds(); const span = b - a || 1;
   const X = t => ((t - a)/span*1000).toFixed(2);
   const devs = Object.keys(data.disks).sort(devOrder);
 
-  document.querySelectorAll('.seg button').forEach(btn => btn.setAttribute('aria-pressed', btn.dataset.range === range));
-  $('sourceLine').innerHTML = `${devs.length} schijven, ${fmtFull.format(a)} tot ${fmtFull.format(b)}` +
-    (data.demo ? '<span class="demo-note">Voorbeelddata</span>' : '') +
-    (data.source === LIVE ? `<span class="demo-note">Live, bijgewerkt ${fmtTime.format(Date.now())}</span>` : '');
+  document.querySelectorAll('[data-range]').forEach(btn => btn.setAttribute('aria-pressed', btn.dataset.range === range));
+  $('nav').hidden = range === 'all';
+  if (range !== 'all'){
+    $('prev').disabled = a <= extent()[0];
+    $('next').disabled = offset === 0;
+    $('now').hidden = offset === 0;
+    for (const [id, k] of [['prev', 'prev_'], ['next', 'next_']]){
+      $(id).title = t(k + range); $(id).setAttribute('aria-label', t(k + range));
+    }
+  }
+  $('sourceLine').innerHTML = esc(t('summary', {n: devs.length, from: fmtFull.format(a), to: fmtFull.format(b)})) +
+    (data.demo ? `<span class="demo-note">${esc(t('demo'))}</span>` : '') +
+    (data.source === LIVE && offset === 0 ? `<span class="demo-note">${esc(t('live', {time: fmtTime.format(Date.now())}))}</span>` : '');
 
   // as
   const ticks = []; let step, lab;
   if (span <= 1.6*DAY){ step = 3*HOUR; lab = t => fmtTime.format(t); }
-  else if (span <= 9*DAY){ step = DAY; lab = t => fmtDay.format(t); }
-  else { step = 7*DAY; lab = t => fmtDay.format(t); }
+  else if (span <= 9*DAY){ step = DAY; lab = t => fmtWeekday.format(t); }
+  else { step = 7*DAY; lab = t => fmtDate.format(t); }
   const d0 = new Date(a); d0.setMinutes(0,0,0);
   if (step >= DAY) d0.setHours(0); else d0.setHours(Math.ceil(d0.getHours()/3)*3);
   if (step === 7*DAY) d0.setDate(d0.getDate() + ((8 - d0.getDay()) % 7));
@@ -526,7 +796,11 @@ function render(){
     const d = new Date(t); if (step >= DAY){ d.setHours(0,0,0,0); t = d.getTime(); }
     if (t >= a) ticks.push(t);
   }
-  const edge = ticks.filter(t => (t-a)/span > .03 && (t-a)/span < .97);
+  // smalle schermen: labels overslaan zodat ze niet overlappen (ongeveer 64px per label)
+  const inner = ticks.filter(t => (t-a)/span > .03 && (t-a)/span < .97);
+  const room = Math.max(2, Math.floor(($('axis').clientWidth || 1000) / 64));
+  const stride = Math.ceil(inner.length / room);
+  const edge = inner.filter((_, i) => i % stride === 0);
   $('axis').innerHTML = edge.map(t => `<span style="left:${(t-a)/span*100}%">${lab(t)}</span>`).join('');
   const gridPath = ticks.map(t => `M${X(t)} 0V40`).join('');
 
@@ -551,7 +825,7 @@ function render(){
     return `<div class="row lane">
       <div class="lane-name">${esc(name)}${name !== dev ? `<small>${esc(dev)}</small>` : ''}</div>
       <div class="trace" data-dev="${esc(dev)}">
-        <svg viewBox="0 0 1000 40" preserveAspectRatio="none" aria-label="${esc(name)}: ${ups} spin-ups, ${pct}% actief">
+        <svg viewBox="0 0 1000 40" preserveAspectRatio="none" aria-label="${esc(t('laneAria', {name, ups, pct}))}">
           <path class="grid" d="${gridPath}" vector-effect="non-scaling-stroke"/>
           <path class="fill" d="${fill}"/>
           <path class="wave" d="${wave}" vector-effect="non-scaling-stroke"/>
@@ -560,8 +834,8 @@ function render(){
         </svg>
       </div>
       <div class="lane-stats">
-        <span><b>${ups}</b> spin-ups</span>
-        <span><b>${pct}%</b> actief</span>
+        <span><b>${ups}</b> ${esc(t('spinUps'))}</span>
+        <span><b>${pct}%</b> ${esc(t('active'))}</span>
       </div>
     </div>`;
   }).join('');
@@ -570,50 +844,54 @@ function render(){
   const bins = new Array(24).fill(0);
   allUps.forEach(u => bins[new Date(u.t).getHours()]++);
   const max = Math.max(1, ...bins), peak = bins.indexOf(Math.max(...bins));
+  const hh = h => String(h).padStart(2,'0') + ':00';
   $('hist').innerHTML = bins.map((n,h) =>
-    `<div class="${h===peak && n ? 'peak':''}" style="height:${n/max*100}%" title="${String(h).padStart(2,'0')}:00 tot ${String(h+1).padStart(2,'0')}:00: ${n} spin-ups"></div>`).join('');
+    `<div class="${h===peak && n ? 'peak':''}" style="height:${n/max*100}%" title="${esc(t('histBar', {from: hh(h), to: hh(h+1), n}))}"></div>`).join('');
   $('histLabels').innerHTML = bins.map((_,h) => `<span>${h%3===0 ? h : ''}</span>`).join('');
   const days = Math.max(1, span/DAY);
   $('histNote').textContent = allUps.length
-    ? `${allUps.length} spin-ups in deze periode, gemiddeld ${(allUps.length/days).toFixed(1)} per dag. Drukste uur: ${String(peak).padStart(2,'0')}:00 tot ${String(peak+1).padStart(2,'0')}:00.`
-    : 'Geen spin-ups in deze periode.';
+    ? t('histNote', {n: allUps.length, avg: (allUps.length/days).toLocaleString(locale(), {minimumFractionDigits:1, maximumFractionDigits:1}), from: hh(peak), to: hh(peak+1)})
+    : t('noUps');
 
   // oorzaken
   if (!hasAct()){
-    $('causes').innerHTML = '<p class="muted">Nog geen bestandsactiviteit. Zodra een HDD-pool of array-schijf wordt aangesproken, zie je hier welke mappen de schijven wakker maken.</p>';
+    $('causes').innerHTML = `<p class="muted">${esc(t('noActivity'))}</p>`;
   } else {
     // Ranglijsten tellen gebeurtenissen, niet schijven: poolleden die samen opspinnen tellen één keer
     const wakeups = groupUps(allUps);
-    const counts = {}, examples = {};
+    const counts = {}, examples = {}, roots = new Set();
     wakeups.forEach(u => {
       const k = u.cause && u.cause.first ? shareOf(u.cause.first) : '';
       counts[k] = (counts[k] || 0) + 1;
       if (!examples[k] && u.cause && u.cause.first) examples[k] = u.cause.first.path;
+      if (k && isRoot(u.cause.first)) roots.add(k);
     });
     const rows = Object.entries(counts).sort((p,q) => q[1] - p[1]).slice(0, 8);
     const mx = rows.length ? rows[0][1] : 1;
     $('causes').innerHTML = rows.length ? rows.map(([k,n]) => `
-      <div class="cause-row${k ? '' : ' unknown'}" title="${esc(examples[k] || 'Geen bestandsactiviteit rond deze spin-ups')}">
-        <span class="cause-name">${k ? esc(k) : 'Onbekend'}</span>
+      <div class="cause-row${k ? '' : ' unknown'}">
+        <span class="cause-name"><span class="cn" title="${esc(examples[k] || t('noActivityAround'))}">${esc(k || t('unknown'))}</span>${
+          infoBtn(!k ? 'unknownNote' : roots.has(k) ? 'rootNote' : null)}</span>
         <span class="cause-bar"><i style="width:${n/mx*100}%"></i></span>
         <b>${n}</b>
-      </div>`).join('') + (rows.some(([k]) => k.startsWith('Root van')) ? '<p class="hist-note muted">Root van een pool betekent dat alleen de mappenlijst van de pool werd gelezen, zonder dat er daarna een bestand werd geopend. Meestal vraagt iets de share-lijst of /mnt/user op, zoals een SMB-verkenner, de webGUI of een container die /mnt/user scant. De plugin Dynamix Cache Directories houdt die lijsten in RAM, zodat de schijf ervoor niet hoeft op te spinnen.</p>' : '')
-      + (counts[''] ? '<p class="hist-note muted">Onbekend betekent geen bestandstoegang rond de spin-up, bijvoorbeeld een SMART-poll, handmatig opspinnen of een map die al uit de cache kwam.</p>' : '')
-      : '<p class="muted">Geen spin-ups in deze periode.</p>';
+      </div>`).join('')
+      : `<p class="muted">${esc(t('noUps'))}</p>`;
 
     // door wie
     if (hasWho() && wakeups.length){
-      const wc = {};
+      const wc = {}, notes = {};
       wakeups.forEach(u => {
         const w = u.cause && u.cause.first ? whoFor(u.cause.first) : null;
-        const k = w ? `${w.kind}|${whoLabel(w)}` : 'none|Onbekend';
+        const k = w ? `${w.kind}|${whoLabel(w)}` : `none|${t('unknown')}`;
         wc[k] = (wc[k] || 0) + 1;
+        notes[k] = !w ? 'whoUnknownNote' : /^shfs\b/.test(w.name) ? 'shfsNote'
+                 : / \(al gestopt\)$/.test(w.name) ? 'stoppedNote' : null;
       });
       const wr = Object.entries(wc).sort((p,q) => q[1] - p[1]).slice(0, 8), wm = wr[0][1];
-      $('causes').innerHTML += '<h3 class="sub">Door wie</h3>' + wr.map(([k,n]) => {
+      $('causes').innerHTML += `<h3 class="sub">${esc(t('byWho'))}</h3>` + wr.map(([k,n]) => {
         const [kind, label] = k.split('|');
         return `<div class="cause-row${kind === 'none' ? ' unknown' : ''}">
-          <span class="cause-name"><span class="kind-dot ${esc(kind)}"></span>${esc(label)}</span>
+          <span class="cause-name"><span class="kind-dot ${esc(kind)}"></span><span class="cn">${esc(label)}</span>${infoBtn(notes[k])}</span>
           <span class="cause-bar"><i class="${esc(kind)}" style="width:${n/wm*100}%"></i></span>
           <b>${n}</b></div>`;
       }).join('');
@@ -622,11 +900,43 @@ function render(){
 
   // filter + tabel
   const sel = $('devFilter'), cur = sel.value || '';
-  sel.innerHTML = `<option value="">Alle schijven</option>` +
+  sel.innerHTML = `<option value="">${esc(t('allDisks'))}</option>` +
     devs.map(d => `<option value="${esc(d)}" ${d===cur?'selected':''}>${esc(nameOf(d))}</option>`).join('');
   renderEvents(a, b);
   bindTips(a, b);
 }
+
+/* ---------- info-icoontjes met uitleg (hover, focus of tik) ---------- */
+const infoBtn = key => key
+  ? `<button type="button" class="info" data-info="${key}" aria-label="${esc(t('info'))}" aria-expanded="false">i</button>` : '';
+let infoOpen = null;
+function showInfo(btn){
+  const tip = $('tip');
+  if (infoOpen && infoOpen !== btn) infoOpen.setAttribute('aria-expanded', 'false');
+  infoOpen = btn;
+  btn.setAttribute('aria-expanded', 'true');
+  tip.textContent = t(btn.dataset.info);
+  tip.hidden = false;
+  const r = btn.getBoundingClientRect();
+  tip.style.left = Math.max(8, Math.min(r.left - 8, innerWidth - tip.offsetWidth - 8)) + 'px';
+  const below = r.bottom + 8;
+  tip.style.top = (below + tip.offsetHeight > innerHeight - 8 ? r.top - tip.offsetHeight - 8 : below) + 'px';
+}
+function hideInfo(){
+  if (!infoOpen) return;
+  infoOpen.setAttribute('aria-expanded', 'false');
+  infoOpen = null;
+  $('tip').hidden = true;
+}
+const infoOf = e => e.target.closest && e.target.closest('.info');
+$('causes').addEventListener('pointerover', e => { const b = infoOf(e); if (b && e.pointerType !== 'touch') showInfo(b); });
+$('causes').addEventListener('pointerout', e => { if (infoOf(e) && e.pointerType !== 'touch') hideInfo(); });
+$('causes').addEventListener('focusin', e => { const b = infoOf(e); if (b) showInfo(b); });
+$('causes').addEventListener('focusout', e => { if (infoOf(e)) hideInfo(); });
+$('causes').addEventListener('click', e => { const b = infoOf(e); if (!b) return; infoOpen === b ? hideInfo() : showInfo(b); });
+document.addEventListener('pointerdown', e => { if (infoOpen && !infoOf(e)) hideInfo(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') hideInfo(); });
+addEventListener('scroll', hideInfo, {passive: true});
 
 // Bij "Alle schijven": gebeurtenissen van dezelfde soort binnen 2 minuten van elkaar vormen één rij
 const GROUP_MS = 120e3;
@@ -642,10 +952,10 @@ function groupRows(rows){
 function durText(items){
   const ds = items.map(r => r.d).filter(d => d != null);
   const running = ds.length < items.length;
-  if (!ds.length) return 'nog bezig';
+  if (!ds.length) return t('running');
   const lo = dur(Math.min(...ds)), hi = dur(Math.max(...ds));
-  const span = lo === hi ? lo : `${lo} tot ${hi}`;
-  return running ? `${span}, deels nog bezig` : span;
+  const span = lo === hi ? lo : t('durRange', {lo, hi});
+  return running ? t('partlyRunning', {span}) : span;
 }
 function groupCause(items){
   const cs = items.map(r => ({dev:r.dev, c:causeOf(r.dev, r.t)})).filter(x => x.c);
@@ -655,11 +965,11 @@ function groupCause(items){
   const main = known[0] || cs[0];
   const others = new Set(known.map(x => shareOf(x.c.first)));
   if (main.c.first) others.delete(shareOf(main.c.first));
-  const extra = others.size ? ` <span class="muted">+${others.size} andere</span>` : '';
+  const extra = others.size ? ` <span class="muted">${esc(t('others', {n: others.size}))}</span>` : '';
   // schijven met dezelfde toegangen (bijv. leden van één pool) samen in de hover
   const byText = new Map();
   cs.forEach(x => {
-    const txt = causeTitle(x.c) || 'geen bestandsactiviteit';
+    const txt = causeTitle(x.c) || t('noFileActivityLc');
     byText.set(txt, [...(byText.get(txt) || []), nameOf(x.dev)]);
   });
   const title = [...byText].map(([txt, names]) => `${names.join(', ')}:\n${txt}`).join('\n\n');
@@ -681,22 +991,22 @@ function renderEvents(a, b){
   $('causeHead').hidden = !hasAct();
   $('events').innerHTML = groups.slice(0,300).map(g => {
     const items = g.items.slice().sort((p,q) => devOrder(p.dev, q.dev));
-    const t = Math.min(...items.map(r => r.t));
+    const t0 = Math.min(...items.map(r => r.t));
     const cause = g.st === 'up' ? groupCause(items) : {html:'', title:''};
-    const key = items.map(r => r.dev).join(',') + '@' + t;
+    const key = items.map(r => r.dev).join(',') + '@' + t0;
     const files = g.st === 'up' ? sessionFiles(items) : [];
     const nFiles = files.filter(e => !isDir(e) || isSmb(e)).length;
     const open = expanded.has(key);
     const toggle = files.length
-      ? `<button class="sess" data-key="${esc(key)}" aria-expanded="${open}">${open ? '▾' : '▸'} ${nFiles} ${nFiles === 1 ? 'bestand' : 'bestanden'}</button>` : '';
+      ? `<button class="sess" data-key="${esc(key)}" aria-expanded="${open}">${open ? '▾' : '▸'} ${esc(tn('file', nFiles))}</button>` : '';
     return `<tr${files.length ? ' class="has-sess"' : ''} data-key="${esc(key)}">
-      <td>${fmtFull.format(t)}</td>
+      <td>${fmtFull.format(t0)}</td>
       <td class="disks">${items.map(r => esc(nameOf(r.dev))).join(', ')}</td>
-      <td><span class="dot ${g.st}"></span>${g.st==='up' ? 'Opgespind' : 'Naar standby'}${toggle}</td>
+      <td><span class="dot ${g.st}"></span>${esc(t(g.st === 'up' ? 'spunUp' : 'toStandby'))}${toggle}</td>
       ${hasAct() ? `<td class="cause" title="${esc(cause.title)}">${cause.html}</td>` : ''}
       <td class="muted">${durText(items)}</td></tr>` +
-      (open ? sessionRow(files, t) : '');
-  }).join('') || `<tr><td colspan="5" class="muted">Geen gebeurtenissen in deze periode.</td></tr>`;
+      (open ? sessionRow(files, t0) : '');
+  }).join('') || `<tr><td colspan="5" class="muted">${esc(t('noEvents'))}</td></tr>`;
 }
 
 const expanded = new Set();
@@ -710,8 +1020,8 @@ function sessionRow(files, t0){
       <span class="ev ${WRITES.test(e.ev) ? 'w' : ''}">${esc(evLabel(e.ev))}</span>
       <span class="by">${hasWho() ? whoBadge(whoFor(e)) : esc(e.disk)}</span>
       <span class="path" title="${esc(e.path)}">${esc(relPath(e))}</span></li>`).join('');
-  const more = list.length > max ? `<p class="muted">en nog ${list.length - max}</p>` : '';
-  const note = !shown.length ? '<p class="muted">Geen bestanden geopend, alleen mappen gelezen.</p>' : '';
+  const more = list.length > max ? `<p class="muted">${esc(t('andMore', {n: list.length - max}))}</p>` : '';
+  const note = !shown.length ? `<p class="muted">${esc(t('onlyDirs'))}</p>` : '';
   return `<tr class="sess-row"><td colspan="5">${note}<ol class="files">${rows}</ol>${more}</td></tr>`;
 }
 $('events').addEventListener('click', e => {
@@ -727,15 +1037,16 @@ function bindTips(a, b){
     const dev = el.dataset.dev, segs = segments(data.disks[dev], a, b);
     el.onpointermove = e => {
       const r = el.getBoundingClientRect();
-      const t = a + (e.clientX - r.left)/r.width*(b - a);
-      const s = segs.find(s => t >= s.from && t <= s.to); if (!s) return;
-      let html = `<strong>${esc(nameOf(dev))}</strong> ${s.st==='up' ? 'draait' : 'in standby'}${s.guessed ? ' (aangenomen)' : ''}<br>`+
-        `${fmtFull.format(s.from)} tot ${fmtTime.format(s.to)}, ${dur(s.to - s.from)}`;
+      const at = a + (e.clientX - r.left)/r.width*(b - a);
+      const s = segs.find(s => at >= s.from && at <= s.to); if (!s) return;
+      let html = `<strong>${esc(nameOf(dev))}</strong> ${esc(t(s.st === 'up' ? 'tipUp' : 'tipDown'))}${s.guessed ? ' ' + esc(t('assumed')) : ''}<br>`+
+        esc(t('tipSpan', {from: fmtFull.format(s.from), to: fmtTime.format(s.to), dur: dur(s.to - s.from)}));
       if (s.st === 'up' && !s.guessed && s.from > a){
         const c = causeOf(dev, s.from);
         const w = c && c.first ? whoFor(c.first) : null;
-        if (c) html += c.first ? `<br>Gewekt door ${esc(shareOf(c.first))}: ${esc(isRoot(c.first) ? 'alleen mappenlijst' : isSmb(c.first) ? 'via share' : evLabel(c.first.ev) + ' ' + tailOf(c.first))}${w ? `, door ${esc(whoLabel(w))}` : ''}`
-                               : '<br>Geen bestandsactiviteit gezien';
+        const what = c && c.first ? (isRoot(c.first) ? t('dirListOnly') : isSmb(c.first) ? t('viaShare') : evLabel(c.first.ev) + ' ' + tailOf(c.first)) : '';
+        if (c) html += '<br>' + esc(c.first ? t('wokenBy', {share: shareOf(c.first), what}) + (w ? t('byWhom', {who: whoLabel(w)}) : '')
+                                            : t('noFileActivity'));
       }
       tip.innerHTML = html; tip.hidden = false;
       const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 8);
@@ -751,19 +1062,34 @@ function load(text, source, demo=false, keepRange=false){
   if (!ev.length) return false;
   data = {disks: toTransitions(ev), names, act: mergeActivity(act, who), who: indexWho(who), source, demo};
   const ts = ev.map(e => e.t), span = Math.max(...ts) - Math.min(...ts);
-  if (!keepRange) range = span > 7*DAY ? '7' : 'all';
+  if (!keepRange){ range = span > 7*DAY ? '7' : 'all'; offset = 0; }
   show();
   return true;
 }
 function show(){
   $('status').hidden = true;
-  $('dash').hidden = false; $('controls').hidden = false;
+  $('dash').hidden = false; $('ranges').hidden = false;
   render();
 }
 
-document.querySelectorAll('.seg button').forEach(btn => btn.onclick = () => { range = btn.dataset.range; render(); });
+document.querySelectorAll('[data-range]').forEach(btn => btn.onclick = () => { range = btn.dataset.range; offset = 0; render(); });
+$('prev').onclick = () => { offset++; render(); };
+$('next').onclick = () => { offset = Math.max(0, offset - 1); render(); };
+$('now').onclick = () => { offset = 0; render(); };
+$('lang').onchange = () => {
+  lang = $('lang').value;
+  try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
+  setFormatters(); applyStatic();
+  if (data) render(); else if (lastStatus) showStatus(lastStatus);
+};
+applyStatic();
 $('devFilter').onchange = $('onlyUp').onchange = () => { const [a,b] = bounds(); renderEvents(a,b); };
-addEventListener('resize', () => $('tip').hidden = true);
+let resizeTimer;
+addEventListener('resize', () => {
+  $('tip').hidden = true;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (data) render(); }, 200);   // aslabels passen bij de breedte
+});
 
 /* ---------- voorbeelddata ---------- */
 function demoLog(){
@@ -828,15 +1154,14 @@ async function fetchLive(){
   lastText = text;
   return 'ok';
 }
+let lastStatus = null;
 function showStatus(result){
   if (data) return;   // laatst geladen data blijft staan bij een tijdelijke fout
-  const msg = {
-    missing: 'Nog geen meting. De eerste peiling van de schijven volgt binnen een minuut na het starten van de container.',
-    empty: 'Er zijn nog geen draaiende schijven gevonden. Controleer in de containerlog of /dev en /var/local/emhttp bereikbaar zijn.'
-  }[result];
-  $('statusText').textContent = msg + ' De pagina probeert het elke minuut opnieuw.';
+  lastStatus = result;
+  const msg = t({missing: 'statusMissing', empty: 'statusEmpty'}[result]);
+  $('statusText').textContent = msg + ' ' + t('retry');
   $('status').hidden = false;
-  $('sourceLine').textContent = 'Geen data';
+  $('sourceLine').textContent = t('noData');
 }
 async function tick(){
   const result = await fetchLive();

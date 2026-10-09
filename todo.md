@@ -11,7 +11,6 @@ Open werk, grofweg op prioriteit. Verplaats afgeronde punten naar `completed.md`
 - [ ] Supportdraadje op het Unraid-forum en aanmelding bij Community Applications
 
 ## Functionaliteit
-- [ ] Tweetalige UI (NL/EN), standaard op browsertaal
 - [ ] Schrijfacties op bestaande bestanden detecteren (fatrace `W`), gededupliceerd, zodat parity-spin-ups beter te verklaren zijn
 - [ ] SAS-schijven en HBA's testen; `smartctl -n standby`-terugval valideren
 - [ ] Optioneel: meldingen (Unraid-notificatie of webhook) bij spin-ups buiten een ingesteld venster
