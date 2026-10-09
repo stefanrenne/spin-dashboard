@@ -1,10 +1,10 @@
-# Publiceren
+# Publishing
 
 ## Image
 
-CI bouwt bij elke push naar `main` (`latest`) en bij tags `v*` (`1.2.3`) een image naar
-`ghcr.io/<owner>/spin-dashboard`. Na de eerste build: *GitHub → Packages → spin-dashboard →
-Package settings → Change visibility → Public*, anders kan Unraid het image niet ophalen.
+On every push to `main` (`latest`) and on tags `v*` (`1.2.3`), CI builds an image to
+`ghcr.io/<owner>/spin-dashboard`. After the first build: *GitHub → Packages → spin-dashboard →
+Package settings → Change visibility → Public*, otherwise Unraid cannot pull the image.
 
 Release:
 
@@ -14,19 +14,19 @@ git tag v1.0.0 && git push --tags
 
 ## Community Applications
 
-1. Vul in het template de juiste `<Support>`-link in.
-2. Test het template handmatig: *Docker → Add Container → Template URL* met de raw-URL van
+1. Fill in the correct `<Support>` link in the template.
+2. Test the template by hand: *Docker → Add Container → Template URL* with the raw URL of
    `unraid/spin-dashboard.xml`.
-3. Maak een supportdraadje in het Unraid-forum, sectie *Docker Containers*. Vermeld wat de app
-   doet, de vereiste rechten (privileged, `--pid=host`, `/mnt` read-only, docker.sock) en waarom.
-4. Meld de repository aan bij Community Applications via het aanmeldformulier op het forum
-   (zie de vastgezette posts in *Community Applications*). CA indexeert daarna de `unraid/`-map.
-5. Houd `<Overview>` en `<Requires>` eerlijk over de rechten; templates met privileged
-   containers worden kritisch bekeken.
+3. Create a support thread on the Unraid forum, section *Docker Containers*. Explain what the app
+   does, the permissions it needs (privileged, `--pid=host`, `/mnt` read-only, docker.sock) and why.
+4. Submit the repository to Community Applications through the submission form on the forum
+   (see the pinned posts in *Community Applications*). CA then indexes the `unraid/` folder.
+5. Keep `<Overview>` and `<Requires>` honest about the permissions; templates with privileged
+   containers are reviewed critically.
 
 ## Checklist per release
 
-- [ ] Tests groen in CI
-- [ ] `completed.md` bijgewerkt
-- [ ] Template-wijzigingen getest via *Add Container*
-- [ ] Tag gezet, image gebouwd, package publiek
+- [ ] Tests green in CI
+- [ ] `completed.md` updated
+- [ ] Template changes tested via *Add Container*
+- [ ] Tag set, image built, package public

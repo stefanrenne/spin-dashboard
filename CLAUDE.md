@@ -1,65 +1,65 @@
 # CLAUDE.md
 
-Context voor Claude (en andere ontwikkelaars) die aan dit project werken.
+Context for Claude (and other developers) working on this project.
 
-## Wat dit is
+## What this is
 
-Spin Dashboard: een Unraid-app (één Docker-container) die laat zien wanneer de HDD's op een
-Unraid-server opspinnen en **waarom**: welk bestand werd geopend en door welk proces
-(container, Unraid zelf of een gebruiker via SMB/shell). Distributie via Community Applications.
+Spin Dashboard: an Unraid app (a single Docker container) that shows when the HDDs on an
+Unraid server spin up and **why**: which file was opened and by which process
+(a container, Unraid itself or a user via SMB/shell). Distributed through Community Applications.
 
-## Structuur
+## Structure
 
-| Pad | Wat |
+| Path | What |
 |---|---|
-| `app/spindash.py` | Het hele backend-proces: poller, watcher (fatrace), webserver, onderhoud. Alleen stdlib. |
-| `app/static/index.html` | Het dashboard. Eén bestand, vanilla JS, geen build-stap. |
-| `tests/` | `pytest` voor de backend, `tests/js/` voor de frontend (node:test + jsdom). |
-| `unraid/` | Community Applications-template en icoon. |
-| `docs/` | Architectuur, dataformaten, ontwikkeling, publiceren, ontwerpkeuzes. |
-| `todo.md` / `completed.md` | Open werk en afgerond werk. Werk deze bij als je iets oppakt of afrondt. |
+| `app/spindash.py` | The whole backend process: poller, watcher (fatrace), web server, housekeeping. Stdlib only. |
+| `app/static/index.html` | The dashboard. A single file, vanilla JS, no build step. |
+| `tests/` | `pytest` for the backend, `tests/js/` for the frontend (node:test + jsdom). |
+| `unraid/` | Community Applications template and icon. |
+| `docs/` | Architecture, data formats, development, publishing, design decisions. |
+| `todo.md` / `completed.md` | Open and finished work. Update them when you pick something up or finish it. |
 
-## Commando's
+## Commands
 
 ```bash
-python -m pytest -q          # backend-tests
-npm install && npm test      # frontend-tests
+python -m pytest -q          # backend tests
+npm install && npm test      # frontend tests
 docker build -t spin-dashboard .
-# lokaal draaien zonder Unraid: zie docs/development.md
+# running locally without Unraid: see docs/development.md
 ```
 
-Voer beide testsets uit voor elke commit. CI (`.github/workflows/ci.yml`) doet hetzelfde en bouwt
-daarna pas het image.
+Run both test suites before every commit. CI (`.github/workflows/ci.yml`) does the same and only
+then builds the image.
 
-## Harde regels
+## Hard rules
 
-1. **Nooit een slapende schijf wakker maken.** Spin-status alleen via `hdparm -C` of
-   `smartctl -n standby`. Geen `stat`, `ls` of `smartctl -a` op HDD's vanuit de poller.
-   Een `os.path.isdir()` in de watcher mag alleen ná een event, als de schijf al draait.
-2. **Nooit schrijven onder `/mnt`.** `/mnt` is read-only gemount; alle uitvoer gaat naar `DATA_DIR`.
-3. **Eigen schrijfacties niet loggen** (eigen PID en eigen bestandsnamen worden overgeslagen),
-   anders houdt het dashboard zichzelf wakker als appdata op een HDD staat.
-4. **Alleen stdlib in de backend.** Geen pip-dependencies in het image.
-5. **Dataformaten zijn een contract** tussen backend en frontend en met bestaande installaties.
-   Wijzig ze alleen achterwaarts compatibel; zie `docs/data-formats.md`.
-6. **Host-paden via module-constanten** (`PROC`, `SYS_BLOCK`, `MOUNTS_FILE`, …) zodat tests ze kunnen vervangen.
+1. **Never wake a sleeping drive.** Spin state only via `hdparm -C` or
+   `smartctl -n standby`. No `stat`, `ls` or `smartctl -a` on HDDs from the poller.
+   An `os.path.isdir()` in the watcher is only allowed after an event, when the drive is already spinning.
+2. **Never write under `/mnt`.** `/mnt` is mounted read-only; all output goes to `DATA_DIR`.
+3. **Do not log our own writes** (our own PID and our own file names are skipped),
+   otherwise the dashboard keeps itself awake when appdata lives on an HDD.
+4. **Stdlib only in the backend.** No pip dependencies in the image.
+5. **Data formats are a contract** between backend and frontend and with existing installations.
+   Only change them in a backward-compatible way; see `docs/data-formats.md`.
+6. **Host paths via module constants** (`PROC`, `SYS_BLOCK`, `MOUNTS_FILE`, …) so tests can replace them.
 
-## Conventies
+## Conventions
 
-- Commentaar en logregels zijn **Nederlands**. README en het CA-template zijn **Engels**
-  (internationaal publiek).
-- De UI is meertalig (en, nl, fr, de, es): alle teksten staan in `I18N` in `index.html` en gaan
-  via `t('sleutel')`. Een nieuwe tekst krijgt een sleutel in **alle** talen; een test controleert dat.
-  Gebruik `t` niet als lokale variabelenaam in code die ook vertaalt.
-- Data: één CSV per dag in `DATA_DIR/days`, regels `epoch,soort,...` (zie `docs/data-formats.md`).
-  Tijden in epoch-seconden, de dag is de lokale datum van de container. De frontend toont lokale tijd.
-- Kleine, gerichte wijzigingen. Nieuwe logica krijgt een test.
-- Frontend: geen frameworks, geen externe assets behalve Google Fonts met fallback.
+- Code comments and log lines are **Dutch**. Markdown documentation (this file, `docs/`, `todo.md`,
+  `completed.md`), the README and the CA template are **English**.
+- The UI is multilingual (en, nl, fr, de, es): all texts live in `I18N` in `index.html` and go
+  through `t('key')`. A new text gets a key in **every** language; a test checks this.
+  Do not use `t` as a local variable name in code that also translates.
+- Data: one CSV per day in `DATA_DIR/days`, lines `epoch,type,...` (see `docs/data-formats.md`).
+  Times in epoch seconds; the day is the container's local date. The frontend shows local time.
+- Small, focused changes. New logic gets a test.
+- Frontend: no frameworks, no external assets except Google Fonts with a fallback.
 
-## Valkuilen die we al tegenkwamen
+## Pitfalls we already ran into
 
-Zie `docs/decisions.md` voor de achtergrond. Kort:
-- Containers zien andere containers' cgroups als `0::/../<id>` (cgroup-namespace). Match op het 64-hex ID.
-- Toegang via `/mnt/user` loopt door `shfs`; de echte opener wordt via `/proc/*/fd` en inodes gezocht.
-- `fatrace` geeft mappen zonder slash; de watcher voegt die toe.
-- Auto-updaters (What's Up Docker) kunnen deze privileged container verwijderen en niet herstellen.
+See `docs/decisions.md` for the background. In short:
+- Containers see other containers' cgroups as `0::/../<id>` (cgroup namespace). Match on the 64-hex ID.
+- Access via `/mnt/user` goes through `shfs`; the real opener is found via `/proc/*/fd` and inodes.
+- `fatrace` reports folders without a trailing slash; the watcher adds it.
+- Auto-updaters (What's Up Docker) can remove this privileged container and fail to restore it.

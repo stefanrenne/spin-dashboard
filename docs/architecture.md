@@ -1,56 +1,64 @@
-# Architectuur
+# Architecture
 
 ```
 ┌──────────────────────── container (privileged, --pid=host) ────────────────────────┐
 │                                                                                    │
-│  poller ── hdparm -C / smartctl -n standby ──► days/<dag>.csv  (spin, state)       │
-│     └── /emhttp/disks.ini + /sys/block/*/rotational ──► days/<dag>.csv  (disk)     │
+│  poller ── hdparm -C / smartctl -n standby ──► days/<day>.csv  (spin, state)       │
+│     └── /emhttp/disks.ini + /sys/block/*/rotational ──► days/<day>.csv  (disk)     │
 │                                                                                    │
-│  watcher ── fatrace -c per HDD-mount ──► wachtrij ──► handle() ──► days/<dag>.csv  │
+│  watcher ── fatrace -c per HDD mount ──► queue ──► handle() ──► days/<day>.csv     │
 │                                         classify(pid): /proc/<pid>/cgroup, stat     │
 │                                         container_name(): docker.sock              │
 │                                         shfs → via_user_share(): /proc/*/fd       │
 │                                                                                    │
-│  housekeeping ── trim() elke 6 uur, relabel_existing() bij start                   │
+│  housekeeping ── prune_days() every 6 hours; migrate() and relabel_existing()      │
+│                  on start                                                          │
 │                                                                                    │
 │  web ── ThreadingHTTPServer :8089 ── /  → static/index.html                        │
-│                                      /data/*.csv → DATA_DIR                        │
+│                                      /data/days.json, /data/days/<day>.csv         │
 └────────────────────────────────────────────────────────────────────────────────────┘
           ▲ /mnt (ro,slave)   ▲ /var/local/emhttp (ro)   ▲ docker.sock (ro)   ▼ /data (rw)
 ```
 
-## Onderdelen
+## Components
 
-**Poller.** Elke `POLL_INTERVAL` seconden. Bepaalt de HDD's uit `disks.ini` (alleen
-`rotational=1`), peilt de status en schrijft alleen statuswijzigingen weg. Bij de eerste peiling
-na het starten wordt de huidige status van elke schijf vastgelegd.
+**Poller.** Every `POLL_INTERVAL` seconds. Determines the HDDs from `disks.ini` (only
+`rotational=1`), polls their state and writes changes as `spin` lines. On the first poll after
+start and on the first poll of each day it writes the current state of every disk as `state`
+lines, plus the disk names as `disk` lines.
 
-**Watcher.** Bepaalt de te bewaken mounts: `/mnt/<naam>` voor array-schijven (`disk1`) en
-pools (poolleden `trunk2` horen bij `/mnt/trunk`), plus alle mounts daaronder (ZFS-datasets).
-Per mount draait `fatrace -c` met filter `O+D<` (open, create, delete, move). `fatrace` gebruikt
-`FAN_MARK_FILESYSTEM`, dus ook toegang vanuit andere mount-namespaces (host, andere containers)
-komt binnen. Elke minuut wordt gecontroleerd of de mounts veranderd zijn of een `fatrace` gestopt is.
+**Watcher.** Determines the mounts to watch: `/mnt/<name>` for array disks (`disk1`) and
+pools (pool member `trunk2` belongs to `/mnt/trunk`), plus every mount below them (ZFS datasets).
+Each mount gets a `fatrace -c` with filter `O+D<` (open, create, delete, move). `fatrace` uses
+`FAN_MARK_FILESYSTEM`, so access from other mount namespaces (the host, other containers) is
+seen as well. Every minute it checks whether the mounts changed or a `fatrace` stopped.
 
-**Classificatie.** Processen uit `IGNORE_PROCS` (standaard `cache_dirs`), of met zo'n proces als
-voorouder, worden niet gelogd. Daarna de volgorde: container (cgroup) → gestopt proces → SMB/NFS → shell (sshd, ttyd,
-login) → shfs → btrfs → mover → cron → webGUI → procesnaam. Opens door `shfs` worden 0,4 s later
-opnieuw bekeken: welk ander proces heeft hetzelfde bestand via `/mnt/user` open (inode-vergelijking)?
-De bron van een nieuwe PID wordt al in de leesthread bepaald (`classify_early`) en per PID
-`PID_TTL` (30 s) onthouden, zodat events van een proces dat inmiddels gestopt is dezelfde bron
-krijgen; "gestopt" zelf wordt niet onthouden. Zie *Cache Dirs negeren* in `decisions.md`.
+**Classification.** Processes in `IGNORE_PROCS` (default `cache_dirs`), or with such a process as
+an ancestor, are not logged. After that the order is: container (cgroup) → stopped process →
+SMB/NFS → shell (sshd, ttyd, login) → shfs → btrfs → mover → cron → webGUI → process name. Opens by
+`shfs` are re-examined 0.4 s later: which other process has the same file open via `/mnt/user`
+(inode comparison)? The source of a new PID is already determined in the reader thread
+(`classify_early`) and remembered per PID for `PID_TTL` (30 s), so events of a process that has
+stopped in the meantime get the same source; "stopped" itself is not remembered. See
+*Ignoring Cache Dirs* in `decisions.md`.
 
-**Deduplicatie.** Zelfde pad + soort + naam maar één keer per `DEDUP_SECONDS` (600). SMB/NFS wordt
-samengevat tot één regel per share.
+**Deduplication.** The same path + kind + name only once per `DEDUP_SECONDS` (600). SMB/NFS is
+summarised into one line per share.
 
-**Frontend.** Haalt elke minuut de CSV's op (conditioneel, 304 bij geen wijziging), voegt
-`activity`-regels (oude inotify-data) en `who`-regels samen tot één activiteitenstroom en
-koppelt die aan spin-ups. Zie `docs/data-formats.md`. De periode is 24 uur, 7 dagen, 30 dagen of
-alles; `offset` schuift het venster een hele periode terug. Teksten komen uit `I18N` (en, nl, fr,
-de, es) via `t()`; datums via `Intl` in de locale van de gekozen taal. De `(al gestopt)` uit
-de who-regels wordt bij het tonen vertaald; het dataformaat zelf blijft ongewijzigd.
+**Storage.** All lines go to the day file of their own timestamp (`append_lines`). Old day files
+are removed as a whole. On start, `migrate()` converts files from older versions; see
+`docs/data-formats.md`.
 
-## Waarom één proces
+**Frontend.** Every minute it fetches `days.json` and the day files (conditionally, 304 when
+unchanged), merges `activity` lines (old inotify data) and `who` lines into one activity stream
+and links it to spin-ups. `state` lines set the state but are never a spin-up. The period is
+24 hours, 7 days, 30 days or all; `offset` shifts the window back by whole periods. Texts come
+from `I18N` (en, nl, fr, de, es) via `t()`; dates via `Intl` in the locale of the chosen language.
+The `(al gestopt)` suffix in who lines is translated when shown; the data format itself stays
+unchanged.
 
-Eerder bestond dit uit een User Script (`spinmon.sh`), een inotify-bewaker, nginx en een aparte
-`spin-who`-container. Eén proces met threads maakt installatie via Community Applications mogelijk
-en voorkomt dat onderdelen los van elkaar stoppen.
+## Why one process
+
+This used to be a User Script (`spinmon.sh`), an inotify watcher, nginx and a separate
+`spin-who` container. One process with threads makes installation through Community Applications
+possible and prevents parts from stopping independently of each other.

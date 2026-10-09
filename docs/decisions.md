@@ -1,71 +1,71 @@
-# Ontwerpkeuzes en lessen
+# Design decisions and lessons
 
-Achtergrond bij keuzes die niet vanzelfsprekend zijn. Nieuwste onderaan.
+Background for choices that are not self-evident. Newest at the bottom.
 
-## hdparm -C in plaats van syslog
-Unraid logt `spinning down` maar geen betrouwbare spin-up. `hdparm -C` vraagt de status op
-zonder de schijf te wekken. Peilen per minuut is ruim voldoende; spin-ups worden binnen die minuut
-gekoppeld aan de toegang die ze veroorzaakte (venster: 3 minuten ervoor, 30 seconden erna).
+## hdparm -C instead of syslog
+Unraid logs `spinning down` but no reliable spin-up. `hdparm -C` queries the state without
+waking the drive. Polling once a minute is plenty; spin-ups are linked within that minute to the
+access that caused them (window: 3 minutes before, 30 seconds after).
 
-## fanotify (fatrace) in plaats van inotify
-inotify ziet wel welk bestand, maar niet welk proces. fanotify geeft de PID. `fatrace` ≥ 0.17
-gebruikt `FAN_MARK_FILESYSTEM`, zodat ook toegang vanuit andere mount-namespaces zichtbaar is,
-en ondersteunt ZFS expliciet (per dataset één instantie, want elke dataset is een eigen filesystem).
-De inotify-bewaker is daarna overbodig geworden.
+## fanotify (fatrace) instead of inotify
+inotify does see which file, but not which process. fanotify reports the PID. `fatrace` ≥ 0.17
+uses `FAN_MARK_FILESYSTEM`, so access from other mount namespaces is visible too, and it supports
+ZFS explicitly (one instance per dataset, because every dataset is its own filesystem).
+After that, the inotify watcher became redundant.
 
-## shfs en /mnt/user
-Toegang via `/mnt/user` komt op de pool binnen als `shfs`. De FUSE-mount zelf is niet met
-fanotify te volgen (fatrace slaat `shfs` over). Oplossing: kort na het event zoeken welk proces
-het bestand via `/mnt/user` open heeft, op basis van inode. Werkt voor bestanden die even open
-blijven; korte toegangen en mappenlijsten blijven `shfs`. Exclusieve shares omzeilen shfs.
+## shfs and /mnt/user
+Access via `/mnt/user` arrives on the pool as `shfs`. The FUSE mount itself cannot be followed
+with fanotify (fatrace skips `shfs`). Solution: shortly after the event, look up which process has
+the file open via `/mnt/user`, based on the inode. This works for files that stay open for a
+moment; short accesses and folder listings remain `shfs`. Exclusive shares bypass shfs.
 
-## cgroup-namespace
-Docker geeft containers standaard een eigen cgroup-namespace. Andere containers zijn dan zichtbaar
-als `0::/../<id>` in plaats van `0::/docker/<id>`. `cgroup: host` in compose hielp, maar brak de
-Portainer-deploy; matchen op het 64-hex ID werkt in alle gevallen.
+## cgroup namespace
+Docker gives containers their own cgroup namespace by default. Other containers then show up as
+`0::/../<id>` instead of `0::/docker/<id>`. `cgroup: host` in compose helped but broke the
+Portainer deploy; matching on the 64-hex ID works in every case.
 
 ## SMB per share
-Een SMB-client die een map doorbladert, opent honderden bestanden. Per share één regel per
-10 minuten is genoeg om te weten dát iemand via SMB bezig was.
+An SMB client browsing a folder opens hundreds of files. One line per share per 10 minutes is
+enough to know *that* someone was busy via SMB.
 
-## Pool-wake-ups één keer tellen
-Poolleden spinnen samen op. In de tabel worden ze gegroepeerd (binnen 2 minuten, zelfde soort), en
-de ranglijsten tellen zo'n groep als één gebeurtenis.
+## Counting pool wake-ups once
+Pool members spin up together. In the table they are grouped (within 2 minutes, same kind), and
+the rankings count such a group as a single event.
 
 ## Auto-updaters
-What's Up Docker met `THRESHOLD=all` zag `python:3.15-rc-windowsservercore-ltsc2025` als update van
-`python:3.13-slim`, verwijderde de container en kon de nieuwe niet starten. Het image pint daarom
-op `python:3.13-slim-trixie`, en de README waarschuwt.
+What's Up Docker with `THRESHOLD=all` saw `python:3.15-rc-windowsservercore-ltsc2025` as an update
+of `python:3.13-slim`, removed the container and could not start the new one. The image therefore
+pins `python:3.13-slim-trixie`, and the README warns about it.
 
-## Cache Dirs negeren
+## Ignoring Cache Dirs
 
-De plugin Dynamix Cache Directories houdt mapgegevens in het geheugen door continu `find` over de
-shares te draaien. Dat zijn opens die fatrace ziet, maar die geen schijf wekken; gelogd zouden ze
-de dagbestanden vullen (één regel per map per `DEDUP_SECONDS`) en de ranglijsten domineren. Daarom slaat
-`classify()` processen uit `IGNORE_PROCS` en hun nakomelingen over, op procesnaam of op de
-opdrachtregel (`bash /pad/cache_dirs`).
+The Dynamix Cache Directories plugin keeps folder data in memory by continuously running `find`
+over the shares. Those are opens that fatrace sees but that do not wake a drive; if logged, they
+would fill the day files (one line per folder per `DEDUP_SECONDS`) and dominate the rankings.
+That is why `classify()` skips processes in `IGNORE_PROCS` and their descendants, by process name
+or by command line (`bash /path/cache_dirs`).
 
-In de praktijk (cache_dirs 2.2.9) is de keten `cache_dirs` → subshell → `timeout` → `find`, en loopt
-`find` in een fractie van een seconde door duizenden mappen. De consumer loopt dan seconden achter:
-het proces is al weg en de events verschenen massaal als `find (al gestopt)`, soms ook als
-`unraid,find` als de keten al half was afgebroken. Daarom drie lagen:
+In practice (cache_dirs 2.2.9) the chain is `cache_dirs` → subshell → `timeout` → `find`, and `find`
+walks thousands of folders in a fraction of a second. The consumer then lags seconds behind: the
+process is already gone and the events showed up en masse as `find (al gestopt)`, sometimes also
+as `unraid,find` when the chain was already half broken. Hence three layers:
 
-1. `classify_early()` bepaalt de bron al in de leesthread, zodra een nieuwe PID binnenkomt.
-2. `classify()` onthoudt de uitkomst per PID (en procesnaam, tegen PID-hergebruik) `PID_TTL` (30 s).
-3. Vangnet: is in de laatste `IGNORE_TTL` (300 s) een proces met dezelfde naam genegeerd, dan wordt
-   een proces met die naam zonder herkenbare bron (`(al gestopt)` of alleen de procesnaam) ook
-   genegeerd. Een `find` vanuit een shell, SMB of cron heeft wel een bron en blijft zichtbaar; een
-   losse `find` zonder bron in die vijf minuten valt helaas mee weg.
+1. `classify_early()` determines the source in the reader thread, as soon as a new PID arrives.
+2. `classify()` remembers the result per PID (and process name, against PID reuse) for `PID_TTL` (30 s).
+3. Safety net: if a process with the same name was ignored within the last `IGNORE_TTL` (300 s),
+   a process with that name without a recognisable source (`(al gestopt)` or just the process name)
+   is ignored too. A `find` from a shell, SMB or cron does have a source and stays visible; a
+   stand-alone `find` without a source within those five minutes is unfortunately dropped as well.
 
-## Tijdzones
-Unraid kan op UTC staan terwijl containers lokale tijd gebruiken; cron op de host rekent dan anders
-dan de apps. Alle regels gebruiken daarom epoch-seconden; alleen de bestandsnaam (de dag) hangt
-af van `TZ` van de container.
+## Time zones
+Unraid can run on UTC while containers use local time; cron on the host then counts differently
+from the apps. All lines therefore use epoch seconds; only the file name (the day) depends on the
+container's `TZ`.
 
-## Eén bestand per dag
-Eerst waren er vier losse bestanden (`spin.csv`, `disks.csv`, `who.csv`, `activity.csv`) met elk
-een eigen tijdformaat, die bij elke opruimronde helemaal herschreven werden. Nu staat alles per dag
-in één bestand met een soort per regel: opruimen is een bestand verwijderen, een dag is los te
-bekijken of te exporteren, en de browser haalt oude dagen voorwaardelijk op (304). Elke dag begint
-met `disk`- en `state`-regels zodat hij ook zonder de vorige dag leesbaar is; `state` is uitdrukkelijk
-geen spin-up, zodat een herstart of de dagwissel geen valse spin-ups oplevert.
+## One file per day
+There used to be four separate files (`spin.csv`, `disks.csv`, `who.csv`, `activity.csv`), each with
+its own time format, that were rewritten completely on every cleanup run. Now everything for a day
+lives in one file with a type per line: cleanup means deleting a file, a day can be viewed or
+exported on its own, and the browser fetches older days conditionally (304). Every day starts with
+`disk` and `state` lines so it can be read without the previous day; `state` is explicitly not a
+spin-up, so a restart or the change of day does not produce false spin-ups.

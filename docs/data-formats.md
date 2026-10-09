@@ -1,12 +1,12 @@
-# Dataformaten
+# Data formats
 
-Alle data staat in `DATA_DIR/days` (standaard `/data/days`, op de host meestal
-`/mnt/user/appdata/spin-dashboard/days`): **één CSV per dag**, `YYYY-MM-DD.csv`. De dag is de
-lokale datum van de container (`TZ`, door Unraid meegegeven). Platte tekst, geen header.
+All data lives in `DATA_DIR/days` (default `/data/days`, on the host usually
+`/mnt/user/appdata/spin-dashboard/days`): **one CSV per day**, `YYYY-MM-DD.csv`. The day is the
+container's local date (`TZ`, passed in by Unraid). Plain text, no header.
 
-## Regels
+## Lines
 
-Elke regel begint met epoch-seconden en een soort; daarna velden per soort.
+Every line starts with epoch seconds and a type, followed by fields per type.
 
 ```
 1791496800,disk,sdd,trunk
@@ -16,53 +16,54 @@ Elke regel begint met epoch-seconden en een soort; daarna velden per soort.
 1791530846,spin,sdd,standby
 ```
 
-| Soort | Velden na `epoch,soort` | Betekenis |
+| Type | Fields after `epoch,type` | Meaning |
 |---|---|---|
-| `disk` | device, naam | Naam uit `disks.ini` (`parity`, `disk1`, `trunk`, `trunk2`). Bij de eerste peiling van elke dag en als de namen veranderen. |
-| `state` | device, `active`/`standby` | Gemeten status op dat moment, **geen wijziging**: bij de eerste peiling van een dag en na het starten. Telt niet als spin-up. |
-| `spin` | device, `active`/`standby` | Statuswijziging tussen twee peilingen. `active` na `standby` is een spin-up. |
-| `who` | soort, naam, pid, actie, pad | Toegang tot een bestand of map (fatrace). Zie hieronder. |
-| `activity` | schijf, event, pad | Oude inotify-data (`OPEN+ISDIR`, `MODIFY`, …). Wordt alleen nog door de migratie geschreven. |
+| `disk` | device, name | Name from `disks.ini` (`parity`, `disk1`, `trunk`, `trunk2`). On the first poll of every day and whenever the names change. |
+| `state` | device, `active`/`standby` | Measured state at that moment, **not a change**: on the first poll of a day and after a start. Never counts as a spin-up. |
+| `spin` | device, `active`/`standby` | State change between two polls. `active` after `standby` is a spin-up. |
+| `who` | kind, name, pid, action, path | Access to a file or folder (fatrace). See below. |
+| `activity` | disk, event, path | Old inotify data (`OPEN+ISDIR`, `MODIFY`, …). Only written by the migration. |
 
-Door de `disk`- en `state`-regels bovenaan is elk dagbestand op zichzelf leesbaar: namen en de
-status bij het begin van de dag staan erin, ook als de vorige dag al is opgeruimd.
+Thanks to the `disk` and `state` lines at the top, every day file can be read on its own: the
+names and the state at the start of the day are in it, even when the previous day has already
+been removed.
 
 ### who
 
-| Veld | Inhoud |
+| Field | Content |
 |---|---|
-| soort | `container`, `unraid`, `gebruiker`, `onbekend` |
-| naam | Containernaam, `SMB-share`, `shell (ssh)`, `mover`, `webGUI`, procesnaam, … (komma's vervangen door spaties). `… (al gestopt)` als het proces weg was. |
-| pid | PID (host-namespace) |
-| actie | `geopend`, `aangemaakt`, `verwijderd`, `verplaatst` |
-| pad | **Mappen eindigen op `/`.** Mag komma's bevatten; altijd het laatste veld. |
+| kind | `container`, `unraid`, `gebruiker` (user), `onbekend` (unknown) |
+| name | Container name, `SMB-share`, `shell (ssh)`, `mover`, `webGUI`, process name, … (commas replaced by spaces). Ends in ` (al gestopt)` ("already stopped") when the process was gone. |
+| pid | PID (host namespace) |
+| action | `geopend` (opened), `aangemaakt` (created), `verwijderd` (deleted), `verplaatst` (moved) |
+| path | **Folders end in `/`.** May contain commas; always the last field. |
 
-Deze waarden zijn Nederlands en maken deel uit van het formaat; de frontend vertaalt ze bij het tonen.
+These values are Dutch and part of the format; the frontend translates them when shown.
 
 ## Web
 
-| URL | Inhoud |
+| URL | Content |
 |---|---|
-| `/data/days.json` | `{"days": ["2026-10-08", "2026-10-09"]}`, oplopend |
-| `/data/days/YYYY-MM-DD.csv` | Eén dagbestand. Andere paden onder `/data/` geven 404. |
+| `/data/days.json` | `{"days": ["2026-10-08", "2026-10-09"]}`, ascending |
+| `/data/days/YYYY-MM-DD.csv` | One day file. Any other path under `/data/` returns 404. |
 
-## Bewaartermijn
+## Retention
 
-Elke 6 uur worden dagbestanden ouder dan `RETENTION_DAYS` (standaard 30) in zijn geheel verwijderd.
+Every 6 hours, day files older than `RETENTION_DAYS` (default 30) are removed as a whole.
 
-## Migratie van het oude formaat
+## Migration from the old format
 
-Tot oktober 2026 stond alles in losse bestanden in `DATA_DIR`:
+Until October 2026 everything was stored in separate files in `DATA_DIR`:
 
-| Bestand | Regel | Wordt |
+| File | Line | Becomes |
 |---|---|---|
 | `spin.csv` | `2026-10-01T04:15:07+02:00,/dev/sdd,active` | `spin` |
-| `disks.csv` | `sdd,trunk` | `disk` bovenaan elke gemigreerde dag |
-| `who.csv` | `epoch,soort,naam,pid,actie,pad` | `who` |
-| `activity.csv` | `epoch,disk,EVENT,pad` | `activity` |
+| `disks.csv` | `sdd,trunk` | `disk` at the top of every migrated day |
+| `who.csv` | `epoch,kind,name,pid,action,path` | `who` |
+| `activity.csv` | `epoch,disk,EVENT,path` | `activity` |
 
-`migrate()` draait bij elke start. Staan er oude bestanden, dan worden ze naar dagbestanden
-omgezet (met per dag `disk`- en `state`-regels, berekend uit de spin-historie), samengevoegd met
-wat er al in de dagbestanden stond, en daarna verplaatst naar `DATA_DIR/legacy/`. Herhalen is
-veilig: dubbele regels worden samengevoegd. Regels die niet om te zetten zijn (zoals
-syslog-regels in `spin.csv`) worden overgeslagen en geteld in de log; ze blijven in `legacy/` staan.
+`migrate()` runs on every start. If old files are present, they are converted into day files
+(with `disk` and `state` lines per day, computed from the spin history), merged with whatever was
+already in the day files, and then moved to `DATA_DIR/legacy/`. Running it again is safe: duplicate
+lines are merged. Lines that cannot be converted (such as syslog lines in `spin.csv`) are skipped
+and counted in the log; they stay in `legacy/`.
