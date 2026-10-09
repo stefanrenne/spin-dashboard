@@ -13,7 +13,7 @@ Newest first.
 
 ## 2026-10-09: languages and browsing
 - UI in English, Dutch, French, German and Spanish; defaults to the browser language, the choice is remembered
-- Browse through time: per day (24 hours), per week (7 days) and per 30 days, with a "Now" button
+- Browse through time: per day (24 hours), per week (7 days) and per 30 days, with a "Now" button that is always visible and highlighted for the current period
 - Shorter axis labels, thinned out on narrow screens
 - Info icons with tooltips in "What wakes the drives" (root of a pool, unknown, shfs, already stopped) instead of explanation paragraphs
 - Frontend tests run with `--test-force-exit`, so a failing test no longer hangs on the refresh timer

@@ -755,7 +755,7 @@ function render(){
   if (range !== 'all'){
     $('prev').disabled = a <= extent()[0];
     $('next').disabled = offset === 0;
-    $('now').hidden = offset === 0;
+    $('now').setAttribute('aria-pressed', offset === 0);   // altijd zichtbaar, gemarkeerd bij de huidige periode
     for (const [id, k] of [['prev', 'prev_'], ['next', 'next_']]){
       $(id).title = t(k + range); $(id).setAttribute('aria-label', t(k + range));
     }

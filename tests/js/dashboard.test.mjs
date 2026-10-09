@@ -176,12 +176,13 @@ test('day view steps one day back and forward', async () => {
   click(d, '[data-range="1"]');
   assert.equal(d.getElementById('nav').hidden, false);
   assert.equal(d.getElementById('next').disabled, true);
-  assert.equal(d.getElementById('now').hidden, true);
+  assert.equal(d.getElementById('now').hidden, false);
+  assert.equal(d.getElementById('now').getAttribute('aria-pressed'), 'true');
   assert.equal(upTimes(d), 1);                          // 0,2 dag geleden
   click(d, '#prev');
   assert.equal(upTimes(d), 1);                          // 1,5 dag geleden
   assert.equal(d.getElementById('next').disabled, false);
-  assert.equal(d.getElementById('now').hidden, false);
+  assert.equal(d.getElementById('now').getAttribute('aria-pressed'), 'false');
   assert.equal(d.getElementById('prev').getAttribute('aria-label'), 'Vorige dag');
   click(d, '#prev');
   assert.equal(upTimes(d), 0);                          // 2 tot 3 dagen geleden: niets
@@ -201,6 +202,7 @@ test('week and month views step a whole period, and "now" jumps back', async () 
   assert.equal(d.getElementById('prev').getAttribute('aria-label'), 'Vorige week');
   click(d, '#now');
   assert.equal(upTimes(d), 2);
+  assert.equal(d.getElementById('now').getAttribute('aria-pressed'), 'true');
   click(d, '[data-range="30"]');
   assert.equal(upTimes(d), 3);
   click(d, '#prev');
