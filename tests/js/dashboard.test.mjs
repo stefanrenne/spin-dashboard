@@ -1498,3 +1498,46 @@ test('quiet hours apply only to the chosen drives and are saved on the server', 
   assert.equal(d.getElementById('quietStatus').textContent, 'Test verstuurd.');
   dom.window.close();
 });
+
+test('a source name in the live feed and in Events opens its profile too', async () => {
+  const dom = await load(DOCK);
+  const d = dom.window.document;
+  // live-feed: de naam is een knop, de procesnaam staat erachter
+  const li = [...d.querySelectorAll('#feed li')].find((x) => /b\.mkv/.test(text(x)));
+  const btn = li.querySelector('.fs .srcbtn');
+  assert.equal(btn.dataset.src, 'container|plex');
+  assert.equal(text(li.querySelector('.fs')), 'plex › Plex Media Scan');
+  btn.click();
+  assert.ok(d.getElementById('profile').hasAttribute('open'));
+  assert.equal(text(d.getElementById('profileTitle')), 'plex');
+  d.getElementById('profileDone').click();
+  // gebeurtenissen: het bronlabel bij de oorzaak, met zijn uiterlijk als label
+  const badge = d.querySelector('#events td.cause .srcbtn.who.container');
+  assert.equal(badge.dataset.src, 'container|plex');
+  badge.click();
+  assert.ok(d.getElementById('profile').hasAttribute('open'));
+  dom.window.close();
+});
+
+test('a feed source outside the selected period stays plain text', async () => {
+  const dom = await load(DOCK);
+  const d = dom.window.document;
+  d.querySelector('[data-range="h"]').click();             // laatste uur: plex las 95 min geleden, valt erbuiten
+  await new Promise((r) => setTimeout(r, 100));
+  const li = [...d.querySelectorAll('#feed li')].find((x) => /c\.mkv/.test(text(x)));
+  assert.equal(li.querySelector('.fs .srcbtn'), null);
+  assert.equal(text(li.querySelector('.fs')), 'plex');
+  dom.window.close();
+});
+
+test('a process in Reads and Writes per drive opens its profile', async () => {
+  const dom = await load(RW);
+  const d = dom.window.document;
+  const names = [...d.querySelectorAll('#actWrites .srcbtn')].map((b) => b.dataset.src);
+  assert.deepEqual(names, ['container|plex', 'container|sonarr']);
+  assert.equal(d.querySelectorAll('#actWrites .haspath .srcbtn, #actWrites .srcbtn.haspath').length, 0);   // bestanden blijven paden
+  d.querySelector('#actReads .srcbtn[data-src="container|bazarr"]').click();
+  assert.ok(d.getElementById('profile').hasAttribute('open'));
+  assert.equal(text(d.getElementById('profileTitle')), 'bazarr');
+  dom.window.close();
+});

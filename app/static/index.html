@@ -274,7 +274,9 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 .src-sub{font-size:0.75rem;margin-left:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #rest td.quick{color:var(--up-text);font-weight:600}
 /* bronnamen openen het profiel */
-.srcbtn{background:none;border:0;padding:0;margin:0;font:inherit;color:inherit;cursor:pointer;text-align:left;min-width:0}
+.srcbtn{margin:0;cursor:pointer;text-align:left;min-width:0}
+.srcbtn:not(.who){background:none;border:0;padding:0;font:inherit;color:inherit}
+.srcbtn.who{font-family:inherit}
 .srcbtn:hover{text-decoration:underline}
 .cause-row.wide{grid-template-columns:minmax(7rem,11rem) 1fr 5.5rem}
 /* ritme: naam, herkend schema en een strook van 24 uur */
@@ -1246,7 +1248,16 @@ function collapseShare(e){
 const whoLabel = w => w.name.replace(/ \(al gestopt\)$/, ' ' + t('stopped'));
 function whoBadge(w){
   if (!w) return `<span class="who none">${esc(t('kind_none'))}</span>`;
-  return `<span class="who ${esc(w.kind)}" title="${esc(t('kind_' + w.kind))}, pid ${w.pid}">${esc(whoLabel(w))}</span>`;
+  const title = `${t('kind_' + w.kind)}, pid ${w.pid}`;
+  return srcLink(w, esc(whoLabel(w)), `who ${w.kind}`, title) || `<span class="who ${esc(w.kind)}" title="${esc(title)}">${esc(whoLabel(w))}</span>`;
+}
+// Bronnaam als knop naar het profiel, als die bron in de gekozen periode voorkomt; anders null
+function srcLink(w, inner, cls = '', title = ''){
+  if (!w || !srcIdx) return null;
+  const k = sourceKey(w, projectMap());
+  if (!srcIdx.keys.has(k)) return null;
+  const tip = (title ? title + ' · ' : '') + t('profOpen', {name: whoLabel(w)});
+  return `<button type="button" class="srcbtn ${esc(cls)}" data-src="${esc(k)}" title="${esc(tip)}">${inner}</button>`;
 }
 
 /* ---------- activiteit: inotify (activity-regels, oud) + fanotify (who-regels) samen ---------- */
@@ -1456,7 +1467,8 @@ function render(){
       </div>`).join('')
       : `<p class="muted">${esc(t('noUps'))}</p>`;
   }
-  srcIdx = {a, b, list: sourceIndex(a, b, devs, groupUps(allUps))};
+  const srcList = sourceIndex(a, b, devs, groupUps(allUps));
+  srcIdx = {a, b, list: srcList, keys: new Set(srcList.map(x => x.k))};
   renderSources(srcIdx.list);
   renderAwake(srcIdx.list);
   renderRhythm(srcIdx.list);
@@ -1927,21 +1939,24 @@ function actDrives(a, b, devs){
     const e = data.act[i];
     const m = (ms.find(([, mm]) => mm.test(e)) || [])[0];
     if (!m) continue;                            // parity-schrijvingen tellen bij de echte schijf
-    const d = perDev[m] || (perDev[m] = {dev: m, w: 0, r: 0, srcW: {}, srcR: {}, fileW: {}, fileR: {}});
+    const d = perDev[m] || (perDev[m] = {dev: m, w: 0, r: 0, srcW: {}, srcR: {}, fileW: {}, fileR: {}, who: {}});
     const dir = dirOf(e) || (WRITES.test(e.ev) ? 'w' : 'r');
     const w = whoFor(e), src = w ? whoLabel(w) : '';
     const file = isDir(e) ? null : '/' + partsOf(e.path).slice(2).join('/');
     d[dir === 'w' ? 'w' : 'r']++;
     if (src) (dir === 'w' ? d.srcW : d.srcR)[src] = ((dir === 'w' ? d.srcW : d.srcR)[src] || 0) + 1;
+    if (src && !d.who[src]) d.who[src] = w;          // om de naam naar het profiel te laten wijzen
     if (file) (dir === 'w' ? d.fileW : d.fileR)[file] = ((dir === 'w' ? d.fileW : d.fileR)[file] || 0) + 1;
   }
   return Object.values(perDev).filter(d => d.w + d.r > 0)
     .sort((p, q) => (q.w + q.r) - (p.w + p.r) || devOrder(p.dev, q.dev));
 }
 const topN = (obj, n) => Object.entries(obj).sort((p, q) => q[1] - p[1]).slice(0, n);
-function actRow(label, n, max, cls){
+function actRow(label, n, max, cls, w){
   const isFile = cls === 'muted';   // bestandsrijen krijgen een hover-overlay met het volledige pad
-  return `<div class="cause-row"><span class="cause-name"><span class="cn${cls ? ' ' + cls : ''}${isFile ? ' haspath' : ''}"${isFile ? ` tabindex="0" aria-label="${esc(label)}"` : ` title="${esc(label)}"`} data-path="${esc(label)}">${esc(label)}</span></span>
+  const name = (!isFile && srcLink(w, esc(label), 'cn'))     // een proces opent zijn profiel
+    || `<span class="cn${cls ? ' ' + cls : ''}${isFile ? ' haspath' : ''}"${isFile ? ` tabindex="0" aria-label="${esc(label)}"` : ` title="${esc(label)}"`} data-path="${esc(label)}">${esc(label)}</span>`;
+  return `<div class="cause-row"><span class="cause-name">${name}</span>
     <span class="cause-bar"><i style="width:${n / max * 100}%"></i></span><b>${n}</b></div>`;
 }
 // Twee kaartjes: lezen en schrijven. Per kaartje alleen de schijven met activiteit in die richting,
@@ -1963,7 +1978,7 @@ function drawActDrives(a, b, devs){
         <div class="head"><b>${esc(nameOf(d.dev))}</b>
           <span class="muted">${esc(t('actSum' + D, {n: d[dir], tot, pct: Math.round(d[dir] / tot * 100)}))}</span></div>
         <div class="actlist">
-          ${actSection('actProcs', topN(srcs, 4).map(([k, n]) => actRow(k, n, mx)))}
+          ${actSection('actProcs', topN(srcs, 4).map(([k, n]) => actRow(k, n, mx, '', d.who[k])))}
           ${actSection('actFiles', topN(files, 4).map(([k, n]) => actRow(k, n, mx, 'muted')))}
         </div></div>`;
     }).join('');
@@ -2006,17 +2021,19 @@ function drawFeed(){
     const same = `${d}|${src}|${relPath(e)}`, hit = byKey.get(same);   // zoals getoond: share-pad, niet de schijf
     if (hit){ hit.n++; hit.fresh = hit.fresh || isFresh; continue; }
     if (items.length >= FEED_MAX) continue;
-    const it = {e, k, d, src, n: 1, fresh: isFresh};
+    const it = {e, k, d, src, w, n: 1, fresh: isFresh};
     byKey.set(same, it); items.push(it);
   }
   // toon het share-relatieve pad (mappen + bestand); het volledige pad zit in de hover-overlay
-  el.innerHTML = items.map(({e, k, d, src, n, fresh}) => `<li${fresh ? ' class="fresh"' : ''} data-k="${esc(k)}">
+  el.innerHTML = items.map(({e, k, d, src, w, n, fresh}) => {
+    const link = srcLink(w, esc(w ? whoLabel(w) : ''));       // naam naar het profiel, procesnaam erachter
+    return `<li${fresh ? ' class="fresh"' : ''} data-k="${esc(k)}">
       <span class="dot ${d}"></span>
       <span class="fb ${d}" title="${esc(t(d === 'w' ? 'rwW' : 'rwR'))}">${d.toUpperCase()}</span>
       <span class="fp haspath" tabindex="0" aria-label="${esc(e.path)}" data-path="${esc(e.path)}">${esc(relPath(e))}</span>
-      <span class="fs">${esc(src)}</span>
-      <time>${n > 1 ? `<span class="fx" title="${esc(t('feedRepeat', {n}))}">×${n}</span> ` : ''}${esc(feedAgo(now, e.t))}</time></li>`).join('')
-    || `<li class="muted">${esc(t('actNone'))}</li>`;
+      <span class="fs">${link ? link + esc(procSuffix(w)) : esc(src)}</span>
+      <time>${n > 1 ? `<span class="fx" title="${esc(t('feedRepeat', {n}))}">×${n}</span> ` : ''}${esc(feedAgo(now, e.t))}</time></li>`;
+  }).join('') || `<li class="muted">${esc(t('actNone'))}</li>`;
   $('feedNote').textContent = offset > 0 ? t('feedNote') : '';
   // beperk de geheugen van feedSeen tot wat er nu zichtbaar is
   if (feedSeen.size > 2000){ feedSeen.clear(); for (const e of feedEvents()) feedSeen.add(feedKey(e)); }
