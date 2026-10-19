@@ -1,5 +1,5 @@
-// README-screenshots opnieuw maken uit de demodata (zie docs/development.md).
-// Playwright staat bewust niet in package.json: alleen nodig als de screenshots ververst worden.
+// Recreate the README screenshots from the sample data (see docs/development.md).
+// Playwright is deliberately not in package.json: only needed when the screenshots are refreshed.
 //   npm install --no-save playwright && npx playwright install chromium
 //   node scripts/screenshots.mjs
 import { chromium } from 'playwright';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const out = root + 'docs/images/';
 
-// het dashboard is één bestand; meer hoeft de demo niet
+// the dashboard is one file; the demo needs nothing more
 const server = createServer(async (req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.end(await readFile(root + 'app/static/index.html'));
@@ -26,9 +26,9 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForSelector('#dash:not([hidden])');
   await page.click('[data-range="7"]');
   await page.evaluate(() => document.fonts.ready);
-  await page.waitForTimeout(1200);           // inloopanimatie en lettertype
+  await page.waitForTimeout(1200);           // entrance animation and font
   await page.screenshot({ path: `${out}screenshot-${scheme}.png`, fullPage: true });
-  // detail: lezen en schrijven, draaiduur en live activiteit
+  // detail: reads and writes, spin time and live activity
   const clip = await page.evaluate(() => {
     const rs = ['actR', 'actW', 'rest', 'feed'].map((id) => document.querySelector(`[data-card="${id}"]`).getBoundingClientRect());
     const top = Math.min(...rs.map((r) => r.top)) + scrollY, bottom = Math.max(...rs.map((r) => r.bottom)) + scrollY;

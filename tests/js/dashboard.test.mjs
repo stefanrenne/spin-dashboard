@@ -1,4 +1,4 @@
-// Frontend-tests: laden het dashboard in jsdom met een nagebootste fetch.
+// Frontend tests: load the dashboard in jsdom with a mocked fetch.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -7,10 +7,10 @@ import { JSDOM } from 'jsdom';
 const HTML = readFileSync(new URL('../../app/static/index.html', import.meta.url), 'utf8');
 const now = Date.now();
 const ep = (minAgo) => Math.floor((now - minAgo * 60e3) / 1000);
-// lokale datum als dagnaam, zoals de server die gebruikt
+// local date as day name, as the server uses it
 const dayName = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const today = dayName(now);
-// days.json + dagbestanden zoals de server ze levert: served({'2026-10-09': [regels]})
+// days.json + day files as the server delivers them: served({'2026-10-09': [lines]})
 const served = (days) => Object.fromEntries([
   ['days.json', JSON.stringify({ days: Object.keys(days) })],
   ...Object.entries(days).map(([d, lines]) => [`days/${d}.csv`, lines.join('\n') + '\n']),
@@ -28,7 +28,7 @@ function load(files, url = 'http://dash/?lang=nl', languages = ['en-US'], stored
       w.__posts = [];
       w.fetch = (u, opts = {}) => {
         w.__fetched.push(u);
-        if (opts.method === 'POST') {     // opslaan: vastleggen; files.POST = false laat het mislukken
+        if (opts.method === 'POST') {     // saving: recorded; files.POST = false makes it fail
           w.__posts.push({ url: u, type: opts.headers['Content-Type'], body: JSON.parse(opts.body) });
           if (files.POST === false) return Promise.reject(new Error('offline'));
           const reply = Object.entries(files.POSTREPLY || {}).find(([k]) => u.includes(k));
@@ -44,9 +44,9 @@ function load(files, url = 'http://dash/?lang=nl', languages = ['en-US'], stored
   return new Promise((resolve) => setTimeout(() => resolve(dom), 300));
 }
 const text = (el) => el.textContent.replace(/\s+/g, ' ').trim();
-// wachten tot iets klopt (een periodewissel is asynchroon); hooguit 2 s, daarna beslist de assert
+// wait until something holds (a period switch is asynchronous); at most 2 s, then the assert decides
 const until = async (ok, ms = 2000) => { for (const end = Date.now() + ms; !ok() && Date.now() < end;) await new Promise((r) => setTimeout(r, 20)); };
-// naam van een kaartje in de instellingen, zonder de positie die alleen voor schermlezers is
+// name of a card in the settings, without the position that is only for screen readers
 const cardName = (label) => [...label.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
 const rows = (doc) => [...doc.querySelectorAll('#events tr')].map(text);
 
@@ -110,10 +110,10 @@ test('"Per bron" ranks sources by the spin-ups they caused, with reads, writes a
   const dom = await load(POOL);
   const d = dom.window.document;
   const rows = [...d.querySelectorAll('#sources .src')].map(text);
-  // soort als tekst voor schermlezers; spin-ups eerst, daarna de activiteit
+  // the kind as text for screen readers; spin-ups first, then the activity
   assert.equal(rows[0], 'container: bazarr 1 veroorzaakte spin-ups 1 gelezen · 0 geschreven · trunk');
   assert.ok(rows.slice(1).every((r) => / 0 veroorzaakte spin-ups /.test(r)), rows.join('\n'));
-  assert.doesNotMatch(text(d.getElementById('causes')), /Door wie|bazarr/);   // staat niet meer bij de oorzaken
+  assert.doesNotMatch(text(d.getElementById('causes')), /Door wie|bazarr/);   // no longer with the causes
   dom.window.close();
 });
 
@@ -129,7 +129,7 @@ test('filtering on one disk shows its events separately', async () => {
   dom.window.close();
 });
 
-// ---------- talen ----------
+// ---------- languages ----------
 test('language follows the browser and falls back to English', async () => {
   let dom = await load(POOL, 'http://dash/', ['de-DE', 'en']);
   let d = dom.window.document;
@@ -168,7 +168,7 @@ test('a remembered language wins over the browser language', async () => {
   assert.equal(text(dom.window.document.querySelector('h1')), 'Cuándo giran mis discos');
   assert.equal(dom.window.document.getElementById('lang').value, 'es');
   dom.window.close();
-  dom = await load(POOL, 'http://dash/', ['de-DE'], 'xx');       // onbekende waarde: browsertaal
+  dom = await load(POOL, 'http://dash/', ['de-DE'], 'xx');       // unknown value: browser language
   assert.equal(text(dom.window.document.querySelector('h1')), 'Wann laufen meine Festplatten');
   dom.window.close();
 });
@@ -185,11 +185,11 @@ test('every language has the same keys as English', async () => {
   dom.window.close();
 });
 
-// ---------- bladeren ----------
+// ---------- browsing ----------
 const day = 24 * 60;
 const SPREAD = served({ [today]: [`${ep(40 * day)},disk,sdd,disk1`, ...[40, 35, 9, 8.9, 1.5, 1.4, 0.2, 0.1].map((d, i) =>
   `${ep(d * day)},spin,sdd,${i % 2 ? 'standby' : 'active'}`)] });
-// een wissel toont eerst het skelet; wacht tot het dashboard terug is
+// a switch shows the skeleton first; wait until the dashboard is back
 const settle = async (d) => {
   for (let i = 0; i < 150 && (d.getElementById('dash').hidden || !d.getElementById('loader').hidden); i++)
     await new Promise((r) => setTimeout(r, 20));
@@ -205,14 +205,14 @@ test('day view steps one day back and forward', async () => {
   assert.equal(d.getElementById('next').disabled, true);
   assert.equal(d.getElementById('now').hidden, false);
   assert.equal(d.getElementById('now').getAttribute('aria-pressed'), 'true');
-  assert.equal(upTimes(d), 1);                          // 0,2 dag geleden
+  assert.equal(upTimes(d), 1);                          // 0.2 days ago
   await click(d, '#prev');
-  assert.equal(upTimes(d), 1);                          // 1,5 dag geleden
+  assert.equal(upTimes(d), 1);                          // 1.5 days ago
   assert.equal(d.getElementById('next').disabled, false);
   assert.equal(d.getElementById('now').getAttribute('aria-pressed'), 'false');
   assert.equal(d.getElementById('prev').getAttribute('aria-label'), 'Vorige dag');
   await click(d, '#prev');
-  assert.equal(upTimes(d), 0);                          // 2 tot 3 dagen geleden: niets
+  assert.equal(upTimes(d), 0);                          // 2 to 3 days ago: nothing
   await click(d, '#next'); await click(d, '#next');
   assert.equal(d.getElementById('next').disabled, true);
   assert.equal(upTimes(d), 1);
@@ -223,9 +223,9 @@ test('week and month views step a whole period, and "now" jumps back', async () 
   const dom = await load(SPREAD);
   const d = dom.window.document;
   await click(d, '[data-range="7"]');
-  assert.equal(upTimes(d), 2);                          // 1,5 en 0,2 dag
+  assert.equal(upTimes(d), 2);                          // 1.5 and 0.2 days
   await click(d, '#prev');
-  assert.equal(upTimes(d), 1);                          // 9 dagen
+  assert.equal(upTimes(d), 1);                          // 9 days
   assert.equal(d.getElementById('prev').getAttribute('aria-label'), 'Vorige week');
   await click(d, '#now');
   assert.equal(upTimes(d), 2);
@@ -233,7 +233,7 @@ test('week and month views step a whole period, and "now" jumps back', async () 
   await click(d, '[data-range="30"]');
   assert.equal(upTimes(d), 3);
   await click(d, '#prev');
-  assert.equal(upTimes(d), 1);                          // 35 dagen; 40 dagen is het begin van de data
+  assert.equal(upTimes(d), 1);                          // 35 days; 40 days is the start of the data
   assert.equal(d.getElementById('prev').disabled, true);
   assert.equal(d.getElementById('prev').getAttribute('aria-label'), 'Vorige maand');
   await click(d, '[data-range="all"]');
@@ -242,7 +242,7 @@ test('week and month views step a whole period, and "now" jumps back', async () 
   dom.window.close();
 });
 
-// ---------- info-icoontjes ----------
+// ---------- info icons ----------
 const ROOT = served({ [today]: [
   `${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`,
   `${ep(121)},who,unraid,shfs (via /mnt/user),1,geopend,/mnt/trunk/`,
@@ -260,7 +260,7 @@ test('ranking rows that need explaining get an info icon with a tooltip', async 
     ['shfs (via /mnt/user)', 'shfsNote'],
     ['find (al gestopt)', 'stoppedNote'],
   ]);
-  assert.equal(d.querySelectorAll('#causes p').length, 0);         // geen losse uitlegalinea's meer
+  assert.equal(d.querySelectorAll('#causes p').length, 0);         // no separate explanation paragraphs any more
   const btn = d.querySelector('#causes .info');
   const tip = d.getElementById('tip');
   btn.dispatchEvent(new w.Event('focusin', { bubbles: true }));
@@ -269,7 +269,7 @@ test('ranking rows that need explaining get an info icon with a tooltip', async 
   assert.equal(btn.getAttribute('aria-expanded'), 'true');
   d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' }));
   assert.equal(tip.hidden, true);
-  btn.click();                                                       // tikken op telefoon
+  btn.click();                                                       // tapping on a phone
   assert.equal(tip.hidden, false);
   btn.click();
   assert.equal(tip.hidden, true);
@@ -286,28 +286,28 @@ test('tooltip text follows the chosen language', async () => {
   dom.window.close();
 });
 
-// ---------- dagbestanden ----------
+// ---------- day files ----------
 test('day files are combined, and a state line is not a spin-up', async () => {
   const dom = await load(served({
     '2026-10-08': [`${ep(30 * 60)},disk,sdd,trunk`, `${ep(30 * 60)},state,sdd,standby`,
                    `${ep(26 * 60)},spin,sdd,active`, `${ep(25 * 60)},spin,sdd,standby`],
     '2026-10-09': [`${ep(20 * 60)},disk,sdd,trunk`, `${ep(20 * 60)},state,sdd,standby`,
-                   `${ep(3 * 60)},state,sdd,active`,                 // na een herstart: draait al
+                   `${ep(3 * 60)},state,sdd,active`,                 // after a restart: already spinning
                    `${ep(60)},spin,sdd,standby`],
   }));
   const d = dom.window.document;
-  await click(d, '[data-range="all"]');                  // de spin-up van gisteren valt buiten de 24 uur
+  await click(d, '[data-range="all"]');                  // yesterday's spin-up is outside the 24 hours
   const r = rows(d);
-  assert.equal(r.filter((x) => /Opgespind/.test(x)).length, 1, r.join('\n'));   // alleen die van gisteren
+  assert.equal(r.filter((x) => /Opgespind/.test(x)).length, 1, r.join('\n'));   // only yesterday's
   assert.equal(r.filter((x) => /Naar standby/.test(x)).length, 2);
   assert.match(text(d.querySelector('.lane-stats')), /^1 spin-ups/);
   dom.window.close();
 });
 
-// ---------- lezen/schrijven en actieve schijven ----------
+// ---------- reads/writes and active drives ----------
 const RW = served({ [today]: [
   `${ep(300)},disk,sdd,trunk`,
-  `${ep(300)},state,sdd,active`,                                       // draait al, geen spin-up
+  `${ep(300)},state,sdd,active`,                                       // already spinning, no spin-up
   `${ep(200)},who,container,plex,10,geschreven,/mnt/trunk/appdata/plex/Logs/server.log`,
   `${ep(190)},who,container,plex,10,geschreven,/mnt/trunk/appdata/plex/Logs/server.log`,
   `${ep(180)},who,container,sonarr,11,geschreven,/mnt/trunk/appdata/sonarr/sonarr.db`,
@@ -339,18 +339,18 @@ test('a write event in a session list carries a W badge, a read an R badge', asy
   d.querySelector('tr.has-sess .sess').click();
   const badges = [...d.querySelectorAll('.files .ev .rw')].map((b) => b.textContent);
   assert.ok(badges.includes('W'), badges.join(','));   // geschreven -> W
-  assert.ok(badges.includes('R'), badges.join(','));   // geopend op bestand -> R
+  assert.ok(badges.includes('R'), badges.join(','));   // geopend on a file -> R
   dom.window.close();
 });
 
 test('active drives ranks the top writer and shows write and read counts', async () => {
   const dom = await load(RW);
   const d = dom.window.document;
-  // plex schreef 2x, sonarr 1x, bazarr las 1x: 4 gebeurtenissen op trunk
+  // plex wrote 2x, sonarr 1x, bazarr read 1x: 4 events on trunk
   const ws = text(d.getElementById('actWrites')), rs = text(d.getElementById('actReads'));
   assert.match(ws, /trunk 3 keer geschreven \(75% van 4 gebeurtenissen\)/);
   assert.match(rs, /trunk 1 keer gelezen \(25% van 4 gebeurtenissen\)/);
-  // volgorde: plex (2) voor sonarr (1)
+  // order: plex (2) before sonarr (1)
   const names = [...d.querySelectorAll('#actWrites .cn')].map(text);
   assert.ok(names.indexOf('plex') < names.indexOf('sonarr'), names.join(','));
   dom.window.close();
@@ -369,7 +369,7 @@ test('a direction without activity says so in its own card', async () => {
 });
 
 test('legacy who line without direction still renders without a badge', async () => {
-  // oud 'geopend'-record van een bestand: geen R/W-badge (richting onbekend), geen crash
+  // old 'geopend' record of a file: no R/W badge (direction unknown), no crash
   const LEG = served({ [today]: [
     `${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`,
     `${ep(121)},who,container,bazarr,2,geopend,/mnt/trunk/Media/series/a.mkv`,
@@ -378,23 +378,23 @@ test('legacy who line without direction still renders without a badge', async ()
   const dom = await load(LEG);
   const d = dom.window.document;
   const up = rows(d).find((x) => /Opgespind/.test(x));
-  assert.match(up, /gelezen: a\.mkv/);            // oude regel toont als 'gelezen', geen richting-badge
+  assert.match(up, /gelezen: a\.mkv/);            // old line shows as 'read', no direction badge
   dom.window.close();
 });
 
-// ---------- live feed, laatste uur en pad-overlay ----------
+// ---------- live feed, last hour and path overlay ----------
 test('live activity feed shows recent files newest first with R/W dot', async () => {
   const dom = await load(RW);
   const d = dom.window.document;
   const items = [...d.querySelectorAll('#feed li')];
   assert.ok(items.length >= 3, items.map(text).join(' | '));
-  // nieuwste (bazarr, 120 min geleden) bovenaan; oudste (plex, 200 min) onderaan
+  // newest (bazarr, 120 min ago) on top; oldest (plex, 200 min) at the bottom
   assert.match(text(items[0]), /a\.mkv/);
   assert.match(text(items[items.length - 1]), /server\.log/);
-  // R/W-punten aanwezig
+  // R/W dots present
   assert.ok(d.querySelector('#feed .fb.w'), 'write badge');
   assert.ok(d.querySelector('#feed .fb.r'), 'read badge');
-  // relatieve tijd aanwezig (min of uur geleden)
+  // relative time present (min or hours ago)
   assert.match(text(items[0]), /\d+ (min|u) geleden/);
   dom.window.close();
 });
@@ -403,9 +403,9 @@ test('feed shows the folder structure and the full path in the overlay', async (
   const dom = await load(RW);
   const d = dom.window.document, w = dom.window;
   const fp = [...d.querySelectorAll('#feed .fp')].find((el) => /a\.mkv/.test(el.textContent));
-  // zichtbaar: share-relatief pad met mappen, niet alleen de bestandsnaam
+  // visible: share-relative path with folders, not just the file name
   assert.equal(fp.textContent, '/Media/series/a.mkv');
-  // volledige pad in data-path voor de hover-overlay
+  // full path in data-path for the hover overlay
   assert.equal(fp.dataset.path, '/mnt/trunk/Media/series/a.mkv');
   fp.dispatchEvent(new w.Event('focusin', { bubbles: true }));
   const tip = d.getElementById('tip');
@@ -420,7 +420,7 @@ test('last hour toggle narrows the window and shows minute ticks', async () => {
   d.querySelector('[data-range="h"]').click();
   await until(() => rows(d).filter((x) => /Opgespind|Naar standby/.test(x)).length === 0);
   assert.equal(d.querySelector('[data-range="h"]').getAttribute('aria-pressed'), 'true');
-  // gebeurtenissen ouder dan een uur vallen buiten de tabel
+  // events older than an hour are outside the table
   const r = rows(d);
   assert.equal(r.filter((x) => /Opgespind|Naar standby/.test(x)).length, 0, r.join('\n'));
   dom.window.close();
@@ -470,18 +470,18 @@ test('a streamed who line appears in the feed immediately', async () => {
   const dom = await loadWithStream(RW);
   const d = dom.window.document, w = dom.window;
   const before = d.querySelectorAll('#feed li').length;
-  // simuleer een event dat de server net heeft gelogd
+  // simulate an event the server just logged
   w.__push(`${Math.floor(Date.now() / 1000)},who,container,radarr,99,geschreven,/mnt/trunk/appdata/radarr/radarr.db`);
   await until(() => /radarr\.db/.test(d.getElementById('feed').textContent));
   const items = [...d.querySelectorAll('#feed li')];
   assert.ok(items.length > before, 'feed groeit zonder te wachten op de minuten-fetch');
-  assert.match(text(items[0]), /radarr\.db/);          // nieuwste bovenaan
+  assert.match(text(items[0]), /radarr\.db/);          // newest on top
   assert.ok(items[0].querySelector('.fb.w'), 'write badge op het gestreamde event');
   assert.ok(items[0].classList.contains('fresh'), 'nieuw item krijgt een highlight');
   dom.window.close();
 });
 
-// ---------- laadpaneel ----------
+// ---------- loading panel ----------
 test('first load shows a loading panel with progress, then the dashboard', async () => {
   let release;
   const slow = new Promise((r) => { release = r; });
@@ -491,7 +491,7 @@ test('first load shows a loading panel with progress, then the dashboard', async
   });
   files['days.json'] = JSON.stringify({ days: ['2026-10-08', '2026-10-09'], bytes: 2 * 1048576 });
   const day2 = [`${ep(120)},spin,sdd,active`, `${ep(60)},spin,sdd,standby`].join('\n') + '\n';
-  files['days/2026-10-09.csv'] = slow.then(() => day2);              // tweede dag komt later binnen
+  files['days/2026-10-09.csv'] = slow.then(() => day2);              // the second day arrives later
   const dom = await load(files);
   const d = dom.window.document;
   const bar = d.getElementById('loaderBar');
@@ -503,7 +503,7 @@ test('first load shows a loading panel with progress, then the dashboard', async
   await until(() => d.getElementById('loader').hidden);
   assert.equal(d.getElementById('loader').hidden, true);
   assert.equal(d.getElementById('dash').hidden, false);
-  assert.equal(bar.getAttribute('aria-valuenow'), '96');                 // laatste stap: opbouwen
+  assert.equal(bar.getAttribute('aria-valuenow'), '96');                 // last step: building
   assert.ok(rows(d).some((x) => /Opgespind/.test(x)));
   dom.window.close();
 });
@@ -516,7 +516,7 @@ test('no data hides the loading panel and shows the status message', async () =>
   dom.window.close();
 });
 
-// ---------- alleen de dagen van de getoonde periode ----------
+// ---------- only the days of the shown period ----------
 test('only the days of the shown period are fetched; browsing back loads the rest', async () => {
   const days = {};
   for (let k = 11; k >= 0; k--){
@@ -530,11 +530,11 @@ test('only the days of the shown period are fetched; browsing back loads the res
   const d = dom.window.document;
   const fetchedDays = () => dom.window.__fetched.filter((u) => u.includes('/days/')).map((u) => u.match(/(\d{4}-\d{2}-\d{2})/)[1]);
   const names = Object.keys(days);
-  // standaard 24 uur: vandaag, gisteren en een dag marge
+  // default 24 hours: today, yesterday and a day of margin
   assert.equal(d.querySelector('[data-range="1"]').getAttribute('aria-pressed'), 'true');
   assert.deepEqual(fetchedDays().sort(), names.slice(9));
   assert.equal(upTimes(d), 1);
-  d.querySelector('[data-range="7"]').click();          // wissel: skelet en laadbalk, de knop is meteen actief
+  d.querySelector('[data-range="7"]').click();          // switch: skeleton and loading bar, the button is active at once
   assert.equal(d.getElementById('dash').hidden, true);
   assert.equal(d.getElementById('loader').hidden, false);
   assert.equal(d.getElementById('loaderBar').hidden, false);
@@ -542,11 +542,11 @@ test('only the days of the shown period are fetched; browsing back loads the res
   await settle(d);
   assert.deepEqual(fetchedDays().sort(), names.slice(3));
   assert.equal(upTimes(d), 7);
-  await click(d, '#prev');                               // week terug: de oudere dagen worden bijgeladen
+  await click(d, '#prev');                               // a week back: the older days are loaded
   assert.deepEqual(fetchedDays().sort(), names);
-  assert.equal(upTimes(d), 5);                           // 7 t/m 11 dagen geleden
+  assert.equal(upTimes(d), 5);                           // 7 to 11 days ago
   const before = fetchedDays().length;
-  d.querySelector('[data-range="all"]').click();         // alles staat al in het geheugen: toch even het skelet
+  d.querySelector('[data-range="all"]').click();         // everything is in memory already: still the skeleton briefly
   assert.equal(d.getElementById('loader').hidden, false);
   await settle(d);
   assert.equal(fetchedDays().length, before);
@@ -562,8 +562,8 @@ test('loading finishes in a hidden tab, where requestAnimationFrame never fires'
   dom.window.close();
 });
 
-// ---------- toegankelijkheid ----------
-// WCAG-contrast tussen twee hexkleuren
+// ---------- accessibility ----------
+// WCAG contrast between two hex colours
 const lum = (hex) => {
   const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
     .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
@@ -604,10 +604,10 @@ test('a lane can be read with the keyboard: arrow keys step through its periods'
   key('ArrowRight');
   assert.equal(tip.hidden, false);
   assert.match(live.textContent, /^trunk, in standby/);
-  for (let n = 0; n < 5 && !/draait/.test(live.textContent); n++) key('ArrowRight');   // naar de spin-up
+  for (let n = 0; n < 5 && !/draait/.test(live.textContent); n++) key('ArrowRight');   // to the spin-up
   assert.match(live.textContent, /^trunk, draait \(2 van 2\), .*Gewekt door Media\/series/);
   key('End'); const last = live.textContent;
-  key('ArrowRight');                                     // voorbij het einde blijft hij staan
+  key('ArrowRight');                                     // past the end it stays put
   assert.equal(live.textContent, last);
   key('Home');
   assert.match(live.textContent, /^trunk, in standby/);
@@ -639,7 +639,7 @@ test('the kind of source is named in text, not only by the colour of its dot', a
   dom.window.close();
 });
 
-// ---------- instellingen: taal en kaartjes ----------
+// ---------- settings: language and cards ----------
 const cardOrder = (d) => [...d.querySelectorAll('#dash > [data-card]')].filter((el) => !el.hidden).map((el) => el.dataset.card);
 
 test('the settings button opens a dialog with the language choice and the card list', async () => {
@@ -647,7 +647,7 @@ test('the settings button opens a dialog with the language choice and the card l
   const d = dom.window.document;
   const gear = d.getElementById('openSettings');
   assert.equal(gear.getAttribute('aria-label'), 'Instellingen');
-  assert.ok(d.getElementById('settings').contains(d.getElementById('lang')));   // taalkeuze zit in de instellingen
+  assert.ok(d.getElementById('settings').contains(d.getElementById('lang')));   // the language choice is in the settings
   gear.click();
   assert.ok(d.getElementById('settings').hasAttribute('open'));
   assert.equal(gear.getAttribute('aria-expanded'), 'true');
@@ -657,7 +657,7 @@ test('the settings button opens a dialog with the language choice and the card l
     'Lezen per schijf', 'Schrijven per schijf', 'Draaitijd en rust per schijf', 'Live activiteit', 'Gebeurtenissen']);
   d.getElementById('settingsDone').click();
   assert.ok(!d.getElementById('settings').hasAttribute('open'));
-  assert.equal(d.activeElement, gear);                    // focus terug op de knop
+  assert.equal(d.activeElement, gear);                    // focus back on the button
   dom.window.close();
 });
 
@@ -669,13 +669,13 @@ test('cards can be hidden and moved, and the layout is remembered', async () => 
   const box = d.querySelector('#cardList li[data-card="actR"] input');
   box.checked = false; box.dispatchEvent(new w.Event('change', { bubbles: true }));
   assert.equal(d.querySelector('#dash > [data-card="actR"]').hidden, true);
-  d.querySelector('#cardList li[data-card="events"] [data-move="-1"]').click();   // gebeurtenissen één omhoog
+  d.querySelector('#cardList li[data-card="events"] [data-move="-1"]').click();   // events one up
   assert.deepEqual(cardOrder(d), ['kpi', 'lanes', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actW', 'rest', 'events', 'feed']);
   assert.equal(d.activeElement, d.querySelector('#cardList li[data-card="events"] [data-move="-1"]'));
   assert.equal(d.getElementById('cardLive').textContent, 'Gebeurtenissen: plaats 13 van 14');
-  for (let i = 0; i < 4; i++) d.querySelector('#cardList li[data-card="hist"] [data-move="-1"]').click();   // de histogram naar boven
+  for (let i = 0; i < 4; i++) d.querySelector('#cardList li[data-card="hist"] [data-move="-1"]').click();   // the histogram to the top
   assert.equal(d.querySelector('#cardList li[data-card="hist"] [data-move="-1"]').disabled, true);
-  assert.equal(d.activeElement, d.querySelector('#cardList li[data-card="hist"] [data-move="1"]'));   // bovenaan: focus naar omlaag
+  assert.equal(d.activeElement, d.querySelector('#cardList li[data-card="hist"] [data-move="1"]'));   // at the top: focus to down
   const saved = w.localStorage.getItem('spindash.cards');
   dom.window.close();
 
@@ -702,7 +702,7 @@ test('a saved layout with the old Active drives card gets the reading and writin
   const d = dom.window.document;
   assert.deepEqual([...d.querySelectorAll('#dash > [data-card]')].map((el) => el.dataset.card),
     ['actR', 'actW', 'lanes', 'events', 'hist', 'causes', 'feed', 'kpi', 'srcLanes', 'days', 'awake', 'src', 'rhythm', 'rest']);
-  assert.equal(d.querySelector('#dash > [data-card="actR"]').hidden, true);   // verborgen blijft verborgen
+  assert.equal(d.querySelector('#dash > [data-card="actR"]').hidden, true);   // hidden stays hidden
   assert.equal(d.querySelector('#dash > [data-card="actW"]').hidden, true);
   dom.window.close();
 });
@@ -713,7 +713,7 @@ test('every card except the timeline and the events is half width on a wide scre
   const half = [...d.querySelectorAll('#dash > [data-card]')].filter((el) => el.hasAttribute('data-half')).map((el) => el.dataset.card);
   assert.deepEqual(half, ['days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
   assert.match(HTML, /#dash>\.card\[data-half\]\{grid-column:auto\}/);
-  assert.match(HTML, /@media \(max-width:820px\)\{[^@]*#dash>\.card\[data-half\]\{grid-column:1\/-1\}/);   // telefoon: volle breedte
+  assert.match(HTML, /@media \(max-width:820px\)\{[^@]*#dash>\.card\[data-half\]\{grid-column:1\/-1\}/);   // phone: full width
   dom.window.close();
 });
 
@@ -728,7 +728,7 @@ test('changing the language in settings also translates the card list', async ()
   dom.window.close();
 });
 
-// ---------- pools en array als één baan ----------
+// ---------- pools and the array as one lane ----------
 const ARRAYDATA = served({ [today]: [
   `${ep(300)},disk,sdb,parity`, `${ep(300)},disk,sdc,disk1`, `${ep(300)},disk,sdf,disk2`,
   `${ep(300)},disk,sdd,trunk`, `${ep(300)},disk,sde,trunk2`,
@@ -743,7 +743,7 @@ test('a pool shows as one lane and one event row by default', async () => {
   const dom = await load(POOL);
   const d = dom.window.document;
   assert.deepEqual(laneNames(d), ['trunk sdd, sde']);
-  assert.match(d.querySelector('.trace').getAttribute('aria-label'), /^trunk: 1 spin-ups/);   // één spin-up, niet twee
+  assert.match(d.querySelector('.trace').getAttribute('aria-label'), /^trunk: 1 spin-ups/);   // one spin-up, not two
   const r = rows(d);
   assert.ok(r.some((x) => /^\S+ \S+ \S+, \S+ trunk Opgespind/.test(x)), r.join('\n'));
   assert.ok(r.every((x) => !/trunk2/.test(x)));
@@ -756,11 +756,11 @@ test('the array is one lane by default, and one switch shows every drive again',
   const dom = await load(ARRAYDATA);
   const d = dom.window.document, w = dom.window;
   assert.deepEqual(laneNames(d), ['Array 3 schijven', 'trunk sdd, sde']);
-  assert.match(d.getElementById('sourceLine').textContent, /^5 schijven,/);   // de samenvatting telt schijven, geen banen
+  assert.match(d.getElementById('sourceLine').textContent, /^5 schijven,/);   // the summary counts drives, not lanes
   assert.equal(text(d.querySelector('#devFilter option')), 'Alle schijven en pools');
-  // disk1 alleen, later disk2 en disk1 bijna tegelijk: twee keer wakker
+  // disk1 alone, later disk2 and disk1 almost together: woken twice
   assert.match(d.querySelector('.trace').getAttribute('aria-label'), /^Array: 2 spin-ups/);
-  assert.match(text(d.getElementById('causes')), /^Films 1 Onbekend/);   // activiteit van disk1 telt voor de array
+  assert.match(text(d.getElementById('causes')), /^Films 1 Onbekend/);   // activity of disk1 counts for the array
   const box = d.getElementById('groupDrives');
   box.checked = false; box.dispatchEvent(new w.Event('change'));
   assert.deepEqual(laneNames(d), ['parity sdb', 'disk1 sdc', 'disk2 sdf', 'trunk sdd', 'trunk2 sde']);
@@ -785,7 +785,7 @@ test('cards can be dragged into a new order by their handle', async () => {
   const dom = await load(POOL);
   const d = dom.window.document, w = dom.window;
   d.getElementById('openSettings').click();
-  // jsdom kent geen layout: elke rij is 44px hoog, op de plek waar hij nu in de lijst staat
+  // jsdom has no layout: every row is 44px high, at the place where it is in the list now
   for (const li of d.querySelectorAll('#cardList li')) {
     li.getBoundingClientRect = () => { const i = [...li.parentNode.children].indexOf(li); return { top: i * 44, height: 44, bottom: i * 44 + 44 }; };
   }
@@ -793,8 +793,8 @@ test('cards can be dragged into a new order by their handle', async () => {
   const grip = d.querySelector('#cardList li[data-card="events"] .grip');
   ev('pointerdown', grip, 594);
   assert.ok(grip.closest('li').classList.contains('dragging'));
-  ev('pointermove', grip, 150);   // nog geen opslag tijdens het slepen
-  ev('pointermove', grip, 50);    // tussen de eerste en tweede rij
+  ev('pointermove', grip, 150);   // nothing saved yet while dragging
+  ev('pointermove', grip, 50);    // between the first and second row
   assert.equal(w.localStorage.getItem('spindash.cards'), null);
   ev('pointerup', d, 50);
   assert.deepEqual(cardOrder(d), ['kpi', 'events', 'lanes', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
@@ -802,7 +802,7 @@ test('cards can be dragged into a new order by their handle', async () => {
   assert.ok(!d.querySelector('#cardList .dragging'));
   assert.equal(d.getElementById('cardLive').textContent, 'Gebeurtenissen: plaats 2 van 14');
   assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.cards')).map((c) => c.id), ['kpi', 'events', 'lanes', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
-  // de handgreep zit buiten het label: slepen zet het kaartje niet aan of uit
+  // the handle is outside the label: dragging does not toggle the card
   assert.ok(!d.querySelector('#cardList li label .grip'));
   dom.window.close();
 });
@@ -816,7 +816,7 @@ test('the timeline card has a heading like the other cards', async () => {
   dom.window.close();
 });
 
-// ---------- verborgen paden ----------
+// ---------- hidden paths ----------
 const setHide = (d, w, value) => { const ta = d.getElementById('hidePaths'); ta.value = value; ta.dispatchEvent(new w.Event('change')); };
 const feedText = (d) => [...d.querySelectorAll('#feed li')].map(text).join('\n');
 
@@ -825,14 +825,14 @@ test('hidden paths with a wildcard disappear from the feed, rankings and causes'
   const d = dom.window.document, w = dom.window;
   assert.match(feedText(d), /a\.mkv/);
   assert.match(text(d.getElementById('causes')), /Media\/series/);
-  setHide(d, w, '/mnt/user/Media/series/*\n');            // share-vorm, ook al staat het als /mnt/trunk/... in de data
+  setHide(d, w, '/mnt/user/Media/series/*\n');            // share form, even though the data has it as /mnt/trunk/...
   assert.doesNotMatch(feedText(d), /series/);
-  assert.match(feedText(d), /SMB-share/);                  // de rest blijft staan
+  assert.match(feedText(d), /SMB-share/);                  // the rest stays
   assert.doesNotMatch(text(d.getElementById('causes')), /Media\/series/);
   assert.doesNotMatch(rows(d).join('\n'), /a\.mkv/);
   assert.match(d.getElementById('hideCount').textContent, /^2 van \d+ bestandsgebeurtenissen verborgen$/);
   assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.hide')), ['/mnt/user/Media/series/*']);
-  setHide(d, w, '');                                       // leeg: alles terug en niets meer bewaard
+  setHide(d, w, '');                                       // empty: everything back and nothing stored any more
   assert.match(feedText(d), /a\.mkv/);
   assert.equal(w.localStorage.getItem('spindash.hide'), null);
   assert.equal(d.getElementById('hideCount').textContent, '');
@@ -861,7 +861,7 @@ test('a hidden path does not show up when it streams in live', async () => {
   dom.window.close();
 });
 
-// ---------- verborgen paden op de server ----------
+// ---------- hidden paths on the server ----------
 const withHide = (list) => (w) => w.localStorage.setItem('spindash.hide', JSON.stringify(list));
 const hideSettled = () => new Promise((r) => setTimeout(r, 50));
 
@@ -871,8 +871,8 @@ test('hidden paths come from the server and win over this browser', async () => 
   const d = dom.window.document, w = dom.window;
   assert.equal(d.getElementById('hidePaths').value, '*.mkv');
   assert.doesNotMatch(feedText(d), /\.mkv/);
-  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.hide')), ['*.mkv']);   // kopie voor als de server weg is
-  assert.deepEqual(w.__posts, []);                                                      // niets overgezet
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.hide')), ['*.mkv']);   // copy for when the server is gone
+  assert.deepEqual(w.__posts, []);                                                      // nothing moved over
   dom.window.close();
 });
 
@@ -882,7 +882,7 @@ test('changing hidden paths saves them on the server as JSON', async () => {
   setHide(d, w, ' /mnt/user/Media/series/*\n\n');
   await hideSettled();
   assert.deepEqual(w.__posts, [{ url: 'data/settings.json', type: 'application/json', body: { hide: ['/mnt/user/Media/series/*'] } }]);
-  setHide(d, w, '/mnt/user/Media/series/*');      // zelfde lijst: geen nieuw verzoek
+  setHide(d, w, '/mnt/user/Media/series/*');      // same list: no new request
   setHide(d, w, '');
   await hideSettled();
   assert.deepEqual(w.__posts.map((p) => p.body), [{ hide: ['/mnt/user/Media/series/*'] }, { hide: [] }]);
@@ -897,7 +897,7 @@ test('a browser list is moved to the server once when the server has none', asyn
   assert.equal(d.getElementById('hidePaths').value, '*.mkv');
   assert.doesNotMatch(feedText(d), /\.mkv/);
   dom.window.close();
-  // zonder eigen lijst valt er niets over te zetten
+  // without a list of its own there is nothing to move over
   const empty = await load({ ...POOL, 'settings.json': '{}' });
   assert.deepEqual(empty.window.__posts, []);
   empty.window.close();
@@ -937,8 +937,8 @@ test('demo mode never asks the server for settings', async () => {
   dom.window.close();
 });
 
-// ---------- kerncijfers en spin-ups per dag ----------
-// Vorige 24 uur: 3 spin-ups (3,5 uur draaien); laatste 24 uur: 1 spin-up (1 uur).
+// ---------- key figures and spin-ups per day ----------
+// Previous 24 hours: 3 spin-ups (3.5 hours spinning); last 24 hours: 1 spin-up (1 hour).
 const HISTORY = [
   `${ep(3000)},disk,sdd,trunk`, `${ep(3000)},state,sdd,standby`,
   `${ep(2000)},spin,sdd,active`, `${ep(1990)},spin,sdd,standby`,
@@ -950,7 +950,7 @@ const HISTORY = [
 const byDay = (lines) => {
   const out = {};
   for (const l of lines) (out[dayName(+l.split(',')[0] * 1000)] ||= []).push(l);
-  return served(Object.fromEntries(Object.entries(out).sort()));   // days.json is oplopend, zoals de server het levert
+  return served(Object.fromEntries(Object.entries(out).sort()));   // days.json is ascending, as the server delivers it
 };
 const kpi = (d, key) => d.querySelector(`[data-kpi="${key}"]`);
 
@@ -984,7 +984,7 @@ test('key figures say when there is no previous period to compare with', async (
   const d = dom.window.document;
   assert.equal(d.querySelectorAll('.k-cmp').length, 0);
   assert.equal(d.getElementById('kpiNote').textContent, 'Nog te weinig geschiedenis om met de vorige periode te vergelijken.');
-  d.querySelector('[data-range="all"]').click();          // "alles" heeft geen vorige periode, en dat is geen gebrek
+  d.querySelector('[data-range="all"]').click();          // "All" has no previous period, and that is not a shortcoming
   await until(() => d.getElementById('kpiNote').textContent === '');
   assert.equal(d.getElementById('kpiNote').textContent, '');
   dom.window.close();
@@ -1000,13 +1000,13 @@ test('spin-ups per day shows every day with the selected period highlighted', as
   assert.equal(bars.length, expect);
   const counts = bars.map((b) => +b.getAttribute('aria-label').match(/: (\d+) spin-ups$/)[1]);
   assert.equal(counts.reduce((x, y) => x + y, 0), 4);
-  assert.ok(bars[bars.length - 1].classList.contains('in'));   // vandaag valt in de laatste 24 uur
+  assert.ok(bars[bars.length - 1].classList.contains('in'));   // today falls in the last 24 hours
   assert.ok(!bars[0].classList.contains('in'));
   assert.match(d.getElementById('daysNote').textContent, new RegExp(`^Laatste ${expect} dagen, gemiddeld `));
   dom.window.close();
 });
 
-// ---------- review: kleine fixes, uurkaartje, per bron, draaiduur en rust ----------
+// ---------- review: small fixes, hour card, per source, spin time and rest ----------
 test('the previous-hour button reads "Vorig uur" in Dutch', async () => {
   const dom = await load(POOL);
   const d = dom.window.document;
@@ -1026,7 +1026,7 @@ test('the reading and writing cards label processes and files', async () => {
 test('the feed merges repeats, names an unknown source and says it ignores the period', async () => {
   const files = served({ [today]: [...RW[`days/${today}.csv`].trim().split('\n'),
     `${ep(50)},activity,trunk,MODIFY,/mnt/trunk/appdata/x.log`,
-    `${ep(40)},who,container,plex,10,geschreven,/mnt/trunk2/appdata/plex/Logs/server.log`] });   // zelfde share-pad, andere schijf
+    `${ep(40)},who,container,plex,10,geschreven,/mnt/trunk2/appdata/plex/Logs/server.log`] });   // same share path, other drive
   const dom = await load(files);
   const d = dom.window.document;
   const items = [...d.querySelectorAll('#feed li')].map(text);
@@ -1035,7 +1035,7 @@ test('the feed merges repeats, names an unknown source and says it ignores the p
   assert.match(plex[0], /plex ×3 /);
   assert.match(items.find((x) => /x\.log/.test(x)), /Onbekend/);
   assert.equal(d.getElementById('feedNote').textContent, '');
-  d.querySelector('[data-range="h"]').click();          // een uur terug kan: daar is data
+  d.querySelector('[data-range="h"]').click();          // an hour back is possible: there is data there
   await until(() => d.getElementById('prev').getAttribute('aria-label') === 'Vorig uur' && !d.getElementById('prev').disabled);
   d.getElementById('prev').click();
   await until(() => d.getElementById('feedNote').textContent !== '');
@@ -1048,7 +1048,7 @@ test('spin-ups by hour cover at least the last 7 days', async () => {
   const dom = await load({ ...byDay(HISTORY), 'spins.csv': spinsOnly });
   const d = dom.window.document;
   const n = [...d.querySelectorAll('#hist div')].reduce((x, b) => x + +b.getAttribute('aria-label').match(/: (\d+) spin-ups$/)[1], 0);
-  assert.equal(n, 4);                                  // ook de 3 van gisteren, niet alleen die van de laatste 24 uur
+  assert.equal(n, 4);                                  // also the 3 of yesterday, not only those of the last 24 hours
   assert.match(d.getElementById('histNote').textContent, /^Spin-ups .+ – .+\. Drukste uur: /);
   dom.window.close();
 });
@@ -1057,7 +1057,7 @@ test('key figures count a pool spin-up once but spinning hours per drive', async
   const dom = await load(POOL);
   const d = dom.window.document;
   assert.equal(text(kpi(d, 'kpiUps').querySelector('.k-val')), '1');
-  assert.equal(text(kpi(d, 'kpiHours').querySelector('.k-val')), '2 u');   // trunk en trunk2 elk ongeveer een uur
+  assert.equal(text(kpi(d, 'kpiHours').querySelector('.k-val')), '2 u');   // trunk and trunk2 about an hour each
   dom.window.close();
 });
 
@@ -1065,14 +1065,14 @@ test('spin duration and rest shows the median run, longest rest and quick wake-u
   const QUICK = served({ [today]: [
     `${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`,
     `${ep(200)},spin,sdd,active`, `${ep(190)},spin,sdd,standby`,
-    `${ep(175)},spin,sdd,active`, `${ep(100)},spin,sdd,standby`,      // 15 min na standby weer wakker
+    `${ep(175)},spin,sdd,active`, `${ep(100)},spin,sdd,standby`,      // awake again 15 min after standby
   ] });
   const dom = await load(QUICK);
   const d = dom.window.document;
   const cells = [...d.querySelectorAll('#rest tbody tr[data-dev="sdd"] td')].map(text);
   assert.equal(cells[0], 'trunk');
   assert.equal(cells[1], '2');
-  assert.equal(cells[2], '43 min');                    // mediaan van 10 en 75 minuten
+  assert.equal(cells[2], '43 min');                    // median of 10 and 75 minutes
   assert.equal(cells[4], '1');
   assert.ok(d.querySelector('#rest tbody td.quick'));
   dom.window.close();
@@ -1088,7 +1088,7 @@ test('demo data is long enough to compare a week with the week before', async ()
   dom.window.close();
 });
 
-// ---------- containers: houdt wakker, ritme, tijdlijn per bron, profiel ----------
+// ---------- containers: kept awake, rhythm, timeline per source, profile ----------
 const AWAKE = served({ [today]: [
   `${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`,
   `${ep(121)},who,container,bazarr,2,geopend,/mnt/trunk/Media/series/a.mkv`,
@@ -1102,7 +1102,7 @@ const AWAKE = served({ [today]: [
 test('"what keeps them awake" adds up the time each access postponed the spin-down', async () => {
   const dom = await load(AWAKE);
   const rows = [...dom.window.document.querySelectorAll('#awake .src')].map(text);
-  // plex: 10 min na de spin-up + 20 min na sonarr; sonarr: 10 min na plex; plex was de laatste vóór standby
+  // plex: 10 min after the spin-up + 20 min after sonarr; sonarr: 10 min after plex; plex was the last one before standby
   assert.deepEqual(rows, [
     'container: plex 30 min 1× de laatste toegang vóór standby',
     'container: sonarr 10 min',
@@ -1112,12 +1112,12 @@ test('"what keeps them awake" adds up the time each access postponed the spin-do
 
 test('the rhythm card recognises a fixed interval and a daily time', async () => {
   const lines = [];
-  for (let dd = 5; dd >= 0; dd--) {                      // elke dag begint met disk en state, zoals op de server
+  for (let dd = 5; dd >= 0; dd--) {                      // every day starts with disk and state, as on the server
     const t0 = new Date(now - dd * 864e5); t0.setHours(0, 0, 30, 0);
     lines.push(`${Math.floor(t0 / 1000)},disk,sdd,trunk`, `${Math.floor(t0 / 1000)},state,sdd,active`);
   }
   for (let i = 0; i < 9; i++) lines.push(`${ep(200 - i * 15)},who,container,sonarr,11,geschreven,/mnt/trunk/appdata/sonarr/f${i}.db`);
-  for (let dd = 1; dd <= 4; dd++) {                       // vier dagen rond 03:00
+  for (let dd = 1; dd <= 4; dd++) {                       // four days around 03:00
     const at = new Date(now - dd * 864e5); at.setHours(3, 5, dd, 0);
     lines.push(`${Math.floor(at / 1000)},who,unraid,mover,7,verplaatst,/mnt/trunk/Media/m${dd}.mkv`);
   }
@@ -1161,7 +1161,7 @@ test('clicking a source opens its profile with figures, heatmap, folders and fil
   assert.match(text(d.getElementById('profileBody')), /\/appdata\/plex\/Logs\/server\.log 2/);
   d.getElementById('profileDone').click();
   assert.ok(!d.getElementById('profile').hasAttribute('open'));
-  assert.equal(d.activeElement, btn);                      // focus terug op de naam
+  assert.equal(d.activeElement, btn);                      // focus back on the name
   dom.window.close();
 });
 
@@ -1170,24 +1170,24 @@ test('every card title follows one pattern: a subject, optionally "per" a dimens
     const dom = await load(POOL, `http://dash/?lang=${lang}`);
     const titles = [...dom.window.document.querySelectorAll('#dash > [data-card] h2')].map(text);
     assert.equal(titles.length, 14);
-    // geen vragen, geen dubbele punten, geen titel die met het voorzetsel begint
+    // no questions, no colons, no title that starts with the preposition
     assert.ok(titles.every((x) => !/[?:]/.test(x) && !x.toLowerCase().startsWith(per.trim())), `${lang}: ${titles.join(' | ')}`);
     assert.ok(titles.filter((x) => x.includes(per)).length >= 10, `${lang}: ${titles.join(' | ')}`);
     dom.window.close();
   }
 });
 
-// ---------- docker: proces in de container, start/stop, opslag ----------
+// ---------- docker: process in the container, start/stop, storage ----------
 const DOCK = served({ [today]: [
   `${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`,
-  `${ep(130)},ctr,radarr,die,0`, `${ep(129.7)},ctr,radarr,start`,          // herstart, 9 min vóór de spin-up
+  `${ep(130)},ctr,radarr,die,0`, `${ep(129.7)},ctr,radarr,start`,          // restart, 9 min before the spin-up
   `${ep(121)},proc,7,Plex Media Scan`,
   `${ep(121)},who,container,plex,7,geopend,/mnt/trunk/Media/films/b.mkv`,
   `${ep(120)},spin,sdd,active`,
-  `${ep(119)},ctr,plex,start`,                                           // vlak vóór de tweede spin-up
+  `${ep(119)},ctr,plex,start`,                                           // right before the second spin-up
   `${ep(110)},who,container,sonarr,8,geschreven,/mnt/trunk/appdata/sonarr/sonarr.db`,
   `${ep(100)},spin,sdd,standby`, `${ep(96)},spin,sdd,active`,
-  `${ep(95)},who,container,plex,9,geopend,/mnt/trunk/Media/films/c.mkv`,  // geen proc-regel: alleen de naam
+  `${ep(95)},who,container,plex,9,geopend,/mnt/trunk/Media/films/c.mkv`,  // no proc line: only the name
   `${ep(60)},spin,sdd,standby`,
 ] });
 
@@ -1196,7 +1196,7 @@ test('the process inside a container shows in the feed and the profile', async (
   const d = dom.window.document;
   const items = [...d.querySelectorAll('#feed li')].map(text);
   assert.match(items.find((x) => /b\.mkv/.test(x)), /plex › Plex Media Scan/);
-  assert.doesNotMatch(items.find((x) => /c\.mkv/.test(x)), /›/);           // oude regels zonder proc: gewoon de container
+  assert.doesNotMatch(items.find((x) => /c\.mkv/.test(x)), /›/);           // old lines without proc: just the container
   d.querySelector('#sources .srcbtn[data-src="container|plex"]').click();
   assert.match(text(d.getElementById('profileBody')), /Processen\s*Plex Media Scan 1/);
   dom.window.close();
@@ -1218,7 +1218,7 @@ test('container start and stop show on the source timeline, in the profile and b
   const plex = d.querySelector('#srcLaneList .srow[data-k="container|plex"]');
   assert.equal((plex.querySelector('.cs').getAttribute('d').match(/M/g) || []).length, 1);
   assert.equal(plex.querySelector('.cd').getAttribute('d'), '');
-  // radarr herstartte 9 min vóór de spin-up: buiten de 5 minuten, dus niet genoemd
+  // radarr restarted 9 min before the spin-up: outside the 5 minutes, so not named
   const ups = rows(d).filter((x) => /Opgespind/.test(x));
   assert.ok(ups.every((x) => !/radarr/.test(x)), ups.join('\n'));
   d.querySelector('#sources .srcbtn[data-src="container|plex"]').click();
@@ -1229,7 +1229,7 @@ test('container start and stop show on the source timeline, in the profile and b
 test('a container restart just before a spin-up is named in the events table', async () => {
   const NEAR = served({ [today]: [
     `${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`,
-    `${ep(250)},who,container,plex,7,geopend,/mnt/trunk/Media/x.mkv`,     // wel activiteit, maar niet bij de spin-up
+    `${ep(250)},who,container,plex,7,geopend,/mnt/trunk/Media/x.mkv`,     // activity, but not at the spin-up
     `${ep(123)},ctr,radarr,die,0`, `${ep(122.8)},ctr,radarr,start`,
     `${ep(120)},spin,sdd,active`, `${ep(60)},spin,sdd,standby`,
   ] });
@@ -1254,7 +1254,7 @@ test('the overview lists every container with its storage labels and opens its p
   const dom = await load({ ...DOCK, 'containers.json': JSON.stringify(containers) });
   const d = dom.window.document;
   d.getElementById('openSettings').click();
-  assert.equal(d.getElementById('mountList'), null);                       // niet meer in de instellingen
+  assert.equal(d.getElementById('mountList'), null);                       // no longer in the settings
   d.getElementById('settingsDone').click();
   d.getElementById('openInfo').click();
   assert.equal(text(d.getElementById('profileTitle')), 'Overzicht');
@@ -1262,7 +1262,7 @@ test('the overview lists every container with its storage labels and opens its p
   const tr = (n) => d.querySelector(`#profileBody tr[data-ctr="${n}"]`);
   assert.deepEqual([...d.querySelectorAll('#profileBody tr[data-ctr]')].map((x) => x.dataset.ctr), ['plex', 'radarr', 'nginx', 'idle']);
   assert.deepEqual([...tr('plex').querySelectorAll('.loc')].map((x) => x.textContent), ['cache', 'Array', '?']);
-  assert.equal(text(tr('nginx')), 'nginx gestopt cache –');                // één label per plek, geen activiteit
+  assert.equal(text(tr('nginx')), 'nginx gestopt cache –');                // one label per place, no activity
   assert.match(text(tr('plex')), /2 gelezen · 0 geschreven/);
   const colors = {};
   for (const tg of d.querySelectorAll('#profileBody .loc:not(.unknown)')) {
@@ -1271,13 +1271,13 @@ test('the overview lists every container with its storage labels and opens its p
     colors[tg.textContent] = c;
   }
   assert.notEqual(colors.Array, colors.cache);
-  // doorklikken en terug
+  // click through and back
   tr('plex').querySelector('.srcbtn').click();
   assert.equal(text(d.getElementById('profileTitle')), 'plex');
   assert.equal(d.getElementById('profileBack').hidden, false);
   d.getElementById('profileBack').click();
   assert.equal(text(d.getElementById('profileTitle')), 'Overzicht');
-  // ook een container zonder activiteit heeft een profiel
+  // a container without activity also has a profile
   tr('idle').querySelector('.srcbtn').click();
   assert.equal(text(d.getElementById('profileTitle')), 'idle');
   assert.match(text(d.getElementById('profileBody')), /Gelezen\s*0/);
@@ -1306,35 +1306,35 @@ test('the overview lists pools and the array with their drives, each with a deta
   const group = d.querySelector('#profileBody .ov-group[data-group="trunk"]');
   assert.match(text(group.querySelector('.ov-row')), /^trunk standby 1 spin-ups · \d+% actief$/);
   assert.deepEqual([...group.querySelectorAll('.ov-members li')].map((li) => li.dataset.dev), ['sdd', 'sde']);
-  // de hele pool
+  // the whole pool
   group.querySelector('.drvbtn[data-drive="g:trunk"]').click();
   assert.match(text(d.getElementById('profileTitle')), /^trunk standby$/);
   const kpis = [...d.querySelectorAll('#profileBody .kpi')].map((k) => `${text(k.querySelector('.k-label'))} ${text(k.querySelector('.k-val'))}`);
   assert.equal(kpis[0], 'Spin-ups 1');
   assert.deepEqual([...d.querySelectorAll('#profileBody tr[data-dev]')].map((r) => r.dataset.dev), ['sdd', 'sde']);
   const body = text(d.getElementById('profileBody'));
-  assert.match(body, /Wie leest en schrijft.*bazarr 1.*Wat hem wekte/);   // bazarr las op de pool
+  assert.match(body, /Wie leest en schrijft.*bazarr 1.*Wat hem wekte/);   // bazarr read on the pool
   assert.match(body, /Wat hem wekte\s*Media\/series 1/);
   assert.match(body, /Containers die ernaar mappen\s*plex \/mnt\/trunk\/Media/);
   assert.doesNotMatch(body, /nginx/);
-  // één schijf uit de pool, met een link terug naar de pool
+  // one drive of the pool, with a link back to the pool
   d.querySelector('#profileBody tr[data-dev="sde"] .drvbtn').click();
   assert.match(text(d.getElementById('profileTitle')), /^trunk2 sde standby$/);
   assert.ok(d.querySelector('#profileBody .prof-sub .drvbtn[data-drive="g:trunk"]'));
   assert.match(text(d.getElementById('profileBody')), /verspreid over zijn schijven/);
   d.querySelector('#profileBody .drvbtn[data-drive="g:trunk"]').click();
   assert.match(text(d.getElementById('profileTitle')), /^trunk standby$/);
-  d.getElementById('profileBack').click();                                // terug naar trunk2
-  d.getElementById('profileBack').click();                                // terug naar trunk
-  d.getElementById('profileBack').click();                                // terug naar het overzicht
+  d.getElementById('profileBack').click();                                // back to trunk2
+  d.getElementById('profileBack').click();                                // back to trunk
+  d.getElementById('profileBack').click();                                // back to the overview
   assert.equal(text(d.getElementById('profileTitle')), 'Overzicht');
   assert.equal(d.getElementById('profileBack').hidden, true);
   d.getElementById('profileDone').click();
-  assert.equal(d.activeElement, d.getElementById('openInfo'));          // focus terug op het icoontje
+  assert.equal(d.activeElement, d.getElementById('openInfo'));          // focus back on the icon
   dom.window.close();
 });
 
-// ---------- kaartjes: maat en positie in de instellingen ----------
+// ---------- cards: size and position in the settings ----------
 const posOf = (d) => Object.fromEntries([...d.querySelectorAll('#cardList li')].map((li) => [li.dataset.card, li.dataset.pos]));
 
 test('the card list shows which cards are small or large and which sit side by side', async () => {
@@ -1347,7 +1347,7 @@ test('the card list shows which cards are small or large and which sit side by s
   assert.ok(li('days').classList.contains('pair-l') && li('hist').classList.contains('pair-r'));
   assert.equal(text(li('days').querySelector('.size')), 'Klein');
   assert.equal(text(li('kpi').querySelector('.size')), 'Groot');
-  assert.equal(li('kpi').querySelector('.lay').disabled, true);               // groot: niets om mee te wisselen
+  assert.equal(li('kpi').querySelector('.lay').disabled, true);               // large: nothing to swap with
   assert.equal(li('days').querySelector('.lay').getAttribute('aria-label'), 'Spin-ups per dag: naar rechts');
   assert.equal(li('hist').querySelector('label .sr').textContent, ', rechterhelft');
   dom.window.close();
@@ -1360,9 +1360,9 @@ test('a card can be made small or large, and the choice is remembered and reset'
   d.querySelector('#cardList li[data-card="kpi"] .size').click();
   assert.ok(d.querySelector('#dash > [data-card="kpi"]').hasAttribute('data-half'));
   assert.equal(d.getElementById('cardLive').textContent, 'Kerncijfers: Klein');
-  assert.equal(posOf(d).kpi, 'alone');                                       // klein, maar de tijdlijn erna is groot
+  assert.equal(posOf(d).kpi, 'alone');                                       // small, but the timeline after it is large
   assert.equal(d.activeElement, d.querySelector('#cardList li[data-card="kpi"] .size'));
-  d.querySelector('#cardList li[data-card="feed"] .size').click();            // live activiteit groot
+  d.querySelector('#cardList li[data-card="feed"] .size').click();            // live activity large
   assert.ok(!d.querySelector('#dash > [data-card="feed"]').hasAttribute('data-half'));
   assert.equal(posOf(d).rest, 'alone');
   const saved = JSON.parse(w.localStorage.getItem('spindash.cards'));
@@ -1389,7 +1389,7 @@ test('two cards side by side swap places with the layout button, also across a h
   assert.equal(posOf(d).days, 'right');
   assert.equal(d.getElementById('cardLive').textContent, 'Spin-ups per dag: nu rechts');
   assert.equal(d.activeElement, d.querySelector('#cardList li[data-card="days"] .lay'));
-  // verberg "wakker gehouden": oorzaken staat dan naast per bron, en die twee wisselen
+  // hide "kept awake": causes then sits next to per source, and those two swap
   const box = d.querySelector('#cardList li[data-card="awake"] input');
   box.checked = false; box.dispatchEvent(new w.Event('change', { bubbles: true }));
   d.querySelector('#cardList li[data-card="src"] .lay').click();
@@ -1404,7 +1404,7 @@ test('an old saved layout without sizes keeps the default sizes', async () => {
   const dom = await load(POOL, 'http://dash/?lang=nl', ['en-US'], null, (w) => w.localStorage.setItem('spindash.cards', stored));
   const d = dom.window.document;
   assert.ok(!d.querySelector('#dash > [data-card="events"]').hasAttribute('data-half'));
-  assert.ok(d.querySelector('#dash > [data-card="feed"]').hasAttribute('data-half'));    // onbekende maat: standaard
+  assert.ok(d.querySelector('#dash > [data-card="feed"]').hasAttribute('data-half'));    // unknown size: default
   assert.ok(d.querySelector('#dash > [data-card="days"]').hasAttribute('data-half'));
   dom.window.close();
 });
@@ -1426,7 +1426,7 @@ test('full file paths can be reached with the keyboard and keep focus when the f
   const d = dom.window.document, w = dom.window;
   const fp = d.querySelector('#feed .haspath');
   assert.equal(fp.getAttribute('tabindex'), '0');
-  assert.match(fp.getAttribute('aria-label'), /^\/mnt\//);                 // schermlezer hoort het hele pad
+  assert.match(fp.getAttribute('aria-label'), /^\/mnt\//);                 // a screen reader hears the whole path
   assert.equal(d.querySelector('#actWrites .haspath').getAttribute('tabindex'), '0');
   fp.focus();
   assert.equal(d.getElementById('tip').hidden, false);
@@ -1435,11 +1435,11 @@ test('full file paths can be reached with the keyboard and keep focus when the f
   const path = fp.dataset.path;
   w.__push(`${Math.floor(Date.now() / 1000)},who,container,sonarr,98,geschreven,/mnt/trunk/appdata/sonarr/new.db`);
   await new Promise((r) => setTimeout(r, 400));
-  assert.equal(d.activeElement.dataset.path, path);                        // focus overleeft het opnieuw tekenen
+  assert.equal(d.activeElement.dataset.path, path);                        // focus survives the redraw
   dom.window.close();
 });
 
-// jsdom kent Blob.text() niet; FileReader wel
+// jsdom has no Blob.text(); FileReader works
 const blobText = (w, blob) => new Promise((resolve) => { const r = new w.FileReader(); r.onload = () => resolve(r.result); r.readAsText(blob); });
 
 test('the CSV export holds the spin-ups, file access and container events of the period', async () => {
@@ -1464,7 +1464,7 @@ test('the CSV export holds the spin-ups, file access and container events of the
   assert.ok(lines.some((l) => /,container start,,,container,radarr,,,$/.test(l)));
   assert.ok(lines.some((l) => /,container start,,,container,plex,,,$/.test(l)));
   const times = lines.slice(1).map((l) => l.slice(0, 19));
-  assert.deepEqual(times, times.slice().sort());                          // op tijd
+  assert.deepEqual(times, times.slice().sort());                          // in time order
   dom.window.close();
 });
 
@@ -1494,29 +1494,29 @@ test('containers of one Compose project can count as one source', async () => {
   const dom = await load(files);
   const d = dom.window.document, w = dom.window;
   const keys = () => [...d.querySelectorAll('#sources .srcbtn')].map((b) => b.dataset.src);
-  assert.ok(keys().includes('container|plex') && keys().includes('container|sonarr'));   // standaard uit
+  assert.ok(keys().includes('container|plex') && keys().includes('container|sonarr'));   // off by default
   d.getElementById('openSettings').click();
   const box = d.getElementById('groupCompose');
   box.checked = true; box.dispatchEvent(new w.Event('change'));
   assert.ok(keys().includes('container|media') && !keys().includes('container|plex') && !keys().includes('container|sonarr'));
   const media = [...d.querySelectorAll('#sources .src')].find((x) => x.querySelector('[data-src="container|media"]'));
-  assert.match(text(media), /media stack 1 veroorzaakte spin-ups 2 gelezen · 1 geschreven/);   // plex wekte 1×, las 2×; sonarr schreef 1×
+  assert.match(text(media), /media stack 1 veroorzaakte spin-ups 2 gelezen · 1 geschreven/);   // plex woke 1×, read 2×; sonarr wrote 1×
   assert.equal(media.querySelector('.srcbtn').title, 'Compose-project media: plex, sonarr');
-  // de start van plex hoort nu bij de stack
+  // plex's start now belongs to the stack
   const lane = d.querySelector('#srcLaneList .srow[data-k="container|media"]');
   assert.equal((lane.querySelector('.cs').getAttribute('d').match(/M/g) || []).length, 1);
   d.querySelector('[data-src="container|media"]').click();
   assert.match(text(d.getElementById('profileBody')), /Start en stop\s*Start plex/);
   assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.group')), { merge: true, compose: true });
-  assert.match([...d.querySelectorAll('#feed li')].map(text).join('\n'), /plex › Plex Media Scan/);   // de feed blijft per container
+  assert.match([...d.querySelectorAll('#feed li')].map(text).join('\n'), /plex › Plex Media Scan/);   // the feed stays per container
   dom.window.close();
 });
 
-// ---------- stille uren ----------
+// ---------- quiet hours ----------
 const hhmmOf = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
 
 test('quiet hours from the server shade the timeline and mark spin-ups inside them', async () => {
-  // venster om de eerste spin-up van DOCK heen (120 min geleden), niet om de tweede (96 min geleden)
+  // window around the first spin-up of DOCK (120 min ago), not around the second (96 min ago)
   const quiet = { from: hhmmOf(now - 125 * 60e3), to: hhmmOf(now - 110 * 60e3), drives: [] };
   const dom = await load({ ...DOCK, 'settings.json': JSON.stringify({ hide: [], quiet, webhook: 'https://ntfy.example/x' }) });
   const d = dom.window.document;
@@ -1535,7 +1535,7 @@ test('quiet hours from the server shade the timeline and mark spin-ups inside th
 });
 
 test('quiet hours apply only to the chosen drives and are saved on the server', async () => {
-  const quiet = { from: hhmmOf(now - 125 * 60e3), to: hhmmOf(now - 110 * 60e3), drives: ['array'] };   // trunk doet niet mee
+  const quiet = { from: hhmmOf(now - 125 * 60e3), to: hhmmOf(now - 110 * 60e3), drives: ['array'] };   // trunk does not take part
   const dom = await load({ ...DOCK, 'settings.json': JSON.stringify({ hide: [], quiet }), POSTREPLY: { 'notify-test': { ok: true, status: 200 } } });
   const d = dom.window.document, w = dom.window;
   assert.equal(d.querySelector('#laneList .trace .quiet').getAttribute('d'), '');
@@ -1561,7 +1561,7 @@ test('quiet hours apply only to the chosen drives and are saved on the server', 
 test('a source name in the live feed and in Events opens its profile too', async () => {
   const dom = await load(DOCK);
   const d = dom.window.document;
-  // live-feed: de naam is een knop, de procesnaam staat erachter
+  // live feed: the name is a button, the process name behind it
   const li = [...d.querySelectorAll('#feed li')].find((x) => /b\.mkv/.test(text(x)));
   const btn = li.querySelector('.fs .srcbtn');
   assert.equal(btn.dataset.src, 'container|plex');
@@ -1570,7 +1570,7 @@ test('a source name in the live feed and in Events opens its profile too', async
   assert.ok(d.getElementById('profile').hasAttribute('open'));
   assert.equal(text(d.getElementById('profileTitle')), 'plex');
   d.getElementById('profileDone').click();
-  // gebeurtenissen: het bronlabel bij de oorzaak, met zijn uiterlijk als label
+  // events: the source label at the cause, keeping its label look
   const badge = d.querySelector('#events td.cause .srcbtn.who.container');
   assert.equal(badge.dataset.src, 'container|plex');
   badge.click();
@@ -1581,7 +1581,7 @@ test('a source name in the live feed and in Events opens its profile too', async
 test('a feed source outside the selected period stays plain text', async () => {
   const dom = await load(DOCK);
   const d = dom.window.document;
-  d.querySelector('[data-range="h"]').click();             // laatste uur: plex las 95 min geleden, valt erbuiten
+  d.querySelector('[data-range="h"]').click();             // last hour: plex read 95 min ago, outside it
   await until(() => d.querySelector('[data-range="h"]').getAttribute('aria-pressed') === 'true'
     && ![...d.querySelectorAll('#feed li')].some((x) => /c\.mkv/.test(text(x)) && x.querySelector('.srcbtn')));
   const li = [...d.querySelectorAll('#feed li')].find((x) => /c\.mkv/.test(text(x)));
@@ -1595,7 +1595,7 @@ test('a process in Reads and Writes per drive opens its profile', async () => {
   const d = dom.window.document;
   const names = [...d.querySelectorAll('#actWrites .srcbtn')].map((b) => b.dataset.src);
   assert.deepEqual(names, ['container|plex', 'container|sonarr']);
-  assert.equal(d.querySelectorAll('#actWrites .haspath .srcbtn, #actWrites .srcbtn.haspath').length, 0);   // bestanden blijven paden
+  assert.equal(d.querySelectorAll('#actWrites .haspath .srcbtn, #actWrites .srcbtn.haspath').length, 0);   // files stay paths
   d.querySelector('#actReads .srcbtn[data-src="container|bazarr"]').click();
   assert.ok(d.getElementById('profile').hasAttribute('open'));
   assert.equal(text(d.getElementById('profileTitle')), 'bazarr');
@@ -1627,14 +1627,14 @@ test('the container profile lists the paths of that container with their locatio
   const paths = d.querySelector('#profileBody .prof-paths');
   assert.equal(text(paths.querySelector('h4')), 'Paden');
   assert.deepEqual([...paths.querySelectorAll('.map')].map(text), ['/mnt/frunk/appdata frunk', '/mnt/trunk/Media trunk']);
-  // dezelfde kleur als in de instellingen
+  // the same colour in the profile as in the overview
   const inProfile = paths.querySelector('.loc').style.getPropertyValue('--c');
   d.getElementById('profileDone').click();
   d.getElementById('openInfo').click();
   const inOverview = [...d.querySelectorAll('#profileBody .loc')].find((x) => x.textContent === 'frunk').style.getPropertyValue('--c');
-  assert.equal(inProfile, inOverview);                                     // dezelfde kleur als in het overzicht
+  assert.equal(inProfile, inOverview);                                     // the same colour as in the overview
   d.getElementById('profileDone').click();
-  // als Compose-project: de paden van elk lid onder zijn naam
+  // as a Compose project: the paths of each member under its name
   const box = d.getElementById('groupCompose');
   box.checked = true; box.dispatchEvent(new w.Event('change'));
   d.querySelector('#sources .srcbtn[data-src="container|media"]').click();
@@ -1645,7 +1645,7 @@ test('the container profile lists the paths of that container with their locatio
 test('a container without known paths has no paths section in its profile', async () => {
   const dom = await load({ ...DOCK, 'containers.json': JSON.stringify({ docker: true, containers: [] }) });
   const d = dom.window.document;
-  d.querySelector('#sources .srcbtn[data-src="container|sonarr"]').click();   // geen mounts bekend
+  d.querySelector('#sources .srcbtn[data-src="container|sonarr"]').click();   // no mounts known
   assert.equal(d.querySelector('#profileBody .prof-paths'), null);
   dom.window.close();
 });
@@ -1653,14 +1653,14 @@ test('a container without known paths has no paths section in its profile', asyn
 test('a drive name in the timeline and in Events opens the drive page', async () => {
   const dom = await load(POOL);
   const d = dom.window.document, w = dom.window;
-  // samengevoegd (standaard): de baan is de pool als geheel
+  // merged (default): the lane is the pool as a whole
   d.querySelector('#laneList .lane-name .drvbtn').click();
   assert.match(text(d.getElementById('profileTitle')), /^trunk /);
   assert.equal(d.querySelectorAll('#profileBody tr[data-dev]').length, 2);
   d.getElementById('profileDone').click();
   const ev = d.querySelector('#events td.disks .drvbtn');
   assert.equal(ev.dataset.drive, 'g:trunk');
-  // los: elke baan en elke rij is één schijf
+  // separate: every lane and every row is one drive
   d.getElementById('openSettings').click();
   const box = d.getElementById('groupDrives');
   box.checked = false; box.dispatchEvent(new w.Event('change'));
@@ -1678,13 +1678,13 @@ test('the detail dialog switches the period and recalculates the open page', asy
   d.querySelector('#profileBody .drvbtn[data-drive="g:trunk"]').click();
   const ups = () => text([...d.querySelectorAll('#profileBody .kpi')][0].querySelector('.k-val'));
   assert.equal(d.querySelector('[data-drange="1"]').getAttribute('aria-pressed'), 'true');
-  assert.equal(ups(), '1');                                                 // laatste 24 uur
+  assert.equal(ups(), '1');                                                 // last 24 hours
   d.querySelector('[data-drange="7"]').click();
   await until(() => ups() === '4');
-  assert.equal(ups(), '4');                                                 // ook de 3 van gisteren
+  assert.equal(ups(), '4');                                                 // also the 3 of yesterday
   assert.equal(d.querySelector('[data-drange="7"]').getAttribute('aria-pressed'), 'true');
-  assert.equal(d.querySelector('#ranges [data-range="7"]').getAttribute('aria-pressed'), 'true');   // het dashboard volgt
-  assert.match(text(d.getElementById('profileTitle')), /^trunk /);         // nog steeds dezelfde pagina
+  assert.equal(d.querySelector('#ranges [data-range="7"]').getAttribute('aria-pressed'), 'true');   // the dashboard follows
+  assert.match(text(d.getElementById('profileTitle')), /^trunk /);         // still the same page
   assert.equal(d.getElementById('profileBack').hidden, false);
   dom.window.close();
 });
@@ -1698,20 +1698,20 @@ test('every place that names a drive, pool or the array links to its page', asyn
   const dom = await load({ ...DOCK, 'containers.json': JSON.stringify(containers) });
   const d = dom.window.document;
   const drives = (sel) => [...d.querySelectorAll(`${sel} .drvbtn`)].map((b) => b.dataset.drive);
-  // trunk heeft hier één schijf, dus de baan is de schijf zelf (sdd)
+  // trunk has one drive here, so the lane is the drive itself (sdd)
   assert.ok(drives('#sources .src-sub').includes('d:sdd'), 'Activiteit per bron');
   assert.ok(drives('#actReads .actdisk .head').includes('d:sdd'), 'Lezen per schijf');
   assert.ok(drives('#actWrites .actdisk .head').includes('d:sdd'), 'Schrijven per schijf');
   assert.ok(drives('#rest tbody').includes('d:sdd'), 'Draaitijd en rust');
-  // in het profiel: de schijven en de opslaglabels bij de paden
+  // in the profile: the drives and the location labels at the paths
   d.querySelector('#sources .srcbtn[data-src="container|plex"]').click();
   assert.ok(drives('#profileBody .prof-rhythm').includes('d:sdd'));
   assert.deepEqual(drives('#profileBody .prof-paths'), ['g:frunk', 'g:trunk']);
-  // het label van een gevolgde pool opent die pool
+  // the label of a watched pool opens that pool
   d.querySelector('#profileBody .prof-paths .loc[data-drive="g:trunk"]').click();
   assert.match(text(d.getElementById('profileTitle')), /^trunk /);
   d.getElementById('profileBack').click();
-  // een pool zonder harde schijven: uitleg en wie ernaar mapt
+  // a pool without hard drives: explanation and who maps it
   d.querySelector('#profileBody .prof-paths .loc[data-drive="g:frunk"]').click();
   assert.equal(text(d.getElementById('profileTitle')), 'frunk');
   assert.match(text(d.getElementById('profileBody')), /frunk heeft geen harde schijven/);

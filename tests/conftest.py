@@ -11,7 +11,7 @@ import spindash  # noqa: E402
 
 @pytest.fixture
 def sd(tmp_path, monkeypatch):
-    """spindash met alle host-paden en uitvoerbestanden in een tijdelijke map."""
+    """spindash with all host paths and output files in a temporary folder."""
     data = tmp_path / "data"
     data.mkdir()
     monkeypatch.setattr(spindash, "DATA", str(data))
@@ -29,7 +29,7 @@ def sd(tmp_path, monkeypatch):
     monkeypatch.setattr(spindash, "_fd_snap", {"t": 0.0, "by_name": {}})
     monkeypatch.setattr(spindash, "notified", {})
     monkeypatch.setattr(spindash, "_containers_cache", {"t": 0.0, "body": None})
-    monkeypatch.setenv("TZ", "Europe/Amsterdam")      # dagen en dagstart vast voor de tests
+    monkeypatch.setenv("TZ", "Europe/Amsterdam")      # fixed days and day start for the tests
     time.tzset()
     monkeypatch.setattr(spindash, "EMHTTP", str(tmp_path / "emhttp"))
     monkeypatch.setattr(spindash, "SYS_BLOCK", str(tmp_path / "sys"))
@@ -68,11 +68,11 @@ def make_proc(tmp_path, pid, comm, ppid=1, cgroup="0::/\n"):
 
 
 class FakeDocker:
-    """Docker-API op een Unix-socket: routes {pad: JSON} of {pad: (regels, ...)} (een tuple) voor
-    een chunked stroom zoals /events, die daarna sluit."""
+    """Docker API on a Unix socket: routes {path: JSON} or {path: (lines, ...)} (a tuple) for
+    a chunked stream such as /events, which closes afterwards."""
     def __init__(self, routes):
         import socketserver, http.server, tempfile, json, threading
-        self.dir = tempfile.mkdtemp(dir="/tmp")         # korte padnaam: Unix-sockets hebben een lengtelimiet
+        self.dir = tempfile.mkdtemp(dir="/tmp")         # short path: Unix sockets have a length limit
         self.path = os.path.join(self.dir, "d.sock")
         self.requests = []
         outer = self

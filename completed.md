@@ -33,6 +33,9 @@ Newest first.
 - Tested on an array-less setup with a Btrfs HDD pool (Unraid 7.3.3, pool `trunk` with four HDDs, NVMe pool `frunk` for appdata): the image runs, watches `/mnt/trunk` and logs spin state, file access and container events
 - Documented in `docs/publishing.md` why the image is amd64 only
 
+## 2026-10-19: English comments
+- All code comments and docstrings are English now (backend, frontend, tests, scripts, Dockerfile); CLAUDE.md requires English everywhere except the UI texts in `I18N` and the Dutch values of the data format. Only comments changed: the code of every file is identical before and after
+
 ## 2026-10-19: links to drive pages everywhere
 - The pool/array labels at a container's paths and in the Overview, the drives in a source profile, the line under each source in Activity per source, the drive heading in Reads/Writes per drive and the first column of Spin time and rest per drive all open the drive page
 - A pool without hard drives (such as an NVMe pool) gets a page that says it is not watched and lists the containers that map it

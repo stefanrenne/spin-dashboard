@@ -55,8 +55,10 @@ then builds the image.
 
 ## Conventions
 
-- Code comments are **Dutch**. Log lines, Markdown documentation (this file, `docs/`, `todo.md`,
-  `completed.md`), the README and the CA template are **English**.
+- Everything is **English**: code comments and docstrings (backend, frontend, tests, scripts),
+  log lines, Markdown documentation (this file, `docs/`, `todo.md`, `completed.md`), the README and
+  the CA template. Only UI texts in `I18N` and the Dutch values that are part of the data format
+  (`geopend`, `gebruiker`, ...) stay as they are.
 - The UI is multilingual (en, nl, fr, de, es): all texts live in `I18N` in `index.html` and go
   through `t('key')`. A new text gets a key in **every** language; a test checks this.
   Do not use `t` as a local variable name in code that also translates.

@@ -35,10 +35,10 @@ def test_relabel_existing(sd, monkeypatch):
     os.makedirs(sd.DAYS)
     t = D9 + 60
     open(sd.day_path("2026-10-09"), "w").write(
-        f"{t},who,unraid,python3,42,geopend,/mnt/trunk/a.mkv\n"     # wordt bazarr
-        f"{t},who,unraid,webGUI,42,geopend,/mnt/trunk/\n"            # naam klopt niet met proces
-        f"{t},who,unraid,bash,43,geopend,/mnt/trunk/b\n"             # geen container
-        f"{t},who,unraid,python3,999,geopend,/mnt/trunk/c\n"         # proces bestaat niet meer
+        f"{t},who,unraid,python3,42,geopend,/mnt/trunk/a.mkv\n"     # becomes bazarr
+        f"{t},who,unraid,webGUI,42,geopend,/mnt/trunk/\n"            # name does not match the process
+        f"{t},who,unraid,bash,43,geopend,/mnt/trunk/b\n"             # not a container
+        f"{t},who,unraid,python3,999,geopend,/mnt/trunk/c\n"         # process no longer exists
         f"{t},spin,sdd,active\n"
     )
     sd.relabel_existing(now=t)
@@ -58,7 +58,7 @@ def write_legacy(sd):
         "2026-10-09T08:57:22+02:00,/dev/sdd,active\n"
         "2026-10-09T09:27:26+02:00,/dev/sdd,standby\n"
         "2026-10-10T02:04:19+02:00,/dev/sdd,active\n"
-        "Oct  9 10:00:00 Tower emhttpd: spinning down /dev/sde\n"       # syslog: niet over te zetten
+        "Oct  9 10:00:00 Tower emhttpd: spinning down /dev/sde\n"       # syslog: cannot be converted
     )
     open(sd.WHO, "w").write(
         f"{D9 + 8 * 3600 + 3432},container,sonarr,16690,geopend,/mnt/trunk/Media/series/\n"
@@ -78,7 +78,7 @@ def test_migrate_splits_old_files_into_days(sd):
         f"{D9 + 8 * 3600 + 3442},spin,sdd,active",
         f"{D9 + 9 * 3600 + 1646},spin,sdd,standby",
     ]
-    # tweede dag begint met de namen en de status van gisteravond
+    # the second day starts with the names and the state of last night
     assert open(sd.day_path("2026-10-10")).read().splitlines() == [
         f"{D10},disk,sdd,trunk", f"{D10},disk,sde,trunk2",
         f"{D10},state,sdd,standby",
@@ -93,14 +93,14 @@ def test_migrate_splits_old_files_into_days(sd):
 def test_migrate_is_safe_to_repeat_and_keeps_new_data(sd):
     write_legacy(sd)
     os.makedirs(sd.DAYS)
-    open(sd.day_path("2026-10-10"), "w").write(f"{D10 + 9000},spin,sdd,standby\n")   # al nieuw geschreven
+    open(sd.day_path("2026-10-10"), "w").write(f"{D10 + 9000},spin,sdd,standby\n")   # already written anew
     sd.migrate()
     first = {d: open(sd.day_path(d)).read() for d in sd.list_days()}
-    write_legacy(sd)                                  # bv. migratie halverwege afgebroken
+    write_legacy(sd)                                  # e.g. a migration aborted halfway
     sd.migrate()
     assert {d: open(sd.day_path(d)).read() for d in sd.list_days()} == first
     assert first["2026-10-10"].splitlines()[-1] == f"{D10 + 9000},spin,sdd,standby"
-    kept = sorted(os.listdir(sd.LEGACY))              # beide kopieën van de oude bestanden blijven bewaard
+    kept = sorted(os.listdir(sd.LEGACY))              # both copies of the old files are kept
     assert [k.split(".csv")[0] for k in kept].count("who") == 2 and len(kept) == 8
 
 
@@ -114,7 +114,7 @@ def test_fatrace_version(sd, monkeypatch):
         def __init__(self, code, out): self.returncode, self.stdout = code, out
     monkeypatch.setattr(sd.subprocess, "run", lambda *a, **k: R(0, "0.17.0-1"))
     assert sd.fatrace_version() == "0.17.0-1"
-    monkeypatch.setattr(sd.subprocess, "run", lambda *a, **k: R(1, ""))     # geen dpkg-pakket
+    monkeypatch.setattr(sd.subprocess, "run", lambda *a, **k: R(1, ""))     # no dpkg package
     monkeypatch.setattr(sd.shutil, "which", lambda name: "/usr/bin/fatrace")
     assert sd.fatrace_version() == "found"
     def missing(*a, **k): raise FileNotFoundError("dpkg-query")

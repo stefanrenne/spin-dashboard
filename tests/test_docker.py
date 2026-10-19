@@ -6,7 +6,7 @@ import pytest
 from conftest import FakeDocker, make_disk
 
 
-# ---------- proc: welk proces binnen een container ----------
+# ---------- proc: which process inside a container ----------
 def test_container_access_logs_the_process_name_once_per_pid_and_day(sd):
     sd.write_who("1791496800", "container", "plex", "5", "geopend", "/mnt/trunk/a.mkv", comm="Plex Media Scan")
     sd.write_who("1791496801", "container", "plex", "5", "geopend", "/mnt/trunk/b.mkv", comm="Plex Media Scan")
@@ -14,12 +14,12 @@ def test_container_access_logs_the_process_name_once_per_pid_and_day(sd):
     sd.write_who("1791496803", "unraid", "mover", "6", "verplaatst", "/mnt/trunk/d.mkv", comm="mover")
     lines = open(sd.day_path("2026-10-09")).read().splitlines()
     assert lines == [
-        "1791496800,proc,5,Plex Media Scan",               # vóór de who-regel
+        "1791496800,proc,5,Plex Media Scan",               # before the who line
         "1791496800,who,container,plex,5,geopend,/mnt/trunk/a.mkv",
         "1791496801,who,container,plex,5,geopend,/mnt/trunk/b.mkv",
-        "1791496802,proc,5,Plex Transcoder",              # zelfde PID, andere naam (exec)
+        "1791496802,proc,5,Plex Transcoder",              # same PID, other name (exec)
         "1791496802,who,container,plex,5,geopend,/mnt/trunk/c.mkv",
-        "1791496803,who,unraid,mover,6,verplaatst,/mnt/trunk/d.mkv",   # geen container: geen proc
+        "1791496803,who,unraid,mover,6,verplaatst,/mnt/trunk/d.mkv",   # not a container: no proc
     ]
 
 
@@ -31,7 +31,7 @@ def test_proc_line_is_streamed_before_its_who_line(sd):
         sd.write_who("1791496800", "container", "plex", "5", "geopend", "/mnt/trunk/a.mkv", comm="Plex, Media")
     finally:
         sd.streams.clear()
-    assert q.get_nowait() == "1791496800,proc,5,Plex  Media"      # komma vervangen
+    assert q.get_nowait() == "1791496800,proc,5,Plex  Media"      # comma replaced
     assert q.get_nowait().startswith("1791496800,who,container,plex,5,")
 
 
@@ -43,7 +43,7 @@ def test_handle_passes_the_fatrace_process_name(sd, monkeypatch):
     assert calls == [(("1", "container", "plex", "5", "geopend", "/mnt/trunk/Media/a.mkv"), {"comm": "Plex Media Scan"})]
 
 
-# ---------- ctr: levenscyclus van containers ----------
+# ---------- ctr: container lifecycle ----------
 def ev(action, name="radarr", t=1791496800, **attrs):
     return {"Type": "container", "Action": action, "time": t, "Actor": {"Attributes": {"name": name, **attrs}}}
 
@@ -55,7 +55,7 @@ def test_ctr_line_for_start_die_and_health():
     assert sd.ctr_line(ev("die")) == "1791496800,ctr,radarr,die"
     assert sd.ctr_line(ev("health_status: unhealthy")) == "1791496800,ctr,radarr,unhealthy"
     assert sd.ctr_line(ev("health_status: healthy")) == "1791496800,ctr,radarr,healthy"
-    assert sd.ctr_line(ev("exec_create: /bin/true")) is None             # healthcheck-ruis
+    assert sd.ctr_line(ev("exec_create: /bin/true")) is None             # healthcheck noise
     assert sd.ctr_line(ev("start", name="")) is None
     assert sd.ctr_line({**ev("start"), "Type": "network"}) is None
 
@@ -76,11 +76,11 @@ def test_docker_events_writes_ctr_lines_until_the_stream_closes(sd, monkeypatch)
 def test_docker_events_without_a_socket_logs_and_stops(sd):
     logged = []
     sd.log = lambda *a: logged.append(" ".join(map(str, a)))
-    sd.docker_events()                                   # keert direct terug
+    sd.docker_events()                                   # returns right away
     assert "No Docker socket" in logged[0]
 
 
-# ---------- containers.json: mounts en waar de share staat ----------
+# ---------- containers.json: mounts and where the share lives ----------
 SHARES = '''["appdata"]
 name="appdata"
 useCache="only"
@@ -123,8 +123,8 @@ def test_locate_says_where_a_path_lives_and_whether_that_is_an_hdd(unraid):
     sh, hdd = unraid.read_shares_ini(), {"disk1", "trunk"}
     L = lambda p: unraid.locate(p, sh, hdd)
     assert L("/mnt/user/appdata/plex") == {"kind": "share", "share": "appdata", "storage": "pool", "pool": "cache", "hdd": False}
-    assert L("/mnt/user/Media")["hdd"] is True                        # komt via de mover op de array
-    assert L("/mnt/user/downloads")["hdd"] is True                    # pool trunk is een HDD-pool
+    assert L("/mnt/user/Media")["hdd"] is True                        # ends up on the array through the mover
+    assert L("/mnt/user/downloads")["hdd"] is True                    # pool trunk is an HDD pool
     assert L("/mnt/user0/appdata") == {"kind": "share", "share": "appdata", "storage": "array", "pool": "cache", "hdd": True}
     assert L("/mnt/user/unknown")["storage"] == "unknown" and L("/mnt/user/unknown")["hdd"] is None
     assert L("/mnt/user") == {"kind": "user", "hdd": True}
@@ -145,14 +145,14 @@ def test_containers_info_lists_mounts_under_mnt(unraid, monkeypatch):
     try:
         monkeypatch.setattr(unraid, "DOCKER_SOCK", fake.path)
         body = unraid.containers_info(now=1000)
-        assert unraid.containers_info(now=1010) is body              # 30 s gecachet
-        assert sorted(r.split('?')[0] for r in fake.requests) == ['/containers/json', '/volumes']   # één verversing
+        assert unraid.containers_info(now=1010) is body              # cached for 30 s
+        assert sorted(r.split('?')[0] for r in fake.requests) == ['/containers/json', '/volumes']   # one refresh
     finally:
         fake.close()
     assert body["docker"] is True
     plex, radarr = body["containers"]
     assert (plex["name"], plex["state"], radarr["project"]) == ("plex", "running", "arr")
-    assert [m["target"] for m in plex["mounts"]] == ["/config", "/media"]   # /tmp valt weg
+    assert [m["target"] for m in plex["mounts"]] == ["/config", "/media"]   # /tmp is dropped
     assert plex["mounts"][0]["where"]["storage"] == "pool"
     assert plex["mounts"][1] == {"source": "/mnt/user/Media", "target": "/media", "rw": False,
                                  "where": {"kind": "share", "share": "Media", "storage": "pool>array", "pool": "cache", "hdd": True}}
@@ -170,9 +170,9 @@ def test_containers_json_endpoint_without_docker(sd):
     assert body == {"docker": False, "containers": []}
 
 
-# ---------- oude data blijft geldig ----------
+# ---------- old data stays valid ----------
 def test_old_day_files_without_proc_or_ctr_lines_still_work(sd):
-    """proc en ctr komen er alleen bij: oude dagbestanden hebben ze niet en hoeven niet omgezet."""
+    """proc and ctr are only added: old day files lack them and need no conversion."""
     os.makedirs(sd.DAYS)
     open(sd.day_path("2026-10-08"), "w").write(
         "1791410400,disk,sdd,trunk\n1791410400,state,sdd,standby\n"
@@ -183,7 +183,7 @@ def test_old_day_files_without_proc_or_ctr_lines_still_work(sd):
 
 
 def test_named_volumes_that_bind_a_folder_count_as_that_folder(unraid, monkeypatch):
-    """Zoals op een echte server: compose-volumes met driver_opts type=none, o=bind, device=/mnt/..."""
+    """As on a real server: Compose volumes with driver_opts type=none, o=bind, device=/mnt/..."""
     fake = FakeDocker({
         "/containers/json": [{"Names": ["/plex"], "State": "running", "Mounts": [
             {"Type": "volume", "Name": "appdata", "Source": "/var/lib/docker/volumes/appdata/_data", "Destination": "/config", "RW": True},
@@ -192,7 +192,7 @@ def test_named_volumes_that_bind_a_folder_count_as_that_folder(unraid, monkeypat
         "/volumes": {"Volumes": [
             {"Name": "appdata", "Driver": "local", "Options": {"device": "/mnt/cache/appdata", "o": "bind", "type": "none"}},
             {"Name": "media", "Driver": "local", "Options": {"device": "/mnt/trunk/Media", "o": "bind,ro", "type": "none"}},
-            {"Name": "cache", "Driver": "local", "Options": None}]},       # gewoon volume: valt weg
+            {"Name": "cache", "Driver": "local", "Options": None}]},       # plain volume: dropped
     })
     try:
         monkeypatch.setattr(unraid, "DOCKER_SOCK", fake.path)

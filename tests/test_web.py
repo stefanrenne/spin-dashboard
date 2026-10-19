@@ -36,7 +36,7 @@ def get(url):
 def test_serves_dashboard_day_list_and_day_files(server):
     assert get(server + "/")[:2] == (200, "<html>ok</html>")
     status, body, headers = get(server + "/data/days.json")
-    # bytes: totale grootte van de dagbestanden, voor de voortgangsbalk ("x\n" + 27 tekens)
+    # bytes: total size of the day files, for the progress bar ("x\n" + 27 characters)
     assert status == 200 and json.loads(body) == {"days": ["2026-10-08", "2026-10-09"], "bytes": 2 + 27,
                                                    "sizes": [2, 27]}
     assert headers["Cache-Control"] == "no-cache"
@@ -75,10 +75,10 @@ def test_broadcast_skips_full_queue(sd):
     full.put("x")
     sd.streams.append(full)
     try:
-        sd.broadcast("1791496800,who,container,plex,1,geopend,/mnt/trunk/a.mkv")   # mag niet blokkeren
+        sd.broadcast("1791496800,who,container,plex,1,geopend,/mnt/trunk/a.mkv")   # must not block
     finally:
         sd.streams.clear()
-    assert full.get_nowait() == "x"     # alleen het oude item; de broadcast is geskipt
+    assert full.get_nowait() == "x"     # only the old item; the broadcast was skipped
 
 
 def test_stream_endpoint_delivers_broadcast(sd, server):
@@ -88,7 +88,7 @@ def test_stream_endpoint_delivers_broadcast(sd, server):
     resp = conn.getresponse()
     assert resp.status == 200
     assert resp.headers["Content-Type"] == "text/event-stream"
-    line = resp.readline()              # ": ok" begroeting
+    line = resp.readline()              # ": ok" greeting
     assert line.startswith(b":")
     assert len(sd.streams) == 1
     sd.broadcast("1791496800,who,container,plex,1,geopend,/mnt/trunk/a.mkv")
@@ -111,7 +111,7 @@ def test_day_files_are_gzipped_when_accepted(server):
     assert status == 200 and headers["Content-Encoding"] == "gzip"
     assert gzip.decompress(body) == b"1791496800,spin,sdd,active\n"
     assert headers["Vary"] == "Accept-Encoding" and headers["Content-Type"].startswith("text/csv")
-    status, body, headers = fetch(server + "/data/days/2026-10-09.csv")          # zonder gzip
+    status, body, headers = fetch(server + "/data/days/2026-10-09.csv")          # without gzip
     assert (status, body, headers["Content-Encoding"]) == (200, b"1791496800,spin,sdd,active\n", None)
 
 
@@ -120,14 +120,14 @@ def test_unchanged_day_gives_304(server, sd):
     status, body, _ = fetch(server + "/data/days/2026-10-09.csv",
                             **{"Accept-Encoding": "gzip", "If-None-Match": h["ETag"]})
     assert (status, body) == (304, b"")
-    with open(sd.day_path("2026-10-09"), "a") as f:                            # dag groeit: weer 200
+    with open(sd.day_path("2026-10-09"), "a") as f:                            # day grows: 200 again
         f.write("1791496900,spin,sdd,standby\n")
     status, body, _ = fetch(server + "/data/days/2026-10-09.csv",
                             **{"Accept-Encoding": "gzip", "If-None-Match": h["ETag"]})
     assert status == 200 and gzip.decompress(body).count(b"\n") == 2
 
 
-# ---------- instellingen (verborgen paden) ----------
+# ---------- settings (hidden paths) ----------
 def post(url, body, content_type="application/json"):
     data = body if isinstance(body, bytes) else json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, method="POST", headers={"Content-Type": content_type})
@@ -155,7 +155,7 @@ def test_saved_hidden_paths_are_returned_and_stored_in_data_dir(server, sd):
     assert json.load(open(sd.SETTINGS)) == {"hide": ["/mnt/user/appdata/*", "*.tmp"]}
     assert os.path.dirname(sd.SETTINGS) == sd.DATA
     assert not os.path.exists(sd.SETTINGS + ".tmp")
-    # een lege lijst is ook een keuze: de sleutel blijft, zodat de browser niet opnieuw migreert
+    # an empty list is a choice too: the key stays, so the browser does not migrate again
     assert post(server + "/data/settings.json", {"hide": []}) == (200, {"hide": []})
     assert json.loads(get(server + "/data/settings.json")[1]) == {"hide": []}
 
@@ -179,7 +179,7 @@ def test_invalid_settings_are_rejected_and_nothing_changes(server, sd, body):
 def test_settings_post_needs_json_and_a_sane_size(server, sd):
     assert post(server + "/data/settings.json", b"{nope", "application/json")[0] == 400
     assert post(server + "/data/settings.json", b"\xff\xfe", "application/json")[0] == 400
-    # gewoon formulier (kan cross-site zonder preflight): geweigerd
+    # plain form (can be cross-site without a preflight): refused
     assert post(server + "/data/settings.json", b"hide=x", "application/x-www-form-urlencoded")[0] == 415
     assert post(server + "/data/settings.json", b"{}", "text/plain")[0] == 415
     big = json.dumps({"hide": ["a" * 400] * 200}).encode()
@@ -197,7 +197,7 @@ def test_unreadable_settings_file_counts_as_empty(sd):
     assert sd.save_settings({"hide": ["x"]}) == {"hide": ["x"]}
 
 
-# ---------- /data/spins.csv: alleen de spin-regels van alle dagen ----------
+# ---------- /data/spins.csv: only the spin lines of all days ----------
 def test_spins_returns_only_disk_state_and_spin_lines_of_every_day(server, sd):
     open(sd.day_path("2026-10-08"), "w").write(
         "1791410400,disk,sdd,trunk\n1791410400,state,sdd,standby\n"
@@ -221,7 +221,7 @@ def test_spins_is_gzipped_and_answers_304_until_a_day_changes(server, sd):
     assert e.value.code == 304
     with open(sd.day_path("2026-10-09"), "a") as f:
         f.write("1791500000,spin,sdd,standby\n")
-    r = urllib.request.urlopen(req, timeout=5)      # dag veranderd: nieuwe inhoud
+    r = urllib.request.urlopen(req, timeout=5)      # day changed: new content
     assert gzip.decompress(r.read()).decode().endswith("1791500000,spin,sdd,standby\n")
 
 

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Spin Dashboard voor Unraid.
+"""Spin Dashboard for Unraid.
 
-Eén proces met drie onderdelen:
+One process with these parts:
 
-  poller   peilt elke POLL_INTERVAL seconden de status van alle HDD's (hdparm -C, met
-           smartctl als terugval) en schrijft alleen wijzigingen naar spin.csv.
-           De namen (parity, disk1, pool, pool2) komen uit Unraid's disks.ini.
-  watcher  draait per HDD-mount een `fatrace -c` (fanotify) en legt vast welk proces
-           welk bestand opent: een container, Unraid zelf of een gebruiker (SMB/shell).
-  docker   volgt start/stop/health van containers (ctr-regels) en levert per container de mounts
-           met waar de share staat (shares.ini) voor /data/containers.json.
-  web      serveert het dashboard en de CSV's, en bewaart de instellingen (verborgen paden).
+  poller   polls the state of every HDD every POLL_INTERVAL seconds (hdparm -C, with
+           smartctl as fallback) and writes only changes to the day file.
+           The names (parity, disk1, pool, pool2) come from Unraid's disks.ini.
+  watcher  runs one `fatrace -c` (fanotify) per HDD mount and records which process
+           opens which file: a container, Unraid itself or a user (SMB/shell).
+  docker   follows start/stop/health of containers (ctr lines) and provides per container the mounts
+           with where the share lives (shares.ini) for /data/containers.json.
+  web      serves the dashboard and the CSV files, and stores the settings (hidden paths, quiet hours).
 
-Alles staat in DATA_DIR/days: één CSV per dag (YYYY-MM-DD.csv, lokale datum) met regels
-`epoch,soort,...` (disk, state, spin, proc, who, activity, ctr). Oudere losse bestanden (spin.csv, disks.csv,
-who.csv, activity.csv) worden bij het starten eenmalig naar dagbestanden gemigreerd.
+Everything lives in DATA_DIR/days: one CSV per day (YYYY-MM-DD.csv, local date) with lines
+`epoch,type,...` (disk, state, spin, proc, who, activity, ctr). Older separate files (spin.csv, disks.csv,
+who.csv, activity.csv) are migrated to day files once at start.
 """
 import gzip
 import hashlib
@@ -35,23 +35,23 @@ import urllib.request
 from datetime import datetime
 from functools import partial
 
-# ---------- instellingen ----------
+# ---------- settings ----------
 PORT = int(os.environ.get("PORT", "8089"))
 DATA = os.environ.get("DATA_DIR", "/data")
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-EMHTTP = os.environ.get("EMHTTP_DIR", "/emhttp")          # /var/local/emhttp van de host
+EMHTTP = os.environ.get("EMHTTP_DIR", "/emhttp")          # /var/local/emhttp of the host
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
 RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", "30"))
-DEDUP_S = int(os.environ.get("DEDUP_SECONDS", "600"))   # zelfde pad + bron maar 1x per 10 min
-WATCH_OVERRIDE = os.environ.get("WATCH", "").split()   # optioneel: vaste lijst mounts
-# processen (en hun kinderen) die niet gelogd worden; cache_dirs opent continu alle mappen
+DEDUP_S = int(os.environ.get("DEDUP_SECONDS", "600"))   # same path + source only once per 10 min
+WATCH_OVERRIDE = os.environ.get("WATCH", "").split()   # optional: fixed list of mounts
+# processes (and their children) that are not logged; cache_dirs keeps opening every folder
 IGNORE_PROCS = set(os.environ.get("IGNORE_PROCS", "cache_dirs").split())
 SHFS_DELAY = 0.4
-PID_TTL = 30          # uitkomst van classify() per PID zo lang onthouden
-IGNORE_TTL = 300      # zo lang na een genegeerd proces dezelfde naam zonder bron ook negeren
-IGNORE_SCAN = 30      # zo vaak opnieuw kijken of er een IGNORE_PROCS-proces draait (s)
+PID_TTL = 30          # remember the result of classify() per PID this long
+IGNORE_TTL = 300      # this long after an ignored process, also ignore the same name without a source
+IGNORE_SCAN = 30      # how often to check again whether an IGNORE_PROCS process is running (s)
 
-# Paden naar het hostsysteem; in tests te vervangen
+# Paths to the host system; replaceable in tests
 PROC = "/proc"
 SYS_BLOCK = "/sys/block"
 MOUNTS_FILE = "/proc/self/mounts"
@@ -60,24 +60,24 @@ DOCKER_SOCK = "/var/run/docker.sock"
 
 DAYS = os.path.join(DATA, "days")
 LEGACY = os.path.join(DATA, "legacy")
-# oude losse bestanden; alleen nog gelezen door migrate()
+# old separate files; only read by migrate()
 SPIN = os.path.join(DATA, "spin.csv")
 DISKS = os.path.join(DATA, "disks.csv")
 WHO = os.path.join(DATA, "who.csv")
 ACTIVITY = os.path.join(DATA, "activity.csv")
-# instellingen uit het dashboard (verborgen paden), gedeeld door alle browsers
+# settings from the dashboard (hidden paths, quiet hours), shared by every browser
 SETTINGS = os.path.join(DATA, "spindash-settings.json")
 OWN_FILES = {"spin.csv", "disks.csv", "who.csv", "activity.csv",
              "spindash-settings.json", "spindash-settings.json.tmp"}
 DAY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}\.csv(?:\.tmp)?$")
-TYPES = ("disk", "state", "spin", "proc", "who", "activity", "ctr")   # volgorde binnen dezelfde seconde
+TYPES = ("disk", "state", "spin", "proc", "who", "activity", "ctr")   # order within the same second
 
 write_lock = threading.Lock()
-# gezondheid voor /health: wanneer de poller voor het laatst slaagde, wat de watcher bewaakt, of de
-# Docker-events binnenkomen, en de achtergrondthreads (gevuld in main)
+# health for /health: when the poller last succeeded, what the watcher watches, whether
+# Docker events arrive, and the background threads (filled in main)
 health = {"started": time.time(), "poll": None, "poll_error": None, "mounts": [], "docker": None}
 threads = {}
-# live-verbindingen (Server-Sent Events): elke write_who zet de regel in alle wachtende queues
+# live connections (Server-Sent Events): every write_who puts the line in all waiting queues
 streams = []
 streams_lock = threading.Lock()
 
@@ -87,7 +87,7 @@ def log(*a):
 
 
 # =====================================================================================
-# Dagbestanden
+# Day files
 # =====================================================================================
 def day_of(ts):
     return time.strftime("%Y-%m-%d", time.localtime(float(ts)))
@@ -102,7 +102,7 @@ def day_start(day):
 
 
 def append_lines(lines):
-    """Regels `epoch,soort,...` toevoegen aan het dagbestand van hun eigen tijdstip."""
+    """Append lines `epoch,type,...` to the day file of their own time."""
     by_day = {}
     for line in lines:
         by_day.setdefault(day_of(line.split(",", 1)[0]), []).append(line + "\n")
@@ -121,8 +121,8 @@ def list_days():
 
 
 def days_index():
-    """Inhoud van /data/days.json: de dagen, hun grootte en het totaal (ongecomprimeerd), zodat de
-    frontend alleen de dagen van de getoonde periode ophaalt en daarbij voortgang kan tonen."""
+    """Content of /data/days.json: the days, their size and the total (uncompressed), so the
+    frontend only fetches the days of the shown period and can show progress while doing so."""
     days, sizes = list_days(), []
     for d in days:
         try:
@@ -132,11 +132,11 @@ def days_index():
     return {"days": days, "bytes": sum(sizes), "sizes": sizes}
 
 
-_gz_cache = {}        # pad -> (mtime_ns, grootte, gzip-bytes); oude dagen veranderen niet meer
+_gz_cache = {}        # path -> (mtime_ns, size, gzip bytes); old days no longer change
 
 
 def day_body(path, st, gz):
-    """Inhoud van een dagbestand, gzip-gecomprimeerd als de browser dat accepteert."""
+    """Content of a day file, gzip-compressed when the browser accepts it."""
     if not gz:
         with open(path, "rb") as f:
             return f.read()
@@ -151,13 +151,13 @@ def day_body(path, st, gz):
     return body
 
 
-_spin_cache = {}      # pad -> (mtime_ns, grootte, spin-regels); alleen de disk/state/spin-regels
+_spin_cache = {}      # path -> (mtime_ns, size, spin lines); only the disk/state/spin lines
 SPIN_TYPES = ("disk", "state", "spin")
 
 
 def spin_lines(path, st):
-    """De disk-, state- en spin-regels van één dagbestand. Klein (de who-regels zijn het grootste deel),
-    zodat de frontend kerncijfers en de trend over alle dagen kan tonen zonder alles op te halen."""
+    """The disk, state and spin lines of one day file. Small (the who lines are most of it),
+    so the frontend can show key figures and the trend over all days without fetching everything."""
     hit = _spin_cache.get(path)
     if hit and hit[:2] == (st.st_mtime_ns, st.st_size):
         return hit[2]
@@ -173,8 +173,8 @@ def spin_lines(path, st):
 
 
 def spins_body():
-    """Inhoud van /data/spins.csv: de spin-regels van alle dagen op volgorde, plus een ETag die
-    verandert zodra een dagbestand verandert."""
+    """Content of /data/spins.csv: the spin lines of all days in order, plus an ETag that
+    changes as soon as a day file changes."""
     parts, tag, days = [], [], list_days()
     for d in days:
         path = day_path(d)
@@ -185,7 +185,7 @@ def spins_body():
             continue
         tag.append(f"{d}:{st.st_mtime_ns:x}:{st.st_size:x}")
     live = {day_path(d) for d in days}
-    for path in [p for p in _spin_cache if p not in live]:      # opgeruimde dagen vergeten
+    for path in [p for p in _spin_cache if p not in live]:      # forget days that were cleaned up
         _spin_cache.pop(path, None)
     etag = '"s-%s"' % hashlib.sha1("|".join(tag).encode()).hexdigest()[:16]
     return "".join(parts).encode(), etag
@@ -197,10 +197,10 @@ def is_own_file(path):
 
 
 # =====================================================================================
-# Schijven en mounts
+# Drives and mounts
 # =====================================================================================
 def read_disks_ini():
-    """[(device, naam)] uit disks.ini; flash en lege slots overgeslagen."""
+    """[(device, name)] from disks.ini; flash and empty slots skipped."""
     path = os.path.join(EMHTTP, "disks.ini")
     out, name, seen = [], None, set()
     try:
@@ -226,14 +226,14 @@ def is_rotational(dev):
 
 
 def mount_base(name):
-    """disk1 -> disk1, trunk2 -> trunk (poolleden), parity -> None."""
+    """disk1 -> disk1, trunk2 -> trunk (pool members), parity -> None."""
     if name.startswith("parity"):
         return None
     return name if re.fullmatch(r"disk\d+", name) else re.sub(r"\d+$", "", name)
 
 
 def hdd_devices():
-    """{device: naam} voor alle draaiende schijven. Zonder disks.ini: alle sdX met rotational=1."""
+    """{device: name} for all spinning drives. Without disks.ini: every sdX with rotational=1."""
     mapped = {d: n for d, n in read_disks_ini() if is_rotational(d)}
     if mapped:
         return mapped
@@ -251,7 +251,7 @@ def mounted():
 
 
 def target_mounts():
-    """Mounts van HDD's onder /mnt, inclusief ZFS-datasets daaronder."""
+    """Mounts of HDDs under /mnt, including ZFS datasets below them."""
     if WATCH_OVERRIDE:
         roots = [r.rstrip("/") for r in WATCH_OVERRIDE]
     else:
@@ -261,10 +261,10 @@ def target_mounts():
 
 
 # =====================================================================================
-# Poller: spin-status
+# Poller: spin state
 # =====================================================================================
 def parse_hdparm(out):
-    """Uitvoer van `hdparm -C` -> 'active', 'standby' of None."""
+    """Output of `hdparm -C` -> 'active', 'standby' or None."""
     m = re.search(r"drive state is:\s+(\S+)", out)
     if not m:
         return None
@@ -277,7 +277,7 @@ def parse_hdparm(out):
 
 
 def drive_state(dev):
-    """'active', 'standby' of None. hdparm maakt de schijf niet wakker; smartctl -n standby ook niet."""
+    """'active', 'standby' or None. hdparm does not wake the drive; neither does smartctl -n standby."""
     try:
         out = subprocess.run(["hdparm", "-C", f"/dev/{dev}"], capture_output=True, text=True, timeout=15).stdout
         st = parse_hdparm(out)
@@ -285,7 +285,7 @@ def drive_state(dev):
             return st
     except (OSError, subprocess.TimeoutExpired):
         pass
-    try:   # SAS en controllers waar hdparm niets zegt
+    try:   # SAS and controllers where hdparm says nothing
         r = subprocess.run(["smartctl", "-n", "standby", "-i", f"/dev/{dev}"],
                            capture_output=True, text=True, timeout=15)
         if "STANDBY" in r.stdout.upper():
@@ -298,12 +298,12 @@ def drive_state(dev):
 
 
 def poll_once(last, now=None):
-    """Eén peiling. Schrijft naar het dagbestand:
-    - `disk`-regels bij de eerste peiling van een dag of als de schijfnamen veranderen;
-    - `spin` bij een statuswijziging;
-    - `state` met de huidige status bij de eerste peiling van een dag of na het starten,
-      zodat elk dagbestand op zichzelf leesbaar is. Een `state` is geen spin-up.
-    `last` houdt de vorige status bij. Geeft het aantal spin- en state-regels terug."""
+    """One poll. Writes to the day file:
+    - `disk` lines on the first poll of a day or when the drive names change;
+    - `spin` on a state change;
+    - `state` with the current state on the first poll of a day or after a start,
+      so every day file can be read on its own. A `state` is not a spin-up.
+    `last` keeps the previous state. Returns the number of spin and state lines."""
     now = int(time.time() if now is None else now)
     day, devs = day_of(now), hdd_devices()
     known = last.setdefault("st", {})
@@ -331,7 +331,7 @@ def poll_once(last, now=None):
     if ups:
         try:
             notify_spinups(now, ups)
-        except Exception as e:                  # een melding mag de peiling nooit breken
+        except Exception as e:                  # a notification must never break the poll
             log("notify failed:", repr(e))
     if not devs:
         log("No HDDs found. Is /var/local/emhttp mounted and is the container privileged?")
@@ -339,19 +339,19 @@ def poll_once(last, now=None):
 
 
 # =====================================================================================
-# Stille uren: een spin-up binnen het ingestelde venster meldt de poller via een webhook
+# Quiet hours: the poller reports a spin-up inside the configured window through a webhook
 # =====================================================================================
-NOTIFY_GAP = 600       # hooguit één melding per baan per 10 minuten (poolleden spinnen samen op)
+NOTIFY_GAP = 600       # at most one notification per lane per 10 minutes (pool members spin up together)
 notified = {}
 
 
 def lane_key(name):
-    """Baansleutel zoals de frontend: parity en diskN horen bij de array, poolleden bij hun pool."""
+    """Lane key as in the frontend: parity and diskN belong to the array, pool members to their pool."""
     return "array" if re.fullmatch(r"parity\d*|disk\d+", name) else re.sub(r"\d+$", "", name)
 
 
 def in_quiet(ts, quiet):
-    """Valt `ts` (epoch, lokale tijd) binnen de stille uren? Een venster als 23:00-07:00 loopt over middernacht."""
+    """Is `ts` (epoch, local time) inside the quiet hours? A window like 23:00-07:00 runs over midnight."""
     if not quiet:
         return False
     lt = time.localtime(ts)
@@ -361,7 +361,7 @@ def in_quiet(ts, quiet):
 
 
 def send_webhook(url, payload, timeout=10):
-    """JSON naar de webhook. `text` (Slack, ntfy, Gotify) en `content` (Discord) bevatten dezelfde zin."""
+    """JSON to the webhook. `text` (Slack, ntfy, Gotify) and `content` (Discord) hold the same sentence."""
     req = urllib.request.Request(url, data=json.dumps(payload).encode(), method="POST",
                                  headers={"Content-Type": "application/json", "User-Agent": "spin-dashboard"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -369,8 +369,8 @@ def send_webhook(url, payload, timeout=10):
 
 
 def notify_spinups(now, ups, send=None):
-    """Spin-ups [(device, naam)] van één peiling melden als ze in de stille uren vallen en hun baan
-    meedoet. Versturen gebeurt in een eigen thread, zodat de poller niet wacht op het netwerk."""
+    """Report spin-ups [(device, name)] of one poll when they fall inside the quiet hours and their
+    lane takes part. Sending happens in its own thread, so the poller never waits for the network."""
     st = read_settings()
     quiet, url = st.get("quiet"), st.get("webhook")
     if not ups or not url or not in_quiet(now, quiet):
@@ -416,10 +416,10 @@ def poller():
 
 
 # =====================================================================================
-# Watcher: wie opent wat (fatrace)
+# Watcher: who opens what (fatrace)
 # =====================================================================================
 LINE = re.compile(r"^(\d+)\.\d+ (.*)\((\d+)\): ([RWOCD+<>]+)\s+(/.*?)(?: exe=.*)?$")
-# W (schrijven) staat vóór O (openen): een open met schrijfintentie (OW/ORW) telt als schrijven
+# W (write) comes before O (open): an open with write intent (OW/ORW) counts as a write
 OPS = [("D", "verwijderd"), ("+", "aangemaakt"), ("<", "verplaatst"), (">", "verplaatst"),
        ("W", "geschreven"), ("O", "geopend")]
 SHELLS = {"sshd": "ssh", "sshd-session": "ssh", "ttyd": "webterminal", "login": "console",
@@ -429,8 +429,8 @@ events = queue.Queue(maxsize=20_000)
 procs = []
 recent = {}
 names = {}
-seen = {}             # pid -> (tijd, comm, uitkomst van classify)
-ignored_comms = {}    # comm -> laatste keer dat een proces met die naam genegeerd werd
+seen = {}             # pid -> (time, comm, result of classify)
+ignored_comms = {}    # comm -> last time a process with that name was ignored
 stats = {"written": 0, "dropped": 0}
 MY_PID = str(os.getpid())
 
@@ -455,7 +455,7 @@ _ignore_seen = {"t": None, "on": False}
 
 
 def ignore_active(now=None):
-    """Draait er een proces uit IGNORE_PROCS (bv. cache_dirs)? Hooguit eens per IGNORE_SCAN opnieuw bekeken."""
+    """Is a process from IGNORE_PROCS (e.g. cache_dirs) running? Checked again at most once per IGNORE_SCAN."""
     now = time.time() if now is None else now
     if _ignore_seen["t"] is not None and now - _ignore_seen["t"] < IGNORE_SCAN:
         return _ignore_seen["on"]
@@ -484,8 +484,8 @@ def ignore_active(now=None):
 
 
 def is_ignored(pid, limit=15):
-    """Hoort dit proces (of een voorouder) bij IGNORE_PROCS? Kijkt naar de procesnaam en naar de
-    opdrachtregel, voor scripts die als `bash /pad/naar/cache_dirs` gestart zijn."""
+    """Does this process (or an ancestor) belong to IGNORE_PROCS? Looks at the process name and at the
+    command line, for scripts started as `bash /path/to/cache_dirs`."""
     while pid and pid not in ("0", "1") and limit:
         limit -= 1
         try:
@@ -509,13 +509,13 @@ def container_id(pid):
         cg = open(f"{PROC}/{pid}/cgroup").read()
     except OSError:
         return None
-    # met een eigen cgroup-namespace ziet dit eruit als "0::/../<id>", zonder "docker/"
+    # with its own cgroup namespace this looks like "0::/../<id>", without "docker/"
     m = re.search(r"(?:^|[/-])([0-9a-f]{64})(?:\.scope)?\s*$", cg, re.M)
     return m.group(1) if m else None
 
 
 def docker_conn(timeout):
-    """HTTP over de Docker-socket. timeout None: blijven wachten (de events-stroom)."""
+    """HTTP over the Docker socket. timeout None: keep waiting (the event stream)."""
     c = http.client.HTTPConnection("localhost", timeout=timeout)
     c.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     c.sock.settimeout(timeout)
@@ -524,7 +524,7 @@ def docker_conn(timeout):
 
 
 def docker_get(path, timeout=2):
-    """JSON van een GET op de Docker-API, of None (geen socket, fout, andere status)."""
+    """JSON of a GET on the Docker API, or None (no socket, error, other status)."""
     try:
         c = docker_conn(timeout)
         c.request("GET", path)
@@ -546,13 +546,13 @@ def container_name(cid):
 
 
 def classify(pid, comm, now=None):
-    """Als classify_now(), maar onthoudt de uitkomst per PID. Een kortlevend proces (find van
-    cache_dirs) is vaak al gestopt voordat al zijn events verwerkt zijn; de latere events krijgen
-    zo dezelfde uitkomst als het eerste, toen het proces nog draaide.
+    """Like classify_now(), but remembers the result per PID. A short-lived process (find of
+    cache_dirs) has often stopped before all its events are handled; the later events then get
+    the same result as the first one, while the process was still running.
 
-    Vangnet: is kort geleden een proces met dezelfde naam genegeerd, dan wordt een proces met die
-    naam zonder herkenbare bron (gestopt, of verweesd zodat de keten niet meer te volgen is) ook
-    genegeerd. Een find vanuit een shell, SMB of cron heeft wel een bron en wordt gewoon gelogd."""
+    Safety net: if a process with the same name was ignored shortly before, a process with that
+    name without a recognisable source (stopped, or orphaned so the chain can no longer be followed)
+    is ignored too. A find from a shell, SMB or cron does have a source and is logged as usual."""
     now = time.time() if now is None else now
     hit = seen.get(pid)
     if hit and now - hit[0] < PID_TTL and hit[1] == comm:
@@ -573,7 +573,7 @@ def classify(pid, comm, now=None):
 
 
 def classify_now(pid, comm):
-    """(soort, naam) van een proces, of None als het genegeerd wordt (IGNORE_PROCS)."""
+    """(kind, name) of a process, or None when it is ignored (IGNORE_PROCS)."""
     cid = container_id(pid)
     if cid:
         return "container", container_name(cid)
@@ -603,16 +603,16 @@ def classify_now(pid, comm):
     return "unraid", comm
 
 
-FD_SNAP_TTL = 1.0                      # een momentopname van alle open bestanden gaat zo lang mee (s)
+FD_SNAP_TTL = 1.0                      # a snapshot of all open files is reused this long (s)
 _fd_snap = {"t": 0.0, "by_name": {}}
 _fd_lock = threading.Lock()
 
 
 def fd_snapshot(since):
-    """{bestandsnaam: [(pid, /proc/pid/fd/n)]} van alle open bestanden. Een scan van duizenden
-    bestanden via /mnt/user geeft duizenden shfs-events per seconde; zonder momentopname las elk
-    event opnieuw heel /proc/*/fd. Hergebruik alleen als de opname ná `since` (het event) gemaakt is,
-    zodat een net geopend bestand er altijd in staat, en hooguit FD_SNAP_TTL seconden oud."""
+    """{file name: [(pid, /proc/pid/fd/n)]} of all open files. A scan of thousands of files through
+    /mnt/user gives thousands of shfs events per second; without a snapshot every event read all of
+    /proc/*/fd again. Reused only when the snapshot was taken after `since` (the event), so a file
+    that was just opened is always in it, and at most FD_SNAP_TTL seconds old."""
     with _fd_lock:
         now = time.time()
         if _fd_snap["t"] >= since and now - _fd_snap["t"] < FD_SNAP_TTL:
@@ -637,7 +637,7 @@ def fd_snapshot(since):
 
 
 def via_user_share(path, since=None):
-    """Wie heeft /mnt/pool/Share/x via /mnt/user/Share/x open? Vergelijkt inodes."""
+    """Who has /mnt/pool/Share/x open through /mnt/user/Share/x? Compares inodes."""
     parts = path.split("/")
     if len(parts) < 5:
         return None
@@ -662,18 +662,18 @@ def via_user_share(path, since=None):
 
 
 def share_root(path):
-    """/mnt/pool/Share/a/b.mkv -> /mnt/pool/Share/ (ongewijzigd als er geen share in zit)."""
+    """/mnt/pool/Share/a/b.mkv -> /mnt/pool/Share/ (unchanged when there is no share in it)."""
     parts = path.split("/")
     return "/".join(parts[:4]) + "/" if len(parts) > 4 else path
 
 
-procs_seen = {}       # pid -> (comm, dag) van de laatste proc-regel
+procs_seen = {}       # pid -> (comm, day) of the last proc line
 
 
 def proc_line(ts, pid, comm):
-    """`proc`-regel als deze PID vandaag nog niet met deze procesnaam gelogd is, anders None.
-    Zo weet de frontend welk proces binnen een container (Plex Media Scanner, Plex Transcoder)
-    een bestand opende, zonder de who-regel te veranderen."""
+    """`proc` line when this PID has not been logged with this process name today, otherwise None.
+    That way the frontend knows which process inside a container (Plex Media Scanner, Plex Transcoder)
+    opened a file, without changing the who line."""
     day = day_of(ts)
     if procs_seen.get(pid) == (comm, day):
         return None
@@ -685,9 +685,9 @@ def proc_line(ts, pid, comm):
 
 def write_who(ts, kind, name, pid, op, path, now=None, comm=None):
     if kind == "gebruiker" and name in ("SMB-share", "NFS-share"):
-        path = share_root(path)              # één regel per share
+        path = share_root(path)              # one line per share
     now = time.time() if now is None else now
-    # op zit in de sleutel: een lees en een schrijf van hetzelfde pad tellen elk één keer
+    # op is part of the key: a read and a write of the same path each count once
     k = (path, kind, name, op)
     with write_lock:
         if now - recent.get(k, 0) < DEDUP_S:
@@ -701,13 +701,13 @@ def write_who(ts, kind, name, pid, op, path, now=None, comm=None):
     append_lines([proc, line] if proc else [line])
     stats["written"] += 1
     if proc:
-        broadcast(proc)                      # vóór de who-regel, zodat de live-feed de naam al kent
+        broadcast(proc)                      # before the who line, so the live feed already knows the name
     broadcast(line)
 
 
 def broadcast(line):
-    """Leg een who-regel op alle open SSE-verbindingen. Volle of dichte verbindingen
-    worden overgeslagen; de periodieke CSV-verversing blijft de bron van waarheid."""
+    """Put a who line on every open SSE connection. Full or closed connections are skipped;
+    the periodic CSV refresh stays the source of truth."""
     with streams_lock:
         for q in list(streams):
             try:
@@ -717,7 +717,7 @@ def broadcast(line):
 
 
 def resolve_shfs_later(ts, pid, op, path):
-    since = time.time()                      # het bestand is uiterlijk nu geopend
+    since = time.time()                      # the file was opened now at the latest
     def run():
         time.sleep(SHFS_DELAY)
         hit = via_user_share(path, since)
@@ -731,8 +731,8 @@ def resolve_shfs_later(ts, pid, op, path):
 
 
 def classify_early(line):
-    """Direct bij binnenkomst (in de leesthread) de bron van een nieuwe PID bepalen, zolang het
-    proces nog draait. De consumer kan achterlopen; classify() geeft dan de onthouden uitkomst."""
+    """Determine the source of a new PID right away (in the reading thread), while the process
+    is still running. The consumer can lag behind; classify() then returns the remembered result."""
     m = LINE.match(line)
     if m and m.group(3) not in seen and m.group(3) != MY_PID:
         classify(m.group(3), m.group(2))
@@ -744,7 +744,7 @@ def handle(line):
         return
     ts, comm, pid, types, path = m.groups()
     if pid == MY_PID or is_own_file(path):
-        return                               # eigen schrijfacties niet loggen
+        return                               # do not log our own writes
     if not path.endswith("/") and "D" not in types and os.path.isdir(path):
         path += "/"
     op = next((label for c, label in OPS if c in types), None)
@@ -754,8 +754,8 @@ def handle(line):
         resolve_shfs_later(ts, pid, op, path)
         return
     src = classify(pid, comm)
-    # Cache Dirs draait find zo kort dat fatrace soms alleen nog "unknown" ziet en de ouders weg zijn.
-    # find opent alleen mappen: een map-open door een al gestopt proces zonder bron telt dan niet mee.
+    # Cache Dirs runs find so briefly that fatrace sometimes only sees "unknown" and the parents are gone.
+    # find only opens folders: a folder open by an already stopped process without a source does not count then.
     if src and src[0] == "onbekend" and op == "geopend" and path.endswith("/") and ignore_active():
         return
     if src:
@@ -829,14 +829,14 @@ def watcher():
 
 
 # =====================================================================================
-# Docker: levenscyclus (ctr-regels) en mounts per container
+# Docker: lifecycle (ctr lines) and mounts per container
 # =====================================================================================
 CTR_ACTIONS = {"start": "start", "die": "die",
                "health_status: healthy": "healthy", "health_status: unhealthy": "unhealthy"}
 
 
 def ctr_line(ev, now=None):
-    """`ctr`-regel voor een Docker-event (start, die met exitcode, healthy, unhealthy), anders None."""
+    """`ctr` line for a Docker event (start, die with exit code, healthy, unhealthy), otherwise None."""
     if ev.get("Type") != "container":
         return None
     act = CTR_ACTIONS.get(ev.get("Action") or ev.get("status") or "")
@@ -853,7 +853,7 @@ def ctr_line(ev, now=None):
 
 
 def docker_events_once():
-    """Eén verbinding met de events-stroom; keert terug als Docker de verbinding sluit."""
+    """One connection to the event stream; returns when Docker closes the connection."""
     flt = urllib.parse.quote(json.dumps({"type": ["container"]}))
     c = docker_conn(None)
     c.request("GET", f"/events?filters={flt}")
@@ -889,7 +889,7 @@ def docker_events():
 
 
 def read_shares_ini():
-    """{share: {sleutel: waarde}} uit Unraid's shares.ini (tmpfs onder /emhttp, wekt niets)."""
+    """{share: {key: value}} from Unraid's shares.ini (tmpfs under /emhttp, wakes nothing)."""
     out, cur = {}, None
     try:
         for line in open(os.path.join(EMHTTP, "shares.ini")):
@@ -905,17 +905,17 @@ def read_shares_ini():
 
 
 def share_storage(sh):
-    """(opslag, pool) volgens de share-instellingen. Opslag: pool (alleen pool), array (alleen array),
-    pool>array (eerst pool, de mover zet het naar de array), array>pool (de mover haalt het naar de
-    pool) of unknown. De veldnamen verschillen per Unraid-versie; onbekend is unknown."""
+    """(storage, pool) according to the share settings. Storage: pool (pool only), array (array only),
+    pool>array (first the pool, the mover moves it to the array), array>pool (the mover moves it to
+    the pool) or unknown. The field names differ per Unraid version; unknown means unknown."""
     use = (sh.get("useCache") or sh.get("shareUseCache") or "").lower()
     pool = sh.get("cachePool") or sh.get("shareCachePool") or "cache"
     return {"only": "pool", "no": "array", "yes": "pool>array", "prefer": "array>pool"}.get(use, "unknown"), pool
 
 
 def locate(src, shares, hdd_bases):
-    """Waar een host-pad onder /mnt staat: een share (met opslag), een arrayschijf of een pool,
-    en of dat (mogelijk) een HDD is. Alleen instellingen en namen: geen stat op de schijf (regel 1)."""
+    """Where a host path under /mnt lives: a share (with its storage), an array disk or a pool,
+    and whether that is (possibly) an HDD. Only settings and names: no stat on the drive (rule 1)."""
     p = [x for x in src.split("/") if x]
     if len(p) < 2 or p[0] != "mnt":
         return None
@@ -935,9 +935,9 @@ def locate(src, shares, hdd_bases):
 
 
 def volume_devices():
-    """{volumenaam: map} voor lokale volumes die een map binden (driver_opts o=bind, device=/mnt/...).
-    Docker toont bij zo'n volume /var/lib/docker/volumes/<naam>/_data als bron; de echte map staat
-    in de opties van het volume."""
+    """{volume name: folder} for local volumes that bind a folder (driver_opts o=bind, device=/mnt/...).
+    For such a volume Docker shows /var/lib/docker/volumes/<name>/_data as source; the real folder is
+    in the volume's options."""
     out = {}
     for v in (docker_get("/volumes") or {}).get("Volumes") or []:
         opts = v.get("Options") or {}
@@ -950,8 +950,8 @@ _containers_cache = {"t": 0.0, "body": None}
 
 
 def containers_info(now=None):
-    """Inhoud van /data/containers.json: per container de mounts onder /mnt en waar die staan.
-    Hooguit eens per 30 s opnieuw opgevraagd; zonder Docker-socket een lege lijst."""
+    """Content of /data/containers.json: per container the mounts under /mnt and where they live.
+    Asked again at most every 30 s; without a Docker socket an empty list."""
     now = time.time() if now is None else now
     if _containers_cache["body"] is not None and now - _containers_cache["t"] < 30:
         return _containers_cache["body"]
@@ -967,7 +967,7 @@ def containers_info(now=None):
         for m in c.get("Mounts") or []:
             src = m.get("Source") or ""
             if m.get("Type") == "volume" and m.get("Name") in vols:
-                src = vols[m["Name"]]            # benoemd volume dat naar een map onder /mnt wijst
+                src = vols[m["Name"]]            # named volume that points to a folder under /mnt
             where = locate(src, shares, hdd_bases)
             if where:
                 entry = {"source": src, "target": m.get("Destination"), "rw": bool(m.get("RW", True)), "where": where}
@@ -983,7 +983,7 @@ def containers_info(now=None):
 
 
 # =====================================================================================
-# Onderhoud: oude regels opruimen, oude labels herstellen
+# Housekeeping: clean up old lines, restore old labels
 # =====================================================================================
 def epoch_of(line):
     first = line.split(",", 1)[0]
@@ -996,7 +996,7 @@ def epoch_of(line):
 
 
 def prune_days(now=None):
-    """Dagbestanden ouder dan RETENTION_DAYS verwijderen (hele dagen)."""
+    """Remove day files older than RETENTION_DAYS (whole days)."""
     cutoff = day_of((time.time() if now is None else now) - RETENTION_DAYS * 86400)
     old = [d for d in list_days() if d < cutoff]
     with write_lock:
@@ -1010,8 +1010,8 @@ def prune_days(now=None):
 
 
 def relabel_existing(now=None):
-    """who-regels met 'unraid'/'onbekend' van vandaag en gisteren alsnog aan een container
-    koppelen als het proces nog draait."""
+    """Link who lines with 'unraid'/'onbekend' from today and yesterday to a container after all
+    when the process is still running."""
     now = time.time() if now is None else now
     for day in {day_of(now - 86400), day_of(now)}:
         path = day_path(day)
@@ -1051,11 +1051,11 @@ def housekeeping():
 
 
 # =====================================================================================
-# Migratie van de losse bestanden (spin.csv, disks.csv, who.csv, activity.csv)
+# Migration of the separate files (spin.csv, disks.csv, who.csv, activity.csv)
 # =====================================================================================
 def _legacy_records():
-    """(epoch, regel) in het nieuwe formaat uit de oude bestanden, de statuswijzigingen
-    [(epoch, device, status)] en de schijfnamen."""
+    """(epoch, line) in the new format from the old files, the state changes
+    [(epoch, device, state)] and the drive names."""
     recs, spins, disks, skipped = [], [], [], 0
     for line in _read(DISKS):
         p = line.split(",")
@@ -1070,13 +1070,13 @@ def _legacy_records():
             spins.append((ts, dev, p[2]))
         else:
             skipped += 1
-    for line in _read(WHO):                  # epoch,soort,naam,pid,actie,pad
+    for line in _read(WHO):                  # epoch,kind,name,pid,action,path
         p = line.split(",", 5)
         if len(p) == 6 and p[0].isdigit() and p[5].startswith("/"):
             recs.append((int(p[0]), f"{p[0]},who,{line.split(',', 1)[1]}"))
         else:
             skipped += 1
-    for line in _read(ACTIVITY):             # epoch,disk,EV,pad
+    for line in _read(ACTIVITY):             # epoch,disk,EV,path
         p = line.split(",", 3)
         if len(p) == 4 and p[0].isdigit() and p[3].startswith("/"):
             recs.append((int(p[0]), f"{p[0]},activity,{line.split(',', 1)[1]}"))
@@ -1101,9 +1101,8 @@ def _sort_key(line):
 
 
 def migrate():
-    """Losse bestanden eenmalig omzetten naar dagbestanden. Veilig om te herhalen: bestaande
-    dagregels blijven staan en dubbele regels worden samengevoegd. De oude bestanden gaan naar
-    DATA_DIR/legacy, zodat er niets verloren gaat."""
+    """Convert the separate files to day files once. Safe to repeat: existing day lines stay
+    and duplicate lines are merged. The old files go to DATA_DIR/legacy, so nothing is lost."""
     sources = [f for f in (SPIN, DISKS, WHO, ACTIVITY) if os.path.exists(f)]
     if not sources:
         return
@@ -1117,7 +1116,7 @@ def migrate():
             t0 = day_start(day)
             head = [f"{t0},disk,{d},{n}" for d, n in disks]
             state = {}
-            for ts, dev, st in spins:        # status van elke schijf bij het begin van de dag
+            for ts, dev, st in spins:        # state of each drive at the start of the day
                 if ts >= t0:
                     break
                 state[dev] = st
@@ -1140,17 +1139,17 @@ def migrate():
 
 
 # =====================================================================================
-# Instellingen
+# Settings
 # =====================================================================================
-HIDE_MAX = 200          # patronen
-HIDE_LEN = 500          # tekens per patroon
+HIDE_MAX = 200          # patterns
+HIDE_LEN = 500          # characters per pattern
 SETTINGS_BODY_MAX = 64 * 1024
 settings_lock = threading.Lock()
 
 
 def read_settings():
-    """Opgeslagen instellingen; {} als er (nog) niets is of het bestand onleesbaar is.
-    Zonder sleutel 'hide' weet de browser dat hij zijn eigen lijst eenmalig mag overzetten."""
+    """Saved settings; {} when there is nothing (yet) or the file cannot be read.
+    Without a 'hide' key the browser knows it may move its own list over once."""
     try:
         with open(SETTINGS) as f:
             s = json.load(f)
@@ -1159,7 +1158,7 @@ def read_settings():
     if not isinstance(s, dict):
         return {}
     out = {}
-    for key, clean in SETTINGS_KEYS.items():       # een ongeldige sleutel valt weg, de rest blijft
+    for key, clean in SETTINGS_KEYS.items():       # an invalid key is dropped, the rest stays
         if key in s:
             try:
                 out[key] = clean(s[key])
@@ -1169,8 +1168,8 @@ def read_settings():
 
 
 def clean_hide(value):
-    """Lijst met patronen controleren: alleen tekst, zonder stuurtekens, binnen de limieten.
-    Lege regels vallen weg; ValueError bij iets wat geen geldige lijst is."""
+    """Check a list of patterns: text only, without control characters, within the limits.
+    Empty lines are dropped; ValueError for anything that is not a valid list."""
     if not isinstance(value, list) or len(value) > HIDE_MAX:
         raise ValueError(f"hide must be a list of at most {HIDE_MAX} patterns")
     out = []
@@ -1190,8 +1189,8 @@ LANE_NAME = re.compile(r"^[\w.-]{1,64}$")
 
 
 def clean_quiet(value):
-    """Stille uren: None (uit) of {from, to, drives}. from/to als HH:MM (mag over middernacht),
-    drives een lijst baansleutels (array, trunk, ...); leeg = alle schijven."""
+    """Quiet hours: None (off) or {from, to, drives}. from/to as HH:MM (may run over midnight),
+    drives a list of lane keys (array, trunk, ...); empty = all drives."""
     if value is None:
         return None
     if not isinstance(value, dict):
@@ -1205,7 +1204,7 @@ def clean_quiet(value):
 
 
 def clean_webhook(value):
-    """Webhook-URL voor meldingen: leeg (uit) of een http(s)-adres zonder spaties, hooguit 500 tekens."""
+    """Webhook URL for notifications: empty (off) or an http(s) address without spaces, at most 500 characters."""
     if value in (None, ""):
         return ""
     if not isinstance(value, str):
@@ -1222,13 +1221,13 @@ SETTINGS_KEYS = {"hide": clean_hide, "quiet": clean_quiet, "webhook": clean_webh
 
 
 def save_settings(new):
-    """Bekende sleutels uit `new` controleren en atomair wegschrijven (alleen in DATA_DIR).
-    Geeft de opgeslagen instellingen terug; ValueError bij ongeldige invoer."""
+    """Check the known keys of `new` and write them atomically (only in DATA_DIR).
+    Returns the saved settings; ValueError on invalid input."""
     if not isinstance(new, dict):
         raise ValueError("settings must be a JSON object")
     with settings_lock:
         s = read_settings()
-        cleaned = {k: clean(new[k]) for k, clean in SETTINGS_KEYS.items() if k in new}   # eerst alles controleren
+        cleaned = {k: clean(new[k]) for k, clean in SETTINGS_KEYS.items() if k in new}   # check everything first
         s.update(cleaned)
         tmp = SETTINGS + ".tmp"
         with open(tmp, "w") as f:
@@ -1241,9 +1240,9 @@ def save_settings(new):
 # Web
 # =====================================================================================
 class Handler(http.server.SimpleHTTPRequestHandler):
-    """/ → dashboard, /data/days.json → lijst van dagen, /data/days/YYYY-MM-DD.csv → dagbestand,
-    /data/spins.csv → alleen de spin-regels van alle dagen, /data/containers.json → mounts per
-    container, /data/settings.json → instellingen (GET lezen, POST opslaan)."""
+    """/ → dashboard, /data/days.json → list of days, /data/days/YYYY-MM-DD.csv → day file,
+    /data/spins.csv → only the spin lines of all days, /data/containers.json → mounts per
+    container, /data/settings.json → settings (GET reads, POST saves), /health → health."""
     def do_GET(self):
         clean = self.path.split("?", 1)[0]
         if clean == "/data/days.json":
@@ -1276,8 +1275,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if route not in ("/data/settings.json", "/data/notify-test"):
             self.send_error(404)
             return
-        # alleen JSON: een gewoon formulier van een andere site kan dan niets opslaan
-        # (een cross-site JSON-verzoek vraagt eerst toestemming, die we nooit geven)
+        # JSON only: a plain form on another site then cannot save anything
+        # (a cross-site JSON request asks for permission first, which we never give)
         if self.headers.get("Content-Type", "").split(";")[0].strip().lower() != "application/json":
             self.send_error(415)
             return
@@ -1295,7 +1294,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         try:
             saved = save_settings(json.loads(self.rfile.read(size) or b"null"))
-        except ValueError as e:      # ook onleesbare JSON
+        except ValueError as e:      # also unreadable JSON
             self.send_json({"error": str(e)}, 400)
             return
         except OSError as e:
@@ -1305,7 +1304,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_json(saved)
 
     def notify_test(self):
-        """Testmelding naar de opgeslagen webhook (niet naar een adres uit het verzoek)."""
+        """Test message to the saved webhook (never to an address from the request)."""
         url = read_settings().get("webhook")
         if not url:
             self.send_json({"ok": False, "error": "no webhook saved"}, 400)
@@ -1350,8 +1349,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def send_day(self, path):
-        """Dagbestand met gzip (als de browser dat accepteert) en een ETag, zodat een ongewijzigde
-        dag een 304 zonder inhoud oplevert."""
+        """Day file with gzip (when the browser accepts it) and an ETag, so an unchanged
+        day gives a 304 without content."""
         try:
             st = os.stat(path)
         except OSError:
@@ -1382,8 +1381,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def stream_events(self):
-        """Server-Sent Events: stuur elke nieuwe who-regel direct naar de browser,
-        zodat de live-feed stroomt in plaats van elke minuut te wachten op de CSV."""
+        """Server-Sent Events: send every new who line to the browser right away,
+        so the live feed streams instead of waiting a minute for the CSV."""
         q = queue.Queue(maxsize=500)
         with streams_lock:
             streams.append(q)
@@ -1391,7 +1390,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
-            self.send_header("X-Accel-Buffering", "no")   # geen proxy-buffering
+            self.send_header("X-Accel-Buffering", "no")   # no proxy buffering
             self.end_headers()
             self.wfile.write(b": ok\n\n")
             self.wfile.flush()
@@ -1400,7 +1399,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     line = q.get(timeout=30)
                     self.wfile.write(f"data: {line}\n\n".encode())
                 except queue.Empty:
-                    self.wfile.write(b": ping\n\n")        # houd de verbinding levend
+                    self.wfile.write(b": ping\n\n")        # keep the connection alive
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass
@@ -1425,10 +1424,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 
 def health_status(now=None):
-    """(gezond, details) voor /health. Ongezond alleen als de poller te lang niet slaagde of een
-    achtergrondthread gestopt is: dat lost een herstart op. Geen fatrace-processen of geen Docker-socket
-    staan wel in de details, maar maken hem niet ongezond; anders herstart een autoheal hem eindeloos
-    op een systeem zonder HDD's of zonder socket."""
+    """(healthy, details) for /health. Unhealthy only when the poller has not succeeded for too long
+    or a background thread stopped: a restart fixes that. No fatrace processes or no Docker socket
+    are in the details, but do not make it unhealthy; otherwise an auto-heal container restarts it
+    forever on a system without HDDs or without a socket."""
     now = time.time() if now is None else now
     since = health["poll"] or health["started"]
     stale = now - since > 3 * POLL_INTERVAL + 60
@@ -1436,7 +1435,7 @@ def health_status(now=None):
     docker = health["docker"]
     if docker is None and "docker_events" in alive:
         docker = "connecting"
-    # docker_events stopt bewust zonder socket; alleen de threads die altijd moeten lopen tellen mee
+    # docker_events stops on purpose without a socket; only the threads that must always run count
     ok = not stale and all(v for name, v in alive.items() if name != "docker_events")
     return ok, {
         "ok": ok,
@@ -1451,8 +1450,8 @@ def health_status(now=None):
 
 class Server(http.server.ThreadingHTTPServer):
     def handle_error(self, request, client_address):
-        """Een client die de verbinding verbreekt (healthcheck, browser die wegnavigeert) is geen fout:
-        geen traceback in de log. Andere fouten wel."""
+        """A client that hangs up (healthcheck, browser navigating away) is not an error:
+        no traceback in the log. Other errors are."""
         if isinstance(sys.exc_info()[1], (ConnectionResetError, BrokenPipeError)):
             return
         super().handle_error(request, client_address)
@@ -1466,7 +1465,7 @@ def web():
 
 # =====================================================================================
 def fatrace_version():
-    """fatrace heeft geen --version; de pakketversie uit dpkg, anders alleen of hij er is."""
+    """fatrace has no --version; the package version from dpkg, otherwise only whether it is there."""
     try:
         r = subprocess.run(["dpkg-query", "-W", "-f=${Version}", "fatrace"], capture_output=True, text=True)
         if r.returncode == 0 and r.stdout.strip():

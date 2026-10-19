@@ -16,7 +16,7 @@ def at(hh, mm=0):
     return T + hh * 3600 + mm * 60
 
 
-# ---------- instellingen ----------
+# ---------- settings ----------
 def test_quiet_and_webhook_are_validated_and_saved(sd):
     saved = sd.save_settings({"quiet": {"from": "23:00", "to": "07:00", "drives": ["trunk", "array", "trunk"]},
                               "webhook": " https://ntfy.example/spin "})
@@ -44,7 +44,7 @@ def test_an_invalid_key_in_the_file_does_not_drop_the_others(sd):
     assert sd.read_settings() == {"hide": ["a"], "webhook": "https://h/x"}
 
 
-# ---------- venster ----------
+# ---------- window ----------
 def test_in_quiet_handles_a_window_over_midnight(sd):
     q = {"from": "23:00", "to": "07:00", "drives": []}
     assert sd.in_quiet(at(23, 30), q) and sd.in_quiet(at(3), q) and sd.in_quiet(at(6, 59), q)
@@ -59,18 +59,18 @@ def test_lane_key_matches_the_frontend(sd):
         ["array", "array", "array", "array", "trunk", "trunk", "cache"]
 
 
-# ---------- meldingen ----------
+# ---------- notifications ----------
 def test_spin_up_in_quiet_hours_is_sent_once_per_lane(sd):
     sd.save_settings({"quiet": {"from": "23:00", "to": "07:00", "drives": ["trunk"]}, "webhook": "https://h/x"})
     got = []
     send = lambda url, p: got.append((url, p))
     sd.notify_spinups(at(2), [("sdd", "trunk"), ("sde", "trunk2"), ("sdc", "disk1")], send=send)
-    assert len(got) == 1                                   # disk1 (array) doet niet mee; trunk + trunk2 is één baan
+    assert len(got) == 1                                   # disk1 (array) does not take part; trunk + trunk2 is one lane
     url, p = got[0]
     assert url == "https://h/x" and p["lane"] == "trunk" and p["devices"] == ["sdd", "sde"]
     assert p["text"] == p["content"] == "trunk spun up at 02:00 during quiet hours (23:00-07:00)"
-    sd.notify_spinups(at(2, 5), [("sdd", "trunk")], send=send)       # binnen 10 min: niet nog eens
-    sd.notify_spinups(at(12), [("sdd", "trunk")], send=send)         # buiten de stille uren
+    sd.notify_spinups(at(2, 5), [("sdd", "trunk")], send=send)       # within 10 min: not again
+    sd.notify_spinups(at(12), [("sdd", "trunk")], send=send)         # outside the quiet hours
     assert len(got) == 1
     sd.notify_spinups(at(2, 11), [("sdd", "trunk")], send=send)
     assert len(got) == 2
@@ -97,12 +97,12 @@ def test_poll_once_passes_spin_ups_to_the_notifier(sd, monkeypatch):
     states["sdd"] = "active"
     sd.poll_once(last, now=at(2, 1))
     states["sdd"] = "standby"
-    sd.poll_once(last, now=at(2, 2))                       # naar standby: geen melding
+    sd.poll_once(last, now=at(2, 2))                       # to standby: no notification
     assert calls == [(at(2, 1), [("sdd", "trunk")])]
 
 
 class Hook:
-    """Een webhook-ontvanger op localhost die de JSON bewaart."""
+    """A webhook receiver on localhost that keeps the JSON."""
     def __init__(self, status=200):
         self.bodies = []
         outer = self
@@ -152,7 +152,7 @@ def test_notify_test_endpoint_uses_the_saved_webhook(sd):
         sd.save_settings({"webhook": hook.url})
         assert post("/data/notify-test") == (200, {"ok": True, "status": 200})
         assert hook.bodies[0]["event"] == "test" and "notifications work" in hook.bodies[0]["text"]
-        sd.save_settings({"webhook": "http://127.0.0.1:9/nothing"})          # niemand luistert
+        sd.save_settings({"webhook": "http://127.0.0.1:9/nothing"})          # nobody listening
         status, body = post("/data/notify-test")
         assert status == 502 and body["ok"] is False
     finally:

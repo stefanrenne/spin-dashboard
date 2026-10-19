@@ -6,7 +6,7 @@
 <title>Unraid spin activity</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- niet-blokkerend: het laadpaneel verschijnt meteen, het lettertype volgt zodra het binnen is -->
+<!-- non-blocking: the loading panel appears at once, the font follows as soon as it has arrived -->
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
 <style>
@@ -38,7 +38,7 @@ h2{font-size:1rem;margin:0 0 14px;font-weight:600}
 button,select{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 
-/* kop: titel met taalkeuze rechts, daaronder altijd op een eigen regel de periode- en bladerknoppen */
+/* header: title with the buttons on the right, below it always on a row of their own the period and navigation buttons */
 .top{margin-bottom:24px}
 .top p{margin:4px 0 0}
 .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
@@ -49,8 +49,8 @@ button,select{font:inherit;color:inherit}
 .icon-btn svg{width:20px;height:20px}
 .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px;min-height:38px}
 .seg button{white-space:nowrap}
-/* smal scherm: de periodeknoppen vullen samen de breedte (breder waar de tekst langer is); de tekst mag over twee regels,
-   zodat ze allemaal zichtbaar blijven (eerder scrolden ze met een verborgen scrollbalk en viel "Alles" weg) */
+/* narrow screen: the period buttons fill the width together (wider where the text is longer); the text may wrap to two lines,
+   so all of them stay visible (they used to scroll with a hidden scrollbar and "All" fell off) */
 @media (max-width:560px){
   #ranges{display:flex;width:100%}
   #ranges button{flex:1 1 auto;white-space:normal;padding:6px 4px;line-height:1.2}
@@ -65,7 +65,7 @@ button,select{font:inherit;color:inherit}
 .btn.primary{background:var(--spin);border-color:var(--spin);color:var(--on-accent)}
 .btn:disabled{opacity:.4;cursor:default}
 
-/* instellingen */
+/* settings */
 dialog.settings{width:min(540px, calc(100% - 32px));max-height:calc(100% - 32px);padding:22px;border:1px solid var(--line);
   border-radius:14px;background:var(--panel);color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.25)}
 dialog.settings::backdrop{background:rgba(10,15,20,.45)}
@@ -84,13 +84,13 @@ dialog.settings::backdrop{background:rgba(10,15,20,.45)}
 .set-cards li{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line)}
 .set-cards label{display:flex;align-items:center;gap:10px;flex:1;min-width:0;min-height:44px;cursor:pointer}
 .set-cards input{accent-color:var(--spin);width:18px;height:18px;margin:0;flex:none}
-/* slepen aan het handvat; de pijlknoppen blijven voor het toetsenbord */
+/* dragging by the handle; the arrow buttons stay for the keyboard */
 .grip{flex:none;display:flex;align-items:center;justify-content:center;width:20px;min-height:44px;margin-left:-4px;color:var(--muted);cursor:grab;touch-action:none}
 .grip svg{width:10px;height:16px}
 .set-cards li.dragging{background:var(--bg);border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18);position:relative;z-index:1}
 .set-cards.is-dragging,.set-cards.is-dragging *{cursor:grabbing;user-select:none}
 .set-move{display:flex;gap:6px;flex:none}
-/* maat en positie: een icoontje (gevuld = waar het kaartje staat) en een knop klein/groot */
+/* size and position: an icon (filled = where the card sits) and a small/large button */
 .set-cards .lay{flex:none;width:38px;height:34px;padding:0;display:flex;align-items:center;justify-content:center}
 .set-cards .lay svg{width:24px;height:14px}
 .set-cards .lay rect{fill:none;stroke:var(--muted);stroke-width:1.2}
@@ -98,7 +98,7 @@ dialog.settings::backdrop{background:rgba(10,15,20,.45)}
 .set-cards .lay:disabled{opacity:1;cursor:default}
 .set-cards li[data-pos="hidden"] .lay{opacity:.35}
 .set-cards .size{flex:none;min-width:4.2rem;height:34px;padding:0 8px;font-size:0.8125rem}
-/* twee kleine kaartjes naast elkaar: met een lijn aan elkaar verbonden */
+/* two small cards side by side: connected by a line */
 .set-cards li.pair-l,.set-cards li.pair-r{border-left:3px solid var(--spin);padding-left:6px}
 .set-cards li.pair-l{border-bottom-style:dashed;margin-top:8px;border-top-left-radius:4px}
 .set-cards li.pair-r{margin-bottom:8px;border-bottom-left-radius:4px}
@@ -107,7 +107,7 @@ dialog.settings::backdrop{background:rgba(10,15,20,.45)}
 /* status */
 .status{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:22px;margin-bottom:24px;max-width:640px}
 
-/* laden: dunne balk bovenaan, staptekst onder de titel en een skelet van het dashboard */
+/* loading: thin bar at the top, step text under the title and a skeleton of the dashboard */
 .topbar{position:fixed;top:0;left:0;right:0;height:3px;z-index:20;overflow:hidden;pointer-events:none}
 .topbar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--spin);
   box-shadow:0 0 10px var(--spin);border-radius:0 2px 2px 0;transition:width .3s ease-out}
@@ -161,15 +161,15 @@ dialog.settings::backdrop{background:rgba(10,15,20,.45)}
 .lg-idle{border-bottom:2px solid var(--spin)}
 .lg-up{width:2px!important;height:12px!important;background:var(--up)}
 
-/* dashboard: kaartjes in de volgorde uit de instellingen; halve kaartjes nemen op een breed scherm
-   de halve breedte, de tijdlijn en de gebeurtenissen altijd de hele */
+/* dashboard: cards in the order from the settings; small cards take half the width on a wide
+   screen, the timeline and the events always the whole width */
 #dash{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 #dash>.card{grid-column:1/-1;min-width:0}
 #dash>.card[data-half]{grid-column:auto}
 .lower{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}
 .filters{display:flex;gap:14px;align-items:center;font-size:0.8438rem;color:var(--muted)}
 .filters .csv{padding:4px 10px;font-size:0.8125rem;color:var(--ink)}
-/* het label is het klikvlak: minstens 28px hoog, zodat het vinkje ook op een telefoon raak is */
+/* the label is the click target: at least 28px high, so the checkbox is easy to hit on a phone too */
 .filters label{display:inline-flex;align-items:center;min-height:28px;cursor:pointer}
 .filters input{accent-color:var(--spin);margin:0 6px 0 0;width:16px;height:16px}
 .cause-row{display:grid;grid-template-columns:minmax(7rem,11rem) 1fr 2.2rem;gap:10px;align-items:center;padding:5px 0;font-size:0.8438rem}
@@ -177,7 +177,7 @@ dialog.settings::backdrop{background:rgba(10,15,20,.45)}
 .cause-name .cn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .info{position:relative;flex:none;width:1rem;height:1rem;padding:0;border:1px solid var(--muted);border-radius:50%;background:none;
   color:var(--muted);font:italic 600 0.6875rem/1 Georgia,serif;display:inline-flex;align-items:center;justify-content:center;text-align:center;cursor:help}
-/* het rondje blijft klein, het klikvlak is 28 bij 28 */
+/* the circle stays small, the click target is 28 by 28 */
 .info::after{content:"";position:absolute;inset:-6px}
 .info:hover,.info[aria-expanded="true"]{border-color:var(--ink);color:var(--ink)}
 .cause-bar{height:10px;background:var(--bg);border-radius:3px;overflow:hidden}
@@ -211,12 +211,12 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 .kind-dot{flex:none;display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:1px;background:var(--idle)}
 .kind-dot.container{background:var(--spin)} .kind-dot.gebruiker{background:var(--up)}
 .cause-bar i.gebruiker{background:var(--up)} .cause-bar i.unraid,.cause-bar i.onbekend{background:var(--idle)}
-/* lezen/schrijven-badge naast het soort gebeurtenis */
+/* read/write badge next to the kind of event */
 .rw{flex:none;display:inline-block;min-width:1.15rem;text-align:center;font-size:0.6875rem;font-weight:700;line-height:1.4;border-radius:4px;padding:0 3px;vertical-align:1px}
-/* badges: tekst op --up-text, --muted en --spin haalt in beide thema's minstens 4,5:1 */
+/* badges: text on --up-text, --muted and --spin reaches at least 4.5:1 in both themes */
 .rw.w{background:var(--up-text);color:var(--on-accent)}
 .rw.r{background:var(--muted);color:var(--on-accent)}
-/* actieve schijven: wie schrijft/leest er, ook zonder spin-up */
+/* active drives: who writes/reads, also without a spin-up */
 .actdisk{border-top:1px solid var(--line);padding:10px 0 4px}
 .actdisk:first-child{border-top:0;padding-top:0}
 .actdisk .head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
@@ -226,9 +226,9 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 .actlist{margin-top:6px}
 .actlist .cause-row{grid-template-columns:minmax(6rem,1fr) 1.2fr 2rem;padding:2px 0}
 .actlist h4{font-size:0.75rem;font-weight:600;color:var(--muted);margin:8px 0 2px;text-transform:uppercase;letter-spacing:.03em}
-/* live activiteitsfeed: eigen paneel onder Actieve schijven */
+/* live activity feed: its own panel */
 .feed{list-style:none;margin:0;padding:0;max-height:220px;overflow:auto;font-size:0.8125rem}
-/* punt, R/W, pad, bron, tijd: vijf kolommen op één regel */
+/* dot, R/W, path, source, time: five columns on one line */
 .feed li{display:grid;grid-template-columns:auto 1.4rem 1fr auto auto;gap:8px;align-items:center;padding:3px 0;border-bottom:1px solid var(--line)}
 .feed li:last-child{border-bottom:0}
 .feed li.fresh{animation:feedIn .6s ease-out}
@@ -248,7 +248,7 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 @media (prefers-reduced-motion:reduce){.feed li.fresh{animation:none}}
 @media (max-width:600px){.files li{grid-template-columns:4.6rem 1fr}.files .ev,.files .by{display:none}}
 [hidden]{display:none!important}
-/* alleen voor schermlezers */
+/* for screen readers only */
 .sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
 .hist{display:flex;align-items:flex-end;gap:3px;height:170px;padding-top:8px}
@@ -257,10 +257,10 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 .hist-labels{display:flex;gap:3px;margin-top:6px;font-size:0.7188rem;color:var(--muted)}
 .hist-labels span{flex:1;text-align:center}
 .hist-note{font-size:0.8125rem;margin:12px 0 0}
-/* spin-ups per dag: de dagen van de gekozen periode in de hoofdkleur, de rest gedempt */
+/* spin-ups per day: the days of the selected period in the main colour, the rest muted */
 .hist.days div{background:var(--idle)}
 .hist.days div.in{background:var(--spin)}
-/* kerncijfers: vier tegels, met de vergelijking met de vorige periode eronder */
+/* key figures: four tiles, with the comparison with the previous period below them */
 .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .kpi{border:1px solid var(--line);border-radius:8px;padding:10px 12px;min-width:0}
 .kpi .k-label{font-size:0.8125rem;color:var(--muted)}
@@ -274,13 +274,13 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 .src .cause-row{padding-bottom:0}
 .src-sub{font-size:0.75rem;margin-left:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #rest td.quick{color:var(--up-text);font-weight:600}
-/* bronnamen openen het profiel */
+/* source names open the profile */
 .srcbtn{margin:0;cursor:pointer;text-align:left;min-width:0}
 .srcbtn:not(.who){background:none;border:0;padding:0;font:inherit;color:inherit}
 .srcbtn.who{font-family:inherit}
 .srcbtn:hover{text-decoration:underline}
 .cause-row.wide{grid-template-columns:minmax(7rem,11rem) 1fr 5.5rem}
-/* ritme: naam, herkend schema en een strook van 24 uur */
+/* rhythm: name, recognised schedule and a 24-hour strip */
 .rhy{padding:5px 0;border-top:1px solid var(--line)}
 .rhy:first-child{border-top:0}
 .rhy-head{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:0.8438rem}
@@ -288,8 +288,8 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 .rhy-label.fixed{color:var(--ink);font-weight:600}
 .strip{display:grid;grid-template-columns:repeat(24,1fr);gap:2px;height:10px;margin-top:4px}
 .strip i{background:var(--spin);border-radius:2px}
-/* tijdlijn per bron */
-[data-card="srcLanes"] .row{grid-template-columns:9rem 1fr 11rem}   /* bronnamen zijn langer dan schijfnamen */
+/* timeline per source */
+[data-card="srcLanes"] .row{grid-template-columns:9rem 1fr 11rem}   /* source names are longer than drive names */
 .srow{padding:4px 0;border-top:1px solid var(--line)}
 .srow:first-child{border-top:0}
 .srow .sname{display:flex;align-items:center;gap:6px;font-weight:500;font-size:0.8438rem;overflow:hidden}
@@ -304,7 +304,7 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 .lg-cd{width:0!important;height:12px!important;border-left:2px dashed var(--up-text)}
 .ctr-note{display:block;font-size:0.75rem;color:var(--muted)}
 .stack-tag{flex:none;font-size:0.6875rem;font-weight:600;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px}
-/* instellingen › paden per container */
+/* pool/array location labels */
 .set-quiet{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:4px 0}
 .set-quiet[hidden]{display:none}
 .set-quiet > .set-note,.set-quiet > .set-field,.set-quiet > .set-lanes{flex-basis:100%}
@@ -324,7 +324,7 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 .life li{padding:2px 0}
 .life-ev{font-weight:600}
 .life-ev.die,.life-ev.unhealthy{color:var(--up-text)}
-/* profiel van een bron */
+/* profile of a source */
 dialog.profile{width:min(820px, calc(100% - 32px))}
 #profileTitle{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
 #profileBack{flex:none}
@@ -545,7 +545,7 @@ td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
     </section>
   </main>
 </div>
-<!-- instellingen: taal en welke kaartjes in welke volgorde -->
+<!-- settings: language and which cards in which order -->
 <dialog class="settings profile" id="profile" aria-labelledby="profileTitle">
   <div class="set-head">
     <button type="button" class="btn" id="profileBack" hidden data-i18n="back">Back</button>
@@ -604,7 +604,7 @@ td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
   <button type="button" class="btn" id="resetCards" data-i18n="resetCards">Restore default layout</button>
 </dialog>
 <div class="tip" id="tip" role="tooltip" hidden></div>
-<!-- schermlezers: uitleg bij de tijdlijnen, de info-teksten en wat de toetsenbordtooltip toont -->
+<!-- screen readers: explanation of the timelines, the info texts and what the keyboard tooltip shows -->
 <p id="traceHint" data-i18n="traceHint" hidden>Use the left and right arrow keys to step through the periods.</p>
 <div id="notes" hidden></div>
 <p class="sr" id="tipLive" aria-live="polite"></p>
@@ -617,13 +617,13 @@ const LIVE = 'live';
 const WRITES = /MODIFY|CREATE|DELETE|MOVED_TO|WRITE/;
 
 let data = null;   // {disks:{dev:[{t,st}]}, names:{dev:name}, act:[{t,disk,ev,path}], source, demo}
-let range = '1';   // standaard de laatste 24 uur
-let offset = 0;    // aantal periodes terug in de tijd (0 = tot nu)
+let range = '1';   // by default the last 24 hours
+let offset = 0;    // number of periods back in time (0 = up to now)
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-/* ---------- talen ---------- */
-// Nieuwe teksten in alle talen toevoegen; ontbreekt een sleutel, dan valt t() terug op Engels.
+/* ---------- languages ---------- */
+// Add new texts to every language; when a key is missing, t() falls back to English.
 const I18N = {
   en: {
     title:'Unraid spin activity', heading:'When do my drives spin', loading:'Loading data', language:'Language',
@@ -879,7 +879,7 @@ function t(key, vars){
   return vars ? s.replace(/\{(\w+)\}/g, (m, k) => k in vars ? vars[k] : m) : s;
 }
 const tn = (key, n) => t(key + (n === 1 ? '_one' : '_other'), {n});
-// browsertaal met regio (en-US) als die bij de gekozen taal hoort, anders een vaste regio
+// browser language with region (en-US) when it matches the chosen language, otherwise a fixed region
 function locale(){
   const nav = (navigator.languages || [navigator.language || '']).find(l => String(l).slice(0, 2).toLowerCase() === lang);
   return nav || LOCALES[lang];
@@ -890,7 +890,7 @@ function setFormatters(){
   fmtTime = new Intl.DateTimeFormat(loc,{hour:'2-digit',minute:'2-digit'});
   fmtSec  = new Intl.DateTimeFormat(loc,{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   fmtFull = new Intl.DateTimeFormat(loc,{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-  fmtWeekday = new Intl.DateTimeFormat(loc,{weekday:'short',day:'numeric'});   // as: maand staat in de kop
+  fmtWeekday = new Intl.DateTimeFormat(loc,{weekday:'short',day:'numeric'});   // axis: the month is in the header
   fmtDate = new Intl.DateTimeFormat(loc,{day:'numeric',month:'short'});
   fmtDay = new Intl.DateTimeFormat(loc,{weekday:'short',day:'numeric',month:'short'});
 }
@@ -907,7 +907,7 @@ function applyStatic(){
 const INFO_KEYS = ['rootNote', 'unknownNote', 'shfsNote', 'stoppedNote', 'whoUnknownNote'];
 setFormatters();
 
-/* ---------- parsing: dagbestanden, regels `epoch,soort,...` (zie docs/data-formats.md) ---------- */
+/* ---------- parsing: day files, lines `epoch,type,...` (see docs/data-formats.md) ---------- */
 function parseText(text){
   const ev = [], act = [], names = {}, who = [], procs = [], ctrs = [];
   for (const raw of text.split(/\r?\n/)){
@@ -918,16 +918,16 @@ function parseText(text){
       const [dev, name] = rest.split(',');
       if (dev && name) names[dev] = name;
     } else if (m[2] === 'state' || m[2] === 'spin'){
-      // state: status op dat moment (dagbegin, na herstart), geen wijziging en dus geen spin-up
+      // state: the state at that moment (start of day, after a restart), not a change and so not a spin-up
       const [dev, s] = rest.split(',');
       const st = /standby|sleep/.test(s) ? 'down' : /active|idle/.test(s) ? 'up' : null;
       if (dev && st) ev.push({t, dev, st, snap: m[2] === 'state'});
     } else if (m[2] === 'proc'){
-      // proc: welk proces (fatrace-naam) achter een PID zat, voor de who-regels van containers
+      // proc: which process (fatrace name) was behind a PID, for the who lines of containers
       const pm = rest.match(/^(\d+),(.+)$/);
       if (pm) procs.push({t, pid: +pm[1], comm: pm[2]});
     } else if (m[2] === 'ctr'){
-      // ctr: start, die (met exitcode), healthy of unhealthy van een container
+      // ctr: start, die (with exit code), healthy or unhealthy of a container
       const [name, e, code] = rest.split(',');
       if (name && e) ctrs.push({t, name, ev: e, code: code == null ? null : +code});
     } else if (m[2] === 'who'){
@@ -940,7 +940,7 @@ function parseText(text){
   }
   return {ev, act, names, who, procs, ctrs};
 }
-// Procesnaam bij een who-regel: de laatste proc-regel van die PID op of vóór dat moment
+// Process name of a who line: the last proc line of that PID at or before that moment
 function procIndex(procs){
   const m = new Map();
   for (const p of procs) (m.get(p.pid) || m.set(p.pid, []).get(p.pid)).push(p);
@@ -955,7 +955,7 @@ function procAt(idx, pid, t){
   return best ? best.comm : null;
 }
 function setComms(idx, who){ for (const w of who) if (w.kind === 'container') w.comm = procAt(idx, w.pid, w.t); }
-// Een die direct gevolgd door een start (binnen een minuut) is een herstart
+// A die directly followed by a start (within a minute) is a restart
 function ctrEvents(ctrs){
   const out = [];
   for (const c of ctrs.slice().sort((x, y) => x.t - y.t)){
@@ -967,8 +967,8 @@ function ctrEvents(ctrs){
 }
 const procSuffix = w => w && w.comm && w.comm.toLowerCase() !== w.name.toLowerCase() ? ' › ' + w.comm : '';
 
-// Per schijf alleen de momenten waarop de status verandert. Een `state` die afwijkt van de
-// vorige status houdt `snap`: de status klopt vanaf dan, maar wanneer hij veranderde weten we niet.
+// Per drive only the moments the state changes. A `state` that differs from the
+// previous state keeps `snap`: the state is right from then on, but we do not know when it changed.
 function toTransitions(ev){
   ev.sort((a,b) => a.t - b.t);
   const disks = {};
@@ -996,13 +996,13 @@ function devOrder(a, b){
   return rank(a) - rank(b) || na.localeCompare(nb, undefined, {numeric:true});
 }
 
-/* ---------- weergave: een pool of de array als één baan (instellingen) ---------- */
-// Alleen in de frontend: de dagbestanden blijven per schijf. Een groep krijgt een eigen sleutel
-// ('pool:trunk', 'array') met samengevoegde overgangen: hij draait zodra minstens één lid draait.
-// Poolleden herkennen we aan de naam uit disks.ini (trunk, trunk2), net als mount_base() in de backend.
+/* ---------- view: a pool or the array as one lane (settings) ---------- */
+// Frontend only: the day files stay per drive. A group gets its own key
+// ('pool:trunk', 'array') with merged transitions: it spins as soon as at least one member spins.
+// Pool members are recognised by their name from disks.ini (trunk, trunk2), like mount_base() in the backend.
 const GROUP_KEY = 'spindash.group', ARRAY = 'array';
-// Eén schakelaar voor pools en array samen: {merge: true|false}, standaard aan. In hetzelfde object
-// bewaard: compose (containers van één Compose-project als één bron), standaard uit.
+// One switch for pools and the array together: {merge: true|false}, on by default. Stored in the same
+// object: compose (the containers of one Compose project as one source), off by default.
 function loadGroupPrefs(){
   let s = null;
   try { s = JSON.parse(localStorage.getItem(GROUP_KEY)); } catch (e) {}
@@ -1012,14 +1012,14 @@ const saveGroupPrefs = () => { try { localStorage.setItem(GROUP_KEY, JSON.string
 const groupPrefs = loadGroupPrefs();
 let groupOpt = {pools: groupPrefs.merge, array: groupPrefs.merge};
 let composeOpt = groupPrefs.compose;
-let view = null;                         // {data, opt, disks:{sleutel:[overgangen]}, names, members:{sleutel:[devs]}}
+let view = null;                         // {data, opt, disks:{key:[transitions]}, names, members:{key:[devs]}}
 function groupKey(dev, names){
   const n = names[dev];
-  if (!n || /^sd[a-z]+$/.test(n)) return null;                     // geen naam uit disks.ini
+  if (!n || /^sd[a-z]+$/.test(n)) return null;                     // no name from disks.ini
   if (/^(parity\d*|disk\d+)$/.test(n)) return groupOpt.array ? ARRAY : null;
   return groupOpt.pools ? 'pool:' + n.replace(/\d+$/, '') : null;
 }
-// Overgangen van een groep: per lid de laatste status bijhouden, alleen wijzigingen van "een lid draait" bewaren
+// Transitions of a group: keep the last state per member, store only changes of "a member spins"
 function mergeTransitions(lists){
   const all = lists.flatMap((l, k) => l.map(x => ({...x, k}))).sort((p, q) => p.t - q.t);
   const st = new Array(lists.length).fill(null), out = [];
@@ -1030,7 +1030,7 @@ function mergeTransitions(lists){
   }
   return out;
 }
-// Banen maken van een bron ({disks, names}): de geladen data, of de spin-regels van alle dagen
+// Build lanes from a source ({disks, names}): the loaded data, or the spin lines of all days
 function makeView(src){
   const groups = {}, names = src.names || {};
   for (const dev of Object.keys(src.disks)){
@@ -1039,7 +1039,7 @@ function makeView(src){
   }
   const v = {data: src, opt: groupOpt, disks: {}, names: {}, members: {}};
   for (const [k, devs] of Object.entries(groups)){
-    if (devs.length < 2 || k === devs[0]){                           // los of maar één lid: gewoon de schijf
+    if (devs.length < 2 || k === devs[0]){                           // separate or only one member: just the drive
       for (const d of devs) v.disks[d] = src.disks[d];
       continue;
     }
@@ -1053,9 +1053,9 @@ function getView(){
   if (!(view && view.data === data && view.opt === groupOpt)) view = makeView(data);
   return view;
 }
-// Kerncijfers en de dagtrend rekenen op de spin-regels van álle dagen (data/spins.csv), zodat er
-// ook een vorige periode is zonder alle dagbestanden op te halen. Zonder die regels (demo, oudere
-// server): de geladen data.
+// Key figures and the daily trend use the spin lines of all days (data/spins.csv), so there is
+// also a previous period without fetching every day file. Without those lines (demo, older
+// server): the loaded data.
 let spins = null, spinsText = null, trendView = null;
 const trendSrc = () => spins && data.source === LIVE ? spins : data;
 function getTrendView(){
@@ -1074,7 +1074,7 @@ async function fetchSpins(){
 }
 const viewDevs = () => Object.keys(getView().disks).sort(devOrder);
 const membersOf = dev => (view && view.members[dev]) || [dev];
-// Hoeveel leden draaien er hooguit tegelijk tussen `from` en `to` (voor de tooltip van een groep)
+// How many members spin at most at the same time between `from` and `to` (for the tooltip of a group)
 function upMembers(dev, from, to){
   const ms = membersOf(dev);
   const upAt = at => ms.filter(d => { let st = null; for (const x of data.disks[d]){ if (x.t > at) break; st = x.st; } return st === 'up'; }).length;
@@ -1090,11 +1090,11 @@ function evLabel(ev){
   if (/MOVED_TO/.test(ev)) return t('moved');
   return t('read');
 }
-// Richting van een toegang: 'w' (schrijven), 'r' (lezen) of null (oude data zonder richting).
-// WRITE komt van 'geschreven'; MODIFY/CREATE/DELETE/MOVED_TO zijn ook writes. OPEN/ISDIR zijn lees.
-// Alleen een echt bestand (geen map) krijgt een badge; oude 'geopend' zonder richting ook niet.
+// Direction of an access: 'w' (write), 'r' (read) or null (old data without a direction).
+// WRITE comes from 'geschreven'; MODIFY/CREATE/DELETE/MOVED_TO are writes too. OPEN/ISDIR are reads.
+// Only a real file (not a folder) gets a badge; old 'geopend' without a direction does not either.
 function dirOf(e){
-  if (/SMB/.test(e.ev)) return null;                 // per share samengevoegd, richting niet zinvol
+  if (/SMB/.test(e.ev)) return null;                 // merged per share, a direction makes no sense
   if (/WRITE|MODIFY|CREATE|DELETE|MOVED_TO/.test(e.ev)) return 'w';
   if (/OPEN/.test(e.ev) && !isDir(e)) return 'r';
   return null;
@@ -1103,7 +1103,7 @@ const rwBadge = e => {
   const d = dirOf(e);
   return d ? `<span class="rw ${d}" title="${esc(t(d === 'w' ? 'rwW' : 'rwR'))}">${d.toUpperCase()}</span>` : '';
 };
-// Groepering: /mnt/pool/Media/Series/x.mkv -> Media/Series, /mnt/pool/ -> "Root van pool"
+// Grouping: /mnt/pool/Media/Series/x.mkv -> Media/Series, /mnt/pool/ -> "Root of pool"
 const partsOf = path => path.split('/').filter(Boolean);
 const isDir = e => /ISDIR/.test(e.ev);
 const isSmb = e => /SMB/.test(e.ev);
@@ -1118,23 +1118,23 @@ function tailOf(e){
   const p = partsOf(e.path);
   return p[p.length - 1] + (isDir(e) ? '/' : '');
 }
-// Beste verklaring: eerste echte bestand; anders de diepste map die gelezen werd
+// Best explanation: the first real file; otherwise the deepest folder that was read
 function pickCause(hits){
   const file = hits.find(e => !isDir(e) || isSmb(e));
   if (file) return file;
   return hits.reduce((best, e) => partsOf(e.path).length > partsOf(best.path).length ? e : best, hits[0]);
 }
 
-/* ---------- oorzaak zoeken rond een spin-up ---------- */
+/* ---------- finding the cause around a spin-up ---------- */
 const hasAct = () => data.act && data.act.length > 0;
 
-/* ---------- verborgen paden (instellingen) ---------- */
-// Patronen met * (alles, ook /) en ? (één teken), één per regel. Bewaard op de server
-// (data/settings.json, gelijk in elke browser); localStorage is de kopie voor ?demo of als de server
-// niet bereikbaar is. Een patroon met
-// een / vooraan geldt voor het volledige pad (/mnt/trunk/...) én de share-vorm (/mnt/user/...); zonder
-// / vooraan voor het pad binnen de share (appdata/plex/...). Verborgen activiteit telt nergens mee,
-// ook niet als oorzaak van een spin-up. Alleen de weergave: de dagbestanden blijven compleet.
+/* ---------- hidden paths (settings) ---------- */
+// Patterns with * (anything, including /) and ? (one character), one per line. Stored on the server
+// (data/settings.json, the same in every browser); localStorage is the copy for ?demo or when the server
+// cannot be reached. A pattern with
+// a leading / applies to the full path (/mnt/trunk/...) and the share form (/mnt/user/...); without
+// a leading / to the path inside the share (appdata/plex/...). Hidden activity counts nowhere,
+// not even as the cause of a spin-up. View only: the day files stay complete.
 const HIDE_KEY = 'spindash.hide';
 function loadHide(){
   let s = null;
@@ -1142,7 +1142,7 @@ function loadHide(){
   return Array.isArray(s) ? s.filter(x => typeof x === 'string' && x.trim()) : [];
 }
 let hidePatterns = loadHide(), hideRes = [];
-let hideOnServer = false;   // true zodra de server de instellingen heeft geleverd; dan ook daar opslaan
+let hideOnServer = false;   // true once the server has delivered the settings; then save there as well
 const globRe = g => new RegExp('^' + g.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$');
 function compileHide(){ hideRes = hidePatterns.map(g => ({abs: g.startsWith('/'), re: globRe(g.replace(/\/+$/, ''))})); }
 compileHide();
@@ -1151,24 +1151,24 @@ function isHidden(e){
   const p = partsOf(e.path), full = '/' + p.join('/'), rel = p.slice(2).join('/'), user = '/mnt/user/' + rel;
   return hideRes.some(h => h.abs ? h.re.test(full) || h.re.test(user) : h.re.test(rel));
 }
-// Welke activiteit hoort bij deze schijf? Poolleden (trunk2) horen bij de mount (trunk);
-// parity spint alleen op bij writes, dus daarvoor tellen writes op alle schijven.
+// Which activity belongs to this drive? Pool members (trunk2) belong to the mount (trunk);
+// parity only spins up on writes, so for parity the writes on every drive count.
 function matcherFor(dev){
   const ms = membersOf(dev);
   if (ms.length > 1){
-    // groep: de activiteit van de leden; parity voegt niets toe zolang er dataschijven in zitten
+    // group: the activity of the members; parity adds nothing as long as there are data drives in it
     const own = ms.map(matcherFor).filter(m => !m.parity), use = own.length ? own : ms.map(matcherFor);
     return {parity: !own.length, test: e => use.some(m => m.test(e))};
   }
   return devMatcher(dev);
 }
-// Eén schijf: zijn eigen mount (diskN) of die van zijn pool; parity spint alleen op bij writes
+// One drive: its own mount (diskN) or that of its pool; parity only spins up on writes
 function devMatcher(dev){
   const name = (data.names || {})[dev] || dev, parity = /^parity/.test(name);
   const base = /^disk\d+$/.test(name) ? name : name.replace(/\d+$/, '');
   return {parity, test: e => parity ? WRITES.test(e.ev) : (e.disk === name || e.disk === base)};
 }
-// Een vrije set schijven (detailpagina), met dezelfde regel als een groep: parity telt alleen zonder dataschijven
+// A free set of drives (detail page), with the same rule as a group: parity only counts without data drives
 function devsMatcher(devs){
   const ms = devs.map(devMatcher), own = ms.filter(m => !m.parity), use = own.length ? own : ms;
   return {parity: !own.length, test: e => use.some(m => m.test(e))};
@@ -1183,11 +1183,11 @@ function actBetween(from, to){
 function causeOf(dev, t){ return causeWith(matcherFor(dev), t); }
 function causeWith(m, t){
   if (!hasAct()) return null;
-  // de status wordt elke minuut gepeild, dus de trigger ligt tot ~3 min vóór de gelogde tijd
+  // the state is polled every minute, so the trigger lies up to ~3 min before the logged time
   const hits = actBetween(t - 180e3, t + 30e3).filter(m.test).map(collapseShare);
   return {first: hits.length ? pickCause(hits) : null, all: hits, parity: m.parity};
 }
-// Alle bestanden die tijdens een draai-sessie zijn aangesproken (van wekker tot standby)
+// All files touched during a spin session (from wake-up to standby)
 function sessionFiles(items){
   if (!hasAct()) return [];
   const ms = items.map(r => matcherFor(r.dev));
@@ -1216,12 +1216,12 @@ function causeHtml(c){
     (hasWho() ? ` ${whoBadge(w)}` : '');
 }
 
-/* ---------- wie: bron van een toegang (who-regels) ---------- */
+/* ---------- who: the source of an access (who lines) ---------- */
 const normPath = p => p.replace(/\/+$/, '');
-// sleutel voor de who-index: SMB/NFS-regels gelden voor de hele share
+// key for the who index: SMB/NFS lines apply to the whole share
 const whoKey = w => normPath(isShareUser(w) ? (shareRootOf(w.path) || w.path) : w.path);
-// Twee indexen, elke lijst gesorteerd op tijd zodat zoeken binair kan (anders kwadratisch bij veel data):
-// all: per pad (SMB/NFS onder de share-root), share: alleen SMB/NFS-regels per share-root.
+// Two indexes, every list sorted by time so a lookup can be binary (otherwise quadratic with lots of data):
+// all: per path (SMB/NFS under the share root), share: only SMB/NFS lines per share root.
 function indexWho(list){
   const all = new Map(), share = new Map();
   const add = (m, k, w) => { if (!m.has(k)) m.set(k, []); m.get(k).push(w); };
@@ -1232,7 +1232,7 @@ function indexWho(list){
   for (const m of [all, share]) for (const l of m.values()) l.sort((p, q) => p.t - q.t);
   return {all, share};
 }
-// nieuwe regel op zijn plek invoegen (de live stream levert ze vrijwel altijd op volgorde)
+// insert a new line in its place (the live stream delivers them almost always in order)
 function addWho(w){
   for (const [m, ok] of [[data.who.all, true], [data.who.share, isShareUser(w)]]){
     if (!ok) continue;
@@ -1241,14 +1241,14 @@ function addWho(w){
     m.set(k, l);
   }
 }
-// eerste index met .t >= t
+// first index with .t >= t
 function lowerBound(list, t){
   let lo = 0, hi = list.length;
   while (lo < hi){ const m = (lo + hi) >> 1; if (list[m].t < t) lo = m + 1; else hi = m; }
   return lo;
 }
 const hasWho = () => data.who && data.who.all.size > 0;
-// dichtstbijzijnde bron voor hetzelfde pad (inotify en fanotify zien dezelfde toegang)
+// nearest source for the same path (inotify and fanotify see the same access)
 function nearestWho(path, t, shareOnly = false){
   const list = (shareOnly ? data.who.share : data.who.all).get(normPath(path)); if (!list) return null;
   const i = lowerBound(list, t);
@@ -1257,7 +1257,7 @@ function nearestWho(path, t, shareOnly = false){
     if (!w) continue;
     const d = Math.abs(w.t - t); if (d < bd){ bd = d; best = w; }
   }
-  // who-regels worden per 10 minuten gededupliceerd, dus een eerdere regel binnen die tijd telt ook
+  // who lines are deduplicated per 10 minutes, so an earlier line within that time counts too
   return bd <= 660e3 ? best : null;
 }
 const isShareUser = w => w.kind === 'gebruiker' && /^(SMB|NFS)/.test(w.name);
@@ -1267,24 +1267,24 @@ function shareRootOf(path){
 }
 function whoFor(e){
   if (!e || !hasWho()) return null;
-  // SMB/NFS staat als één who-regel per share; losse bestanden vallen daaronder
+  // SMB/NFS is stored as one who line per share; individual files fall under it
   return nearestWho(e.path, e.t) || (shareRootOf(e.path) ? nearestWho(shareRootOf(e.path), e.t, true) : null);
 }
-// Toegang via een SMB/NFS-share: niet per bestand tonen, maar één regel per share
+// Access through an SMB/NFS share: do not show per file, but one line per share
 function collapseShare(e){
   if (isSmb(e) || !hasWho()) return e;
   const w = whoFor(e), root = shareRootOf(e.path);
   if (!w || !isShareUser(w) || !root) return e;
   return {t: e.t, disk: e.disk, ev: 'SMB+ISDIR', path: root};
 }
-// soort blijft zichtbaar via kleur en hover; "(al gestopt)" komt zo uit de who-regels
+// the kind stays visible through colour and hover; "(al gestopt)" comes from the who lines like this
 const whoLabel = w => w.name.replace(/ \(al gestopt\)$/, ' ' + t('stopped'));
 function whoBadge(w){
   if (!w) return `<span class="who none">${esc(t('kind_none'))}</span>`;
   const title = `${t('kind_' + w.kind)}, pid ${w.pid}`;
   return srcLink(w, esc(whoLabel(w)), `who ${w.kind}`, title) || `<span class="who ${esc(w.kind)}" title="${esc(title)}">${esc(whoLabel(w))}</span>`;
 }
-// Bronnaam als knop naar het profiel, als die bron in de gekozen periode voorkomt; anders null
+// Source name as a button to the profile, when that source occurs in the selected period; otherwise null
 function srcLink(w, inner, cls = '', title = ''){
   if (!w || !srcIdx) return null;
   const k = sourceKey(w, projectMap());
@@ -1293,11 +1293,11 @@ function srcLink(w, inner, cls = '', title = ''){
   return `<button type="button" class="srcbtn ${esc(cls)}" data-src="${esc(k)}" title="${esc(tip)}">${inner}</button>`;
 }
 
-/* ---------- activiteit: inotify (activity-regels, oud) + fanotify (who-regels) samen ---------- */
-// geschreven: een W-event of een open met schrijfintentie (OW). Oude regels kennen het woord nog niet.
+/* ---------- activity: inotify (activity lines, old) + fanotify (who lines) together ---------- */
+// written: a W event or an open with write intent (OW). Old lines do not know the word yet.
 const OP_EV = {geopend:'OPEN', aangemaakt:'CREATE', verwijderd:'DELETE', verplaatst:'MOVED_TO', geschreven:'WRITE'};
-// who-regels markeren mappen met een slash aan het eind; oudere regels hadden die nog niet,
-// daar geldt: laatste deel zonder punt, of de pool/share-root zelf, is een map.
+// who lines mark folders with a trailing slash; older lines did not yet,
+// for those: a last part without a dot, or the pool/share root itself, is a folder.
 function whoIsDir(path){
   if (path.endsWith('/')) return true;
   const p = path.split('/').filter(Boolean);
@@ -1309,7 +1309,7 @@ function mergeActivity(act, who){
   for (const e of act) seen.add(key(e.path, e.t));
   const extra = [];
   for (const w of who){
-    // dezelfde toegang staat vaak in beide bestanden; binnen 2 seconden is hetzelfde
+    // the same access is often in both files; within 2 seconds it is the same one
     const s = Math.round(w.t / 1000);
     let dup = false;
     for (let d = -2; d <= 2 && !dup; d++) dup = seen.has(normPath(w.path) + '|' + (s + d));
@@ -1325,25 +1325,25 @@ function mergeActivity(act, who){
   return act.concat(extra).sort((p,q) => p.t - q.t);
 }
 
-/* ---------- bereik ---------- */
+/* ---------- range ---------- */
 function extent(){
   let min = Infinity, max = -Infinity;
   if (data) for (const l of Object.values(data.disks)) for (const x of l){ min = Math.min(min,x.t); max = Math.max(max,x.t); }
-  // live: ook de dagen uit days.json, zodat je kunt terugbladeren naar dagen die nog niet geladen zijn
+  // live: also the days from days.json, so you can go back to days that are not loaded yet
   if (index && index.days.length && (!data || data.source === LIVE)){
     min = Math.min(min, dayStartMs(index.days[0]));
     max = Math.max(max, Math.min(Date.now(), dayStartMs(index.days[index.days.length-1]) + DAY - 1));
   }
   return [min, (Date.now() - max < 2*DAY) ? Date.now() : max];
 }
-// Venster van één periode (1, 7 of 30 dagen), `offset` periodes terug vanaf nu
+// Window of one period (1, 7 or 30 days), `offset` periods back from now
 function bounds(){
   const [min, end0] = extent();
   if (range === 'all') return [min, end0];
   const len = range === 'h' ? HOUR : (+range)*DAY, end = end0 - offset*len;
   return [Math.max(min, end - len), end];
 }
-// snap: het segment begint met een gemeten status, niet met een spin-up
+// snap: the segment starts with a measured state, not with a spin-up
 function segments(list, a, b){
   let i = 0, st, guessed = false, snap = false;
   while (i < list.length && list[i].t <= a) i++;
@@ -1359,13 +1359,13 @@ function segments(list, a, b){
   return segs;
 }
 
-/* ---------- spin-ups die samen horen (zelfde moment, bijv. een pool) ---------- */
+/* ---------- spin-ups that belong together (same moment, e.g. a pool) ---------- */
 function groupUps(ups){
   const sorted = ups.slice().sort((p,q) => p.t - q.t), out = [];
   for (const u of sorted){
     const g = out[out.length - 1];
     if (g && u.t - g.t <= 120e3){
-      // vroegste bekende oorzaak binnen de groep wint
+      // the earliest known cause within the group wins
       const a = g.cause && g.cause.first, b = u.cause && u.cause.first;
       if (b && (!a || b.t < a.t)) g.cause = u.cause;
     } else out.push({t: u.t, cause: u.cause});
@@ -1385,7 +1385,7 @@ function render(){
   if (range !== 'all'){
     $('prev').disabled = a <= extent()[0];
     $('next').disabled = offset === 0;
-    $('now').setAttribute('aria-pressed', offset === 0);   // altijd zichtbaar, gemarkeerd bij de huidige periode
+    $('now').setAttribute('aria-pressed', offset === 0);   // always visible, marked for the current period
     for (const [id, k] of [['prev', 'prev_'], ['next', 'next_']]){
       $(id).title = t(k + range); $(id).setAttribute('aria-label', t(k + range));
     }
@@ -1394,22 +1394,22 @@ function render(){
     (data.demo ? `<span class="demo-note">${esc(t('demo'))}</span>` : '') +
     (data.source === LIVE && offset === 0 ? `<span class="demo-note">${esc(t('live', {time: fmtTime.format(Date.now())}))}</span>` : '');
 
-  // as
+  // axis
   const ticks = []; let step, lab;
-  if (span <= 1.6*HOUR){ step = 10*60e3; lab = t => fmtTime.format(t); }   // laatste uur: per 10 min
+  if (span <= 1.6*HOUR){ step = 10*60e3; lab = t => fmtTime.format(t); }   // last hour: per 10 min
   else if (span <= 1.6*DAY){ step = 3*HOUR; lab = t => fmtTime.format(t); }
   else if (span <= 9*DAY){ step = DAY; lab = t => fmtWeekday.format(t); }
   else { step = 7*DAY; lab = t => fmtDate.format(t); }
   const d0 = new Date(a); d0.setMinutes(0,0,0);
   if (step >= DAY) d0.setHours(0);
   else if (step >= HOUR) d0.setHours(Math.ceil(d0.getHours()/3)*3);
-  else d0.setMinutes(Math.ceil(d0.getMinutes()/10)*10);   // 10-min-raster voor het uurvenster
+  else d0.setMinutes(Math.ceil(d0.getMinutes()/10)*10);   // 10-minute grid for the hour window
   if (step === 7*DAY) d0.setDate(d0.getDate() + ((8 - d0.getDay()) % 7));
   for (let t = d0.getTime(); t <= b; t += step){
     const d = new Date(t); if (step >= DAY){ d.setHours(0,0,0,0); t = d.getTime(); }
     if (t >= a) ticks.push(t);
   }
-  // smalle schermen: labels overslaan zodat ze niet overlappen (ongeveer 64px per label)
+  // narrow screens: skip labels so they do not overlap (about 64px per label)
   const inner = ticks.filter(t => (t-a)/span > .03 && (t-a)/span < .97);
   const room = Math.max(2, Math.floor(($('axis').clientWidth || 1000) / 64));
   const stride = Math.ceil(inner.length / room);
@@ -1417,9 +1417,9 @@ function render(){
   $('axis').innerHTML = edge.map(t => `<span style="left:${(t-a)/span*100}%">${lab(t)}</span>`).join('');
   const gridPath = ticks.map(t => `M${X(t)} 0V40`).join('');
 
-  // banen
+  // lanes
   const allUps = [];
-  // een live-update tekent de banen opnieuw: houd de toetsenbordfocus op dezelfde baan en hetzelfde segment
+  // a live update redraws the lanes: keep the keyboard focus on the same lane and the same segment
   const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('.trace');
   const keep = focused ? {dev: focused.dataset.dev, i: traceFocus && traceFocus.dev === focused.dataset.dev ? traceFocus.i : null} : null;
   $('laneList').innerHTML = devs.map(dev => {
@@ -1463,7 +1463,7 @@ function render(){
 
   $('legQuiet').hidden = !quietOpt;
 
-  // histogram: minstens de laatste 7 dagen tot het eind van het venster, anders zegt één dag weinig
+  // histogram: at least the last 7 days up to the end of the window, otherwise one day says little
   const tv = getTrendView(), hFrom = Math.max(Math.min(a, b - 7*DAY), srcStart(tv.data));
   const bins = new Array(24).fill(0);
   for (const l of Object.values(tv.disks)) if (l.length) for (const s of segments(l, hFrom, b)) if (isUp(s, hFrom)) bins[new Date(s.from).getHours()]++;
@@ -1476,11 +1476,11 @@ function render(){
     ? t('histSpan', {range: fmtDate.format(hFrom) === fmtDate.format(b) ? fmtDate.format(b) : `${fmtDate.format(hFrom)} – ${fmtDate.format(b)}`, from: hh(peak), to: hh(peak+1)})
     : t('noUps');
 
-  // oorzaken
+  // causes
   if (!hasAct()){
     $('causes').innerHTML = `<p class="muted">${esc(t('noActivity'))}</p>`;
   } else {
-    // Ranglijsten tellen gebeurtenissen, niet schijven: poolleden die samen opspinnen tellen één keer
+    // Rankings count events, not drives: pool members that spin up together count once
     const wakeups = groupUps(allUps);
     const counts = {}, examples = {}, roots = new Set();
     wakeups.forEach(u => {
@@ -1511,9 +1511,9 @@ function render(){
   renderRest(a, b);
   renderFeed();
 
-  // filter + tabel
+  // filter + table
   const sel = $('devFilter'), cur = sel.value || '';
-  // "alle"-optie zegt wat er in de lijst staat: losse schijven, alleen pools, of een mix (de array telt als schijven)
+  // the "all" option says what is in the list: separate drives, only pools, or a mix (the array counts as drives)
   const pools = devs.filter(d => d.startsWith('pool:') && membersOf(d).length > 1).length;
   const allKey = !pools ? 'allDisks' : pools === devs.length ? 'allPools' : 'allDisksPools';
   sel.innerHTML = `<option value="">${esc(t(allKey))}</option>` +
@@ -1526,15 +1526,15 @@ function render(){
   }
 }
 
-/* ---------- kerncijfers: hoe staat het ervoor, en t.o.v. de vorige periode ---------- */
-// Per baan zoals op de tijdlijn (een pool telt als één), behalve de draaiuren. "In rust" = geen enkele baan draait.
-const isUp = (s, a) => s.st === 'up' && !s.guessed && !s.snap && s.from > a;   // zelfde regel als de banen
+/* ---------- key figures: how are things, and compared with the previous period ---------- */
+// Per lane as on the timeline (a pool counts as one), except the spinning hours. "Asleep" = no lane spins.
+const isUp = (s, a) => s.st === 'up' && !s.guessed && !s.snap && s.from > a;   // same rule as the lanes
 function srcStart(src){
   let m = Infinity;
   for (const l of Object.values(src.disks)) if (l.length) m = Math.min(m, l[0].t);
   return m;
 }
-// Spin-ups per baan (een pool die opspint telt één keer), draaiuren per losse schijf (slijtage, stroom)
+// Spin-ups per lane (a pool that spins up counts once), spinning hours per physical drive (wear, power)
 function periodStats(v, a, b){
   const lists = Object.values(v.disks).filter(l => l.length);
   let ups = 0, activeMs = 0, restMs = 0, longest = 0;
@@ -1549,7 +1549,7 @@ function periodStats(v, a, b){
 }
 function cmpHtml(k, prevLabel){
   const diff = k.now - k.was;
-  // procenten vergelijken in procentpunten, de rest relatief (of absoluut als het vorige 0 was)
+  // compare percentages in percentage points, the rest relatively (or absolutely when the previous one was 0)
   const rel = k.pp ? Math.round(Math.abs(diff) * 100) : k.was > 0 ? Math.round(Math.abs(diff) / k.was * 100) : null;
   const same = rel === 0 || (rel === null && diff === 0);
   const change = k.pp ? `${rel} ${t('pp')}` : rel !== null ? `${rel}%` : k.fmt(Math.abs(diff));
@@ -1562,7 +1562,7 @@ function cmpHtml(k, prevLabel){
 function renderKpis(a, b){
   const v = getTrendView(), len = b - a;
   const cur = periodStats(v, a, b);
-  // vergelijken kan alleen als de hele vorige periode in de data valt
+  // comparing is only possible when the whole previous period is in the data
   const canCmp = range !== 'all' && a - len >= srcStart(v.data) - 60e3;
   const prev = canCmp ? periodStats(v, a - len, a) : null;
   const pct = x => Math.round(x * 100) + '%';
@@ -1580,7 +1580,7 @@ function renderKpis(a, b){
   $('kpiNote').textContent = range === 'all' || canCmp ? '' : t('kpiNoPrev');
 }
 
-/* ---------- spin-ups per dag: de trend over alle dagen, de gekozen periode gemarkeerd ---------- */
+/* ---------- spin-ups per day: the trend over all days, the selected period highlighted ---------- */
 const DAYS_MAX = 90;
 const midnight = ms => { const d = new Date(ms); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const nextDay = ms => { const d = new Date(ms); d.setDate(d.getDate() + 1); return d.getTime(); };
@@ -1606,10 +1606,10 @@ function renderDays(a, b){
     avg: (total / days.length).toLocaleString(locale(), {minimumFractionDigits: 1, maximumFractionDigits: 1})});
 }
 
-/* ---------- per bron: wie wekt de schijven en wie houdt ze bezig ---------- */
-// Per container/proces: hoeveel spin-ups het veroorzaakte (eerste bestand vóór de spin-up), hoeveel
-// het las en schreef in het venster, en op welke banen. Gesorteerd op spin-ups, dan op activiteit.
-// Compose-project per containernaam (uit data/containers.json), alleen als de instelling aan staat
+/* ---------- per source: who wakes the drives and who keeps them busy ---------- */
+// Per container/process: how many spin-ups it caused (first file before the spin-up), how much
+// it read and wrote in the window, and on which lanes. Sorted by spin-ups, then by activity.
+// Compose project per container name (from data/containers.json), only when the setting is on
 function projectMap(){
   if (!composeOpt || !containers || !containers.containers) return {};
   return Object.fromEntries(containers.containers.filter(c => c.project).map(c => [c.name, c.project]));
@@ -1618,13 +1618,13 @@ function sourceKey(w, pm = {}){
   if (w && w.kind === 'container' && pm[w.name]) return `container|${pm[w.name]}`;
   return w ? `${w.kind}|${whoLabel(w)}` : `none|${t('unknown')}`;
 }
-// hoort een ctr-gebeurtenis bij deze bron (een container, of een container van dit project)?
+// does a ctr event belong to this source (a container, or a container of this project)?
 const ctrOf = (s, pm) => c => s.kind === 'container' && (s.project ? pm[c.name] === s.label : c.name === s.label);
 function sourceNote(w){
   return !w ? 'whoUnknownNote' : /^shfs\b/.test(w.name) ? 'shfsNote' : / \(al gestopt\)$/.test(w.name) ? 'stoppedNote' : null;
 }
-// Eén index per bron voor het venster, gedeeld door Per bron, Houdt wakker, Ritme, de tijdlijn per
-// bron en het profiel: spin-ups, lezen/schrijven per baan, alle toegangen en de wakker-gehouden tijd.
+// One index per source for the window, shared by Activity per source, Kept awake, Rhythm, the timeline per
+// source and the profile: spin-ups, reads/writes per lane, every access and the kept-awake time.
 let srcIdx = null;
 function sourceIndex(a, b, devs, wakeups){
   const per = new Map(), pm = projectMap();
@@ -1645,14 +1645,14 @@ function sourceIndex(a, b, devs, wakeups){
   for (let i = lowerBound(data.act, a); i < data.act.length && data.act[i].t <= b; i++){
     const e = data.act[i], s = get(whoFor(e));
     const dir = (dirOf(e) || (WRITES.test(e.ev) ? 'w' : 'r')) === 'w' ? 'w' : 'r';
-    const lane = (ms.find(([, mm]) => mm.test(e)) || [])[0] || null;   // parity telt bij de echte schijf
+    const lane = (ms.find(([, mm]) => mm.test(e)) || [])[0] || null;   // parity counts for the real drive
     s[dir]++;
     if (lane) s.lanes[lane] = (s.lanes[lane] || 0) + 1;
     s.ev.push({t: e.t, dir, lane, e});
   }
-  // Wakker houden: elke toegang terwijl een baan draait schuift de spin-down op. Per draaiperiode
-  // krijgt elke toegang de tijd sinds de vorige toegang (of sinds de spin-up); opgeteld per bron is dat
-  // hoe lang die bron de schijf extra liet draaien. De laatste toegang vóór een standby telt apart.
+  // Keeping awake: every access while a lane spins postpones the spin-down. Within each spinning period
+  // every access gets the time since the previous access (or since the spin-up); added up per source that is
+  // how long that source kept the drive spinning longer. The last access before a standby counts separately.
   const byLane = {};
   for (const s of per.values()) for (const x of s.ev) if (x.lane) (byLane[x.lane] ||= []).push([x.t, s]);
   for (const [lane, list] of Object.entries(byLane)){
@@ -1673,9 +1673,9 @@ function sourceIndex(a, b, devs, wakeups){
   }
   return [...per.values()];
 }
-// Naam van een bron: soort als stip en als tekst voor schermlezers, de naam opent het profiel
+// Name of a source: the kind as a dot and as text for screen readers, the name opens the profile
 const srcName = s => `<span class="kind-dot ${esc(s.kind)}" title="${esc(t('kind_' + s.kind))}"></span><span class="sr">${esc(t('kind_' + s.kind))}: </span><button type="button" class="srcbtn cn" data-src="${esc(s.k)}" title="${esc(s.project ? t('stackOf', {name: s.label, list: [...s.members].sort().join(', ')}) : t('profOpen', {name: s.label}))}">${esc(s.label)}</button>${s.project ? ` <span class="stack-tag">${esc(t('stackTag'))}</span>` : ''}${infoBtn(s.note)}`;
-// de banen van een bron als knoppen naar hun detailpagina (hooguit drie, daarna "+n")
+// the lanes of a source as buttons to their detail page (at most three, then "+n")
 const laneList = s => {
   const ls = Object.keys(s.lanes).sort(devOrder).map(d => drvButton(d, nameOf(d)));
   return ls.length > 3 ? ls.slice(0, 3).join(', ') + ' +' + (ls.length - 3) : ls.join(', ');
@@ -1697,7 +1697,7 @@ function renderSources(list){
   }).join('');
 }
 
-/* ---------- wat houdt ze wakker: wie schuift de spin-down op ---------- */
+/* ---------- what keeps them awake: who postpones the spin-down ---------- */
 function renderAwake(list){
   const el = $('awake');
   if (!hasAct()){ el.innerHTML = `<p class="muted">${esc(t('noActivity'))}</p>`; return; }
@@ -1712,11 +1712,11 @@ function renderAwake(list){
       ${r.last ? `<div class="src-sub muted">${esc(t('awakeLine', {n: r.last}))}</div>` : ''}</div>`).join('');
 }
 
-/* ---------- ritme: vaste intervallen of tijden per bron ---------- */
-// Toegangen binnen 2 minuten vormen één moment. Liggen de meeste tussenpozen dicht bij de mediaan,
-// dan is dat een vast interval; anders kijken we of de eerste activiteit van de dag steeds rond
-// hetzelfde tijdstip valt. Let op: hetzelfde bestand wordt hooguit eens per DEDUP_SECONDS (standaard
-// 10 min) gelogd, dus wat vaker gebeurt verschijnt als "elke 10 min".
+/* ---------- rhythm: fixed intervals or times per source ---------- */
+// Accesses within 2 minutes form one moment. When most gaps are close to the median,
+// that is a fixed interval; otherwise we check whether the first activity of the day is always around
+// the same time. Note: the same file is logged at most once per DEDUP_SECONDS (by default
+// 10 min), so anything more frequent shows as "every 10 min".
 const hhmm = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(Math.round(m % 60)).padStart(2, '0');
 function rhythmOf(times){
   const ts = times.slice().sort((p, q) => p - q), bursts = [];
@@ -1751,7 +1751,7 @@ function renderRhythm(list){
   }).join('');
 }
 
-/* ---------- tijdlijn per bron: elke toegang als streepje, onder de band "een schijf draait" ---------- */
+/* ---------- timeline per source: every access as a tick, under the band "a drive spins" ---------- */
 function renderSrcLanes(list, a, b, X, gridPath){
   const el = $('srcLaneList');
   $('srcAxis').innerHTML = $('axis').innerHTML;
@@ -1777,10 +1777,10 @@ function renderSrcLanes(list, a, b, X, gridPath){
   }).join('');
 }
 
-/* ---------- export: de gekozen periode als CSV ---------- */
-// Eén tabel met alles van het venster: spin-ups en standby per schijf, bestandstoegang met bron en
-// proces, en container-start/stop. Volgt het dashboard: verborgen paden blijven weg. Kolommen en waarden
-// zijn vast Engels, zodat een spreadsheet of script ze in elke taal hetzelfde leest.
+/* ---------- export: the selected period as CSV ---------- */
+// One table with everything in the window: spin-ups and standby per drive, file access with source and
+// process, and container start/stop. Follows the dashboard: hidden paths stay out. Columns and values
+// are fixed English, so a spreadsheet or script reads them the same in every language.
 const csvCell = v => v == null ? '' : /[",\n\r]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
 const isoLocal = ms => { const d = new Date(ms), p = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
@@ -1808,7 +1808,7 @@ function periodCsv(a, b){
   }
   for (const c of data.ctr || []){
     if (c.t < a || c.t > b) continue;
-    // een herstart is in de weergave één regel; in de export weer de twee echte gebeurtenissen
+    // a restart is one line in the view; in the export the two real events again
     const ev = c.ev === 'restart' ? 'die' : c.ev;
     rows.push([c.t, 'container ' + ev, '', '', 'container', c.name, '', '', ev === 'die' && c.code != null ? `exit code ${c.code}` : '']);
     if (c.t2) rows.push([c.t2, 'container start', '', '', 'container', c.name, '', '', '']);
@@ -1820,7 +1820,7 @@ function periodCsv(a, b){
 function exportCsv(){
   if (!data) return;
   const [a, b] = bounds(), stamp = ms => isoLocal(ms).slice(0, 16).replace(/[: ]/g, '').replace(/^(\d{4})-(\d\d)-(\d\d)/, '$1$2$3-');
-  const blob = new Blob(['\ufeff' + periodCsv(a, b)], {type: 'text/csv;charset=utf-8'});   // BOM: Excel leest het dan als UTF-8
+  const blob = new Blob(['\ufeff' + periodCsv(a, b)], {type: 'text/csv;charset=utf-8'});   // BOM: Excel then reads it as UTF-8
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = `spin-dashboard_${stamp(a)}_${stamp(b)}.csv`;
@@ -1829,8 +1829,8 @@ function exportCsv(){
 }
 $('exportCsv').onclick = exportCsv;
 
-/* ---------- paden per container (instellingen) ---------- */
-// Uit data/containers.json (mounts via de Docker-API, opslag uit shares.ini); getoond in de instellingen.
+/* ---------- paths per container (profile and overview) ---------- */
+// From data/containers.json (mounts via the Docker API, storage from shares.ini).
 let containers = null, containersText = null;
 async function fetchContainers(){
   const txt = await fetch('data/containers.json', {cache:'no-cache'}).then(r => r.ok ? r.text() : null).catch(() => null);
@@ -1838,7 +1838,7 @@ async function fetchContainers(){
   if (txt === containersText) return false;
   try { containers = JSON.parse(txt); containersText = txt; return true; } catch (e) { return false; }
 }
-// voorbeeld: een paar typische Unraid-containers
+// sample: a few typical Unraid containers
 function demoContainers(){
   const sh = (share, storage, hdd, pool = 'cache') => ({kind: 'share', share, storage, pool, hdd});
   const m = (source, target, rw, where) => ({source, target, rw, where});
@@ -1855,8 +1855,8 @@ function demoContainers(){
     {name: 'nginx', state: 'exited', mounts: [m('/mnt/cache/appdata/nginx', '/config', true, {kind: 'pool', name: 'cache', hdd: false})]},
   ]};
 }
-// Elke pool en de array een eigen kleur, vast per naam (de array eerst, daarna op naam), over alle
-// containers: zo heeft een pool in de instellingen en in een profiel dezelfde kleur
+// Every pool and the array get their own colour, fixed per name (the array first, then by name), across all
+// containers: so a pool has the same colour in the overview and in a profile
 function locColors(){
   const names = [...new Set(((containers && containers.containers) || []).flatMap(c => c.mounts.flatMap(m => locsOf(m.where))).filter(Boolean))]
     .sort((p, q) => (q === 'array') - (p === 'array') || p.localeCompare(q));
@@ -1865,32 +1865,32 @@ function locColors(){
 function locTag(n, w, color){
   const title = (n ? (n === 'array' ? t('arrayName') : n) : t(n === null ? 'mountsAllShares' : 'mountsUnknown')) + (w.hdd === true ? ' · ' + t('mountsHdd') : '');
   const label = esc(n ? (n === 'array' ? t('arrayName') : n) : n === null ? t('mountsAllShares') : '?');
-  // een pool of de array opent zijn detailpagina; "alle shares" en onbekend niet
+  // a pool or the array opens its detail page; "all shares" and unknown do not
   return n ? `<button type="button" class="loc drvbtn" data-drive="g:${esc(n)}" style="--c:${color[n]}" title="${esc(title)}">${label}</button>`
            : `<span class="loc unknown" title="${esc(title)}">${label}</span>`;
 }
-// De gemapte mappen van een container, één regel per map (dezelfde map kan meer dan eens gemapt zijn)
+// The mapped folders of a container, one line per folder (the same folder can be mapped more than once)
 function mountLines(c, color = locColors()){
   const seen = new Set(), mounts = c.mounts.filter(m => !seen.has(m.source) && seen.add(m.source));
   return mounts.map(m => `<div class="map">${esc(m.source)} ${locsOf(m.where).map(n => locTag(n, m.where, color)).join('<span class="muted"> → </span>')}</div>`).join('');
 }
-// Waar een map volgens de share-instellingen staat: poolnamen en/of 'array'. Een share met de mover
-// heeft er twee (waar het eerst komt, waar het heen gaat). null = alle shares, undefined = onbekend.
+// Where a folder lives according to the share settings: pool names and/or 'array'. A share with the mover
+// has two (where it lands first, where it goes). null = all shares, undefined = unknown.
 function locsOf(w){
   if (w.kind === 'disk') return ['array'];
   if (w.kind === 'pool') return [w.name];
   if (w.kind === 'user') return [null];
   return {pool: [w.pool], array: ['array'], 'pool>array': [w.pool, 'array'], 'array>pool': ['array', w.pool]}[w.storage] || [undefined];
 }
-// donker genoeg voor witte tekst (4,5:1) in het lichte en het donkere thema
+// dark enough for white text (4.5:1) in the light and the dark theme
 const LOC_COLORS = ['#2458C6', '#1F7A4D', '#8A5F00', '#9B2C8F', '#B23A3A', '#136F80', '#5B5FC7', '#6B5B45'];
 
-/* ---------- profiel van één bron (dialoog) ---------- */
+/* ---------- profile of one source (dialog) ---------- */
 let profileFrom = null;
 function profileHtml(s){
   const {a, b} = srcIdx;
   const tiles = [['profUps', String(s.ups)], ['profKeep', dur(s.keep)], ['profReads', String(s.r)], ['profWrites', String(s.w)]];
-  // heatmap dag × uur over het venster (hooguit de laatste 31 dagen)
+  // heatmap day × hour over the window (at most the last 31 days)
   let days = [];
   for (let d = midnight(a); d <= b; d = nextDay(d)) days.push(d);
   days = days.slice(-31);
@@ -1920,7 +1920,7 @@ function profileHtml(s){
       ${s.kind === 'container' ? `<div class="actlist"><h4>${esc(t('profLife'))}</h4>${lifeHtml(s, a, b)}</div>` : ''}
     </div>`;
 }
-// Paden van de container in het profiel; bij een Compose-project die van elk lid, met de naam erboven
+// Paths of the container in the profile; for a Compose project those of each member, with its name above
 function profilePaths(s){
   if (s.kind !== 'container' || !containers || !containers.containers) return '';
   const pm = projectMap();
@@ -1936,8 +1936,8 @@ function lifeHtml(s, a, b){
   return '<ul class="life">' + list.slice(-8).reverse().map(c =>
     `<li><span class="life-ev ${esc(c.ev)}">${esc(t('ctr_' + c.ev))}</span>${s.project ? ` ${esc(c.name)}` : ''} <span class="muted">${esc(fmtFull.format(c.t))}${c.ev === 'die' && c.code ? ' · ' + esc(t('exitCode', {code: c.code})) : ''}</span></li>`).join('') + '</ul>';
 }
-// Eén dialoog voor het overzicht, een bron en een schijf. Doorklikken binnen de dialoog legt een
-// nieuwe weergave bovenop; "Terug" haalt hem eraf. Van buiten de dialoog begint een nieuwe stapel.
+// One dialog for the overview, a source and a drive. Clicking through inside the dialog puts a
+// new view on top; "Back" takes it off. From outside the dialog a new stack starts.
 let viewStack = [];
 const dialogOpen = () => $('profile').open || $('profile').hasAttribute('open');
 function showDetail(view, from){
@@ -1959,8 +1959,8 @@ function renderDetail(){
 }
 $('profileBack').onclick = () => { viewStack.pop(); renderDetail(); ($('profileBack').hidden ? $('profileDone') : $('profileBack')).focus(); };
 const openProfile = (k, from) => showDetail({type: 'source', k}, from);
-// Een container zonder activiteit in de periode krijgt toch een profiel (met nullen), zodat het
-// overzicht naar elke container kan doorklikken
+// A container without activity in the period still gets a profile (with zeros), so the
+// overview can click through to every container
 function sourceFor(k){
   const s = srcIdx.list.find(x => x.k === k);
   if (s || !k.startsWith('container|')) return s;
@@ -1986,8 +1986,8 @@ document.addEventListener('click', e => {
   else openProfile(b.dataset.src, b);
 });
 $('openInfo').onclick = () => showDetail({type: 'overview'}, $('openInfo'));
-// Periode wisselen vanuit een detailpagina: dezelfde periode als het dashboard (zo worden de juiste
-// dagen geladen), daarna de open pagina opnieuw berekenen
+// Switch the period from a detail page: the same period as the dashboard (so the right
+// days are loaded), then recalculate the open page
 $('detailRanges').addEventListener('click', async e => {
   const btn = e.target.closest('[data-drange]');
   if (!btn) return;
@@ -2003,13 +2003,13 @@ $('profile').addEventListener('click', e => {
   if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) closeProfile();
 });
 
-// Een baan van de tijdlijn naar zijn detailpagina: de array en een pool als geheel, anders de schijf
+// A lane of the timeline to its detail page: the array and a pool as a whole, otherwise the drive
 const driveKeyOf = dev => dev === ARRAY ? 'g:array' : dev.startsWith('pool:') ? 'g:' + dev.slice(5) : 'd:' + dev;
 const drvButton = (dev, name) => `<button type="button" class="drvbtn" data-drive="${esc(driveKeyOf(dev))}" title="${esc(t('drvOpen', {name}))}">${esc(name)}</button>`;
 
-/* ---------- overzicht: pools en array met hun schijven, en alle containers ---------- */
-// Op de spin-regels van alle dagen (zoals de kerncijfers) en los van de instelling "samenvoegen":
-// een groep is altijd de array of een pool, met zijn schijven eronder.
+/* ---------- overview: pools and the array with their drives, and all containers ---------- */
+// On the spin lines of all days (like the key figures) and independent of the "merge" setting:
+// a group is always the array or a pool, with its drives below it.
 const driveName = (src, dev) => (src.names || {})[dev] || dev;
 const byDriveName = src => (p, q) => {
   const np = driveName(src, p), nq = driveName(src, q), rank = n => /^parity/.test(n) ? 0 : /^disk\d/.test(n) ? 1 : 2;
@@ -2070,15 +2070,15 @@ function containersOverview(){
     }).join('') + '</tbody></table></div>';
 }
 
-/* ---------- schijf of pool/array: detailpagina ---------- */
-// containers die naar deze pool of de array mappen, met de mappen erachter
+/* ---------- drive or pool/array: detail page ---------- */
+// containers that map this pool or the array, with the folders after them
 function mappedBy(lane, pm = projectMap()){
   const ctrs = ((containers && containers.containers) || []).filter(c => c.mounts.some(mt => locsOf(mt.where).includes(lane)));
   return ctrs.length ? ctrs.map(c => `<div class="map"><button type="button" class="srcbtn" data-src="${esc(sourceKey({kind: 'container', name: c.name}, pm))}">${esc(c.name)}</button>
       <span class="muted">${esc([...new Set(c.mounts.filter(mt => locsOf(mt.where).includes(lane)).map(mt => mt.source))].join(', '))}</span></div>`).join('')
     : `<p class="muted">${esc(t(containers && containers.docker ? 'drvNoContainers' : 'mountsNoDocker'))}</p>`;
 }
-// Een pool zonder harde schijven (bijv. NVMe) volgt het dashboard niet: alleen wie ernaar mapt
+// A pool without hard drives (e.g. NVMe) is not watched by the dashboard: only who maps it
 function renderUnwatched(lane){
   $('profileTitle').textContent = groupLabel(lane);
   $('profileBody').innerHTML = `<p class="muted ov-note">${esc(t('drvNotWatched', {name: groupLabel(lane)}))}</p>
@@ -2097,12 +2097,12 @@ function renderDriveView(key){
   $('profileTitle').innerHTML = group ? `${esc(groupLabel(x))} ${stateTag(n.up)}` : `${esc(driveName(src, x))} <span class="muted">${esc(x)}</span> ${stateTag(n.up)}`;
   const tiles = [['kpiUps', String(n.ups)], ['drvActive', n.pct + '%'],
     ['kpiHours', hours.toLocaleString(locale(), {maximumFractionDigits: hours < 10 ? 1 : 0}) + ' ' + t('u_h')], ['restLongest', dur(n.longest)]];
-  // de schijven van een groep, elk door te klikken
+  // the drives of a group, each one clickable
   const members = group && devs.length > 1 ? `<h3 class="sub">${esc(t('drvDrives'))}</h3><table class="ov-ctr"><tbody>${devs.map(d => {
     const m = laneNumbers(src.disks[d], a, b);
     return `<tr data-dev="${esc(d)}"><td><button type="button" class="drvbtn" data-drive="d:${esc(d)}">${esc(driveName(src, d))}</button> <span class="muted">${esc(d)}</span></td><td>${stateTag(m.up)}</td><td class="muted">${esc(t('ovStats', {ups: m.ups, pct: m.pct}))}</td></tr>`;
   }).join('')}</tbody></table>` : '';
-  // activiteit op deze schijven in het venster: wie, welke mappen, welke bestanden, en wat hem wekte
+  // activity on these drives in the window: who, which folders, which files, and what woke it
   const m = devsMatcher(devs), pm = projectMap(), who = {}, folders = {}, files = {}, wakers = {};
   if (hasAct()) for (let i = lowerBound(data.act, a); i < data.act.length && data.act[i].t <= b; i++){
     const e = data.act[i];
@@ -2139,9 +2139,9 @@ function renderDriveView(key){
     </div>`;
 }
 
-/* ---------- draaiduur en rust: per baan hoe lang hij draait na een spin-up en hoe lang hij slaapt ---------- */
-// "Snel weer wakker": opgespind binnen QUICK_MS nadat hij naar standby ging. Dat kost slijtage zonder
-// dat de rust iets oplevert; een langere spin-down-vertraging kan dan helpen.
+/* ---------- spin time and rest: per lane how long it spins after a spin-up and how long it sleeps ---------- */
+// "Woke quickly": spun up within QUICK_MS after it went to standby. That costs wear without
+// the rest gaining anything; a longer spin-down delay may help then.
 const QUICK_MS = 30 * 60e3;
 const median = xs => { if (!xs.length) return null; const s = xs.slice().sort((p, q) => p - q), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 function restStats(list, a, b){
@@ -2166,24 +2166,24 @@ function renderRest(a, b){
     }).join('') + '</tbody></table>';
 }
 
-/* ---------- actieve schijven: wie schrijft/leest er, ook zonder spin-up ---------- */
-// Antwoord op "waarom draait deze schijf steeds": per schijf de top-bronnen en -bestanden,
-// gesplitst naar schrijven en lezen, over het huidige venster. Werkt op data.act (zelfde stroom
-// als de spin-up-oorzaken), dus ook als er helemaal geen spin-ups zijn.
+/* ---------- active drives: who writes/reads, also without a spin-up ---------- */
+// Answers "why does this drive keep spinning": per drive the top sources and files,
+// split by writes and reads, over the current window. Works on data.act (the same stream
+// as the spin-up causes), so also when there were no spin-ups at all.
 function actDrives(a, b, devs){
   if (!hasAct()) return [];
   const perDev = {}, ms = devs.map(d => [d, matcherFor(d)]).filter(([, mm]) => !mm.parity);
   for (let i = lowerBound(data.act, a); i < data.act.length && data.act[i].t <= b; i++){
     const e = data.act[i];
     const m = (ms.find(([, mm]) => mm.test(e)) || [])[0];
-    if (!m) continue;                            // parity-schrijvingen tellen bij de echte schijf
+    if (!m) continue;                            // parity writes count for the real drive
     const d = perDev[m] || (perDev[m] = {dev: m, w: 0, r: 0, srcW: {}, srcR: {}, fileW: {}, fileR: {}, who: {}});
     const dir = dirOf(e) || (WRITES.test(e.ev) ? 'w' : 'r');
     const w = whoFor(e), src = w ? whoLabel(w) : '';
     const file = isDir(e) ? null : '/' + partsOf(e.path).slice(2).join('/');
     d[dir === 'w' ? 'w' : 'r']++;
     if (src) (dir === 'w' ? d.srcW : d.srcR)[src] = ((dir === 'w' ? d.srcW : d.srcR)[src] || 0) + 1;
-    if (src && !d.who[src]) d.who[src] = w;          // om de naam naar het profiel te laten wijzen
+    if (src && !d.who[src]) d.who[src] = w;          // to let the name point to the profile
     if (file) (dir === 'w' ? d.fileW : d.fileR)[file] = ((dir === 'w' ? d.fileW : d.fileR)[file] || 0) + 1;
   }
   return Object.values(perDev).filter(d => d.w + d.r > 0)
@@ -2191,14 +2191,14 @@ function actDrives(a, b, devs){
 }
 const topN = (obj, n) => Object.entries(obj).sort((p, q) => q[1] - p[1]).slice(0, n);
 function actRow(label, n, max, cls, w){
-  const isFile = cls === 'muted';   // bestandsrijen krijgen een hover-overlay met het volledige pad
-  const name = (!isFile && srcLink(w, esc(label), 'cn'))     // een proces opent zijn profiel
+  const isFile = cls === 'muted';   // file rows get a hover overlay with the full path
+  const name = (!isFile && srcLink(w, esc(label), 'cn'))     // a process opens its profile
     || `<span class="cn${cls ? ' ' + cls : ''}${isFile ? ' haspath' : ''}"${isFile ? ` tabindex="0" aria-label="${esc(label)}"` : ` title="${esc(label)}"`} data-path="${esc(label)}">${esc(label)}</span>`;
   return `<div class="cause-row"><span class="cause-name">${name}</span>
     <span class="cause-bar"><i style="width:${n / max * 100}%"></i></span><b>${n}</b></div>`;
 }
-// Twee kaartjes: lezen en schrijven. Per kaartje alleen de schijven met activiteit in die richting,
-// de drukste bovenaan, met de top-bronnen en daaronder de top-bestanden.
+// Two cards: reads and writes. Per card only the drives with activity in that direction,
+// the busiest on top, with the top sources and below them the top files.
 const actSection = (key, rows) => rows.length ? `<h4>${esc(t(key))}</h4>${rows.join('')}` : '';
 function renderActDrives(a, b, devs){
   keepPathFocus($('actReads').closest('main'), () => drawActDrives(a, b, devs));
@@ -2223,16 +2223,16 @@ function drawActDrives(a, b, devs){
   }
 }
 
-/* ---------- live activiteitsfeed ---------- */
-// Nieuwste bestandsgebeurtenissen bovenaan, met R/W-punt, bestand, bron en hoe lang geleden.
-// Items die er sinds de vorige render bij kwamen krijgen kort een highlight (class 'fresh').
+/* ---------- live activity feed ---------- */
+// Newest file events on top, with R/W dot, file, source and how long ago.
+// Items added since the previous render get a short highlight (class 'fresh').
 const FEED_MAX = 25;
-const feedSeen = new Set();                       // 't|ev|path' van al getoonde regels
+const feedSeen = new Set();                       // 't|ev|path' of lines already shown
 const feedKey = e => `${Math.round(e.t / 1000)}|${e.ev}|${e.path}`;
 function feedEvents(){
   if (!hasAct()) return [];
-  return data.act.filter(e => !isDir(e) || isSmb(e))   // alleen echte bestanden / shares
-    .slice(-FEED_MAX * 8)                              // genoeg marge na dedup en samenvoegen
+  return data.act.filter(e => !isDir(e) || isSmb(e))   // only real files / shares
+    .slice(-FEED_MAX * 8)                              // enough margin after dedup and merging
     .reverse();
 }
 function feedAgo(now, ts){
@@ -2247,8 +2247,8 @@ function drawFeed(){
   const el = $('feed');
   const now = Date.now();
   const fresh = [];
-  // hetzelfde (getoonde) pad van dezelfde bron in dezelfde richting komt één keer in de lijst, met ×n;
-  // de tijd is die van de nieuwste keer
+  // the same (shown) path of the same source in the same direction appears once in the list, with ×n;
+  // the time is that of the newest one
   const items = [], byKey = new Map();
   for (const e of feedEvents()){
     const k = feedKey(e);
@@ -2256,15 +2256,15 @@ function drawFeed(){
     if (isFresh){ feedSeen.add(k); fresh.push(k); }
     const d = dirOf(e) || (WRITES.test(e.ev) ? 'w' : 'r');
     const w = whoFor(e), src = w ? whoLabel(w) + procSuffix(w) : t('unknown');
-    const same = `${d}|${src}|${relPath(e)}`, hit = byKey.get(same);   // zoals getoond: share-pad, niet de schijf
+    const same = `${d}|${src}|${relPath(e)}`, hit = byKey.get(same);   // as shown: share path, not the drive
     if (hit){ hit.n++; hit.fresh = hit.fresh || isFresh; continue; }
     if (items.length >= FEED_MAX) continue;
     const it = {e, k, d, src, w, n: 1, fresh: isFresh};
     byKey.set(same, it); items.push(it);
   }
-  // toon het share-relatieve pad (mappen + bestand); het volledige pad zit in de hover-overlay
+  // show the share-relative path (folders + file); the full path is in the hover overlay
   el.innerHTML = items.map(({e, k, d, src, w, n, fresh}) => {
-    const link = srcLink(w, esc(w ? whoLabel(w) : ''));       // naam naar het profiel, procesnaam erachter
+    const link = srcLink(w, esc(w ? whoLabel(w) : ''));       // name to the profile, process name behind it
     return `<li${fresh ? ' class="fresh"' : ''} data-k="${esc(k)}">
       <span class="dot ${d}"></span>
       <span class="fb ${d}" title="${esc(t(d === 'w' ? 'rwW' : 'rwR'))}">${d.toUpperCase()}</span>
@@ -2273,18 +2273,18 @@ function drawFeed(){
       <time>${n > 1 ? `<span class="fx" title="${esc(t('feedRepeat', {n}))}">×${n}</span> ` : ''}${esc(feedAgo(now, e.t))}</time></li>`;
   }).join('') || `<li class="muted">${esc(t('actNone'))}</li>`;
   $('feedNote').textContent = offset > 0 ? t('feedNote') : '';
-  // beperk de geheugen van feedSeen tot wat er nu zichtbaar is
+  // limit the memory of feedSeen to what is visible now
   if (feedSeen.size > 2000){ feedSeen.clear(); for (const e of feedEvents()) feedSeen.add(feedKey(e)); }
 }
 
-/* ---------- volledig pad als overlay bij hover (Actieve schijven + live-feed) ---------- */
-// Afgekapte bestandsrijen (.haspath) tonen bij hover/focus/tik het volledige pad in een overlay.
-// Delegatie op document, zodat het zowel in Actieve schijven als in de live-feed werkt.
+/* ---------- full path as an overlay on hover (Active drives + live feed) ---------- */
+// Truncated file rows (.haspath) show the full path in an overlay on hover/focus/tap.
+// Delegated on document, so it works in Active drives as well as in the live feed.
 const pathOf = e => e.target.closest && e.target.closest('.haspath');
 function showPath(el){
   const tip = $('tip');
   tip.textContent = el.dataset.path;
-  tip.style.maxWidth = 'min(90vw, 560px)';   // paden kunnen lang zijn
+  tip.style.maxWidth = 'min(90vw, 560px)';   // paths can be long
   tip.hidden = false;
   const r = el.getBoundingClientRect();
   tip.style.left = Math.max(8, Math.min(r.left, innerWidth - tip.offsetWidth - 8)) + 'px';
@@ -2298,14 +2298,14 @@ document.addEventListener('focusin', e => { const el = pathOf(e); if (el) showPa
 document.addEventListener('focusout', e => { if (pathOf(e)) hidePath(); });
 document.addEventListener('click', e => { const el = pathOf(e); if (el) $('tip').hidden ? showPath(el) : hidePath(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && pathOf(e)) hidePath(); });
-// Bij opnieuw tekenen (live-feed, kaartjes) de toetsenbordfocus op hetzelfde pad houden
+// On a redraw (live feed, cards) keep the keyboard focus on the same path
 function keepPathFocus(el, draw){
   const f = document.activeElement, path = f && el.contains(f) && f.classList.contains('haspath') ? f.dataset.path : null;
   draw();
   if (path){ const again = [...el.querySelectorAll('.haspath')].find(x => x.dataset.path === path); if (again) again.focus(); }
 }
 
-/* ---------- info-icoontjes met uitleg (hover, focus of tik) ---------- */
+/* ---------- info icons with an explanation (hover, focus or tap) ---------- */
 const infoBtn = key => key
   ? `<button type="button" class="info" data-info="${key}" aria-label="${esc(t('info'))}" aria-describedby="note-${key}" aria-expanded="false">i</button>` : '';
 let infoOpen = null;
@@ -2328,7 +2328,7 @@ function hideInfo(){
   $('tip').hidden = true;
 }
 const infoOf = e => e.target.closest && e.target.closest('.info');
-for (const id of ['causes', 'sources', 'awake', 'rhythm', 'srcLaneList']){              // ranglijsten met uitleg-icoontjes
+for (const id of ['causes', 'sources', 'awake', 'rhythm', 'srcLaneList']){              // rankings with info icons
   $(id).addEventListener('pointerover', e => { const b = infoOf(e); if (b && e.pointerType !== 'touch') showInfo(b); });
   $(id).addEventListener('pointerout', e => { if (infoOf(e) && e.pointerType !== 'touch') hideInfo(); });
   $(id).addEventListener('focusin', e => { const b = infoOf(e); if (b) showInfo(b); });
@@ -2339,11 +2339,11 @@ document.addEventListener('pointerdown', e => { if (infoOpen && !infoOf(e)) hide
 document.addEventListener('keydown', e => { if (e.key === 'Escape') hideInfo(); });
 addEventListener('scroll', () => { hideInfo(); if (traceFocus) $('tip').hidden = true; }, {passive: true});
 
-// Bij "Alle schijven": gebeurtenissen van dezelfde soort binnen 2 minuten van elkaar vormen één rij
+// With "All drives": events of the same kind within 2 minutes of each other form one row
 const GROUP_MS = 120e3;
 function groupRows(rows){
   const groups = [];
-  for (const r of rows){                      // rows: nieuwste eerst
+  for (const r of rows){                      // rows: newest first
     const g = groups[groups.length - 1];
     if (g && g.st === r.st && g.anchor - r.t <= GROUP_MS) g.items.push(r);
     else groups.push({st:r.st, anchor:r.t, items:[r]});
@@ -2358,7 +2358,7 @@ function durText(items){
   const span = lo === hi ? lo : t('durRange', {lo, hi});
   return running ? t('partlyRunning', {span}) : span;
 }
-// Start, stop of herstart van een container in de 5 minuten vóór een spin-up
+// Start, stop or restart of a container in the 5 minutes before a spin-up
 const CTR_NEAR = 5 * 60e3;
 function ctrBefore(at){
   const list = (data.ctr || []).filter(c => c.t <= at && at - c.t <= CTR_NEAR && c.ev !== 'healthy');
@@ -2372,13 +2372,13 @@ function groupCause(items){
   const cs = items.map(r => ({dev:r.dev, c:causeOf(r.dev, r.t)})).filter(x => x.c);
   const note = items.some(r => r.st === 'up') ? ctrNote(Math.min(...items.map(r => r.t))) : '';
   if (!cs.length) return {html: note, title:''};
-  // hoofdoorzaak: de vroegste bestandstoegang in de groep
+  // main cause: the earliest file access in the group
   const known = cs.filter(x => x.c.first).sort((p,q) => p.c.first.t - q.c.first.t);
   const main = known[0] || cs[0];
   const others = new Set(known.map(x => shareOf(x.c.first)));
   if (main.c.first) others.delete(shareOf(main.c.first));
   const extra = others.size ? ` <span class="muted">${esc(t('others', {n: others.size}))}</span>` : '';
-  // schijven met dezelfde toegangen (bijv. leden van één pool) samen in de hover
+  // drives with the same accesses (e.g. members of one pool) together in the hover
   const byText = new Map();
   cs.forEach(x => {
     const txt = causeTitle(x.c) || t('noFileActivityLc');
@@ -2425,7 +2425,7 @@ const expanded = new Set();
 const relPath = e => '/' + partsOf(e.path).slice(2).join('/') + (isDir(e) ? '/' : '');
 function sessionRow(files, t0){
   const shown = files.filter(e => !isDir(e) || isSmb(e));
-  const list = shown.length ? shown : files;   // alleen mappen gezien? toon die dan
+  const list = shown.length ? shown : files;   // only folders seen? then show those
   const max = 500;
   const rows = list.slice(0, max).map(e => `<li>
       <time>${fmtSec.format(e.t)}</time>
@@ -2443,8 +2443,8 @@ $('events').addEventListener('click', e => {
   const [a,b] = bounds(); renderEvents(a,b);
 });
 
-// Tooltipregels voor één segment van een baan: [naam, status, tijdspanne, eventueel de oorzaak]
-// Onderregel van een baan: het device, bij een pool de devices van de leden, bij de array het aantal schijven
+// Tooltip lines for one segment of a lane: [name, state, time span, possibly the cause]
+// Second line of a lane: the device, for a pool the devices of its members, for the array the number of drives
 function laneSub(dev, name){
   const ms = membersOf(dev);
   const sub = dev === ARRAY ? tn('disk', ms.length) : ms.length > 1 ? ms.slice().sort().join(', ') : name !== dev ? dev : '';
@@ -2471,9 +2471,9 @@ function showSegTip(lines, x, y){
   tip.style.left = Math.max(8, Math.min(x + 14, innerWidth - tip.offsetWidth - 8)) + 'px';
   tip.style.top = (y + 16) + 'px';
 }
-// Pijltjestoetsen per baan: links/rechts naar het vorige/volgende segment, Home/End naar het eerste/laatste
+// Arrow keys per lane: left/right to the previous/next segment, Home/End to the first/last
 const SEG_KEYS = {ArrowLeft: -1, ArrowRight: 1, Home: -Infinity, End: Infinity};
-let traceFocus = null;   // {dev, i}: baan met toetsenbordfocus, zodat een nieuwe render die terugzet
+let traceFocus = null;   // {dev, i}: lane with keyboard focus, so a new render puts it back
 function bindTips(a, b){
   const tip = $('tip');
   document.querySelectorAll('.trace').forEach(el => {
@@ -2501,9 +2501,9 @@ function bindTips(a, b){
   });
 }
 
-/* ---------- laden ---------- */
-// step(fractie, sleutel): alleen bij de eerste lading; werkt de voortgang bij en geeft de browser
-// even de tijd om die te tekenen, want het verwerken zelf blokkeert de pagina.
+/* ---------- loading ---------- */
+// step(fraction, key): only on the first load; updates the progress and gives the browser
+// a moment to draw it, because the processing itself blocks the page.
 async function load(text, source, demo=false, keepRange=false, step=null){
   if (step) await step(.82, 'loadingProcess');
   const {ev, act, names, who, procs, ctrs} = parseText(text);
@@ -2537,18 +2537,18 @@ $('lang').onchange = () => {
 };
 applyStatic();
 
-/* ---------- kaartjes: volgorde en zichtbaarheid (instellingen) ---------- */
-// Opgeslagen als [{id, hidden, size}] in de getoonde volgorde; size is 'half' of 'full' (ontbreekt in
-// oudere indelingen: dan de standaardmaat). Onbekende ids vallen weg en kaartjes die er later bij komen
-// verschijnen achteraan, zodat een oude indeling blijft werken.
+/* ---------- cards: order and visibility (settings) ---------- */
+// Stored as [{id, hidden, size}] in display order; size is 'half' or 'full' (missing in
+// older layouts: then the default size). Unknown ids are dropped and cards that are added later
+// appear at the end, so an old layout keeps working.
 const CARDS_KEY = 'spindash.cards';
 const CARD_TITLES = {kpi:'kpiTitle', lanes:'lanes', srcLanes:'srcLanesTitle', days:'daysTitle', hist:'histTitle',
   causes:'causesTitle', awake:'awakeTitle', src:'srcTitle', rhythm:'rhythmTitle', actR:'actRTitle', actW:'actWTitle',
   rest:'restTitle', feed:'feedTitle', events:'eventsTitle'};
-// "Actieve schijven" (act) is gesplitst in lezen en schrijven; een oude indeling krijgt beide op die plek
+// "Active drives" (act) was split into reads and writes; an old layout gets both in its place
 const CARD_RENAMED = {act: ['actR', 'actW']};
 const cardEl = id => $('dash').querySelector(`:scope > [data-card="${id}"]`);
-// standaardmaat uit de HTML (data-half), vastgelegd voordat een indeling hem verandert
+// default size from the HTML (data-half), recorded before a layout changes it
 const DEFAULT_SIZE = Object.fromEntries(Object.keys(CARD_TITLES).map(id => [id, cardEl(id).hasAttribute('data-half') ? 'half' : 'full']));
 const SIZES = ['half', 'full'];
 const defaultCards = () => Object.keys(CARD_TITLES).map(id => ({id, hidden: false, size: DEFAULT_SIZE[id]}));
@@ -2576,9 +2576,9 @@ function applyCards(){
     el.toggleAttribute('data-half', c.size === 'half');
   }
 }
-// Waar elk zichtbaar kaartje op een breed scherm terechtkomt, zoals het grid het plaatst: groot = een
-// eigen rij; klein = links, en een volgend klein kaartje ernaast rechts. Een klein kaartje zonder klein
-// kaartje erna staat alleen ('alone'). Geeft {id: positie} en de paren [links, rechts].
+// Where every visible card lands on a wide screen, as the grid places it: large = a
+// row of its own; small = left, and a following small card next to it on the right. A small card without
+// a small card after it stands alone ('alone'). Returns {id: position} and the pairs [left, right].
 function cardLayout(list){
   const pos = {}, pairs = [];
   let open = null;
@@ -2591,7 +2591,7 @@ function cardLayout(list){
   if (open) pos[open] = 'alone';
   return {pos, pairs};
 }
-// Klein icoontje van de positie: het gevulde vlak is waar het kaartje staat
+// Small icon of the position: the filled area is where the card sits
 function layIcon(p){
   const box = (x, w, on) => `<rect x="${x}" y="1" width="${w}" height="12" rx="2" class="${on ? 'on' : ''}"/>`;
   if (p === 'full') return `<svg viewBox="0 0 24 14" aria-hidden="true">${box(1, 22, true)}</svg>`;
@@ -2630,7 +2630,7 @@ $('cardList').addEventListener('click', e => {
       c.size = c.size === 'half' ? 'full' : 'half';
       $('cardLive').textContent = t('sizeSet', {name, size: t(c.size === 'half' ? 'sizeSmall' : 'sizeLarge')});
     } else {
-      // wisselen met de buur in hetzelfde paar (er kunnen verborgen kaartjes tussen staan)
+      // swap with the neighbour in the same pair (hidden cards can be in between)
       const pair = cardLayout(cards).pairs.find(pr => pr.includes(id)), other = pair[0] === id ? pair[1] : pair[0];
       const i = cards.findIndex(x => x.id === id), j = cards.findIndex(x => x.id === other);
       [cards[i], cards[j]] = [cards[j], cards[i]];
@@ -2645,13 +2645,13 @@ $('cardList').addEventListener('click', e => {
   if (j < 0 || j >= cards.length) return;
   [cards[i], cards[j]] = [cards[j], cards[i]];
   saveCards(); applyCards();
-  // de focus blijft bij hetzelfde kaartje; aan de rand gaat hij naar de knop die nog wel kan
+  // focus stays on the same card; at the edge it moves to the button that still works
   const edge = j === 0 || j === cards.length - 1;
   renderCardList(`li[data-card="${id}"] [data-move="${edge ? -btn.dataset.move : btn.dataset.move}"]`);
   $('cardLive').textContent = t('movedTo', {name: t(CARD_TITLES[id]), n: j + 1, total: cards.length});
 });
-// Slepen aan het handvat met muis of vinger: de rij schuift naar de plek waar de aanwijzer
-// voorbij het midden van een andere rij komt. Bij loslaten wordt de nieuwe volgorde bewaard.
+// Drag by the handle with mouse or finger: the row moves to the place where the pointer
+// passes the middle of another row. On release the new order is saved.
 let drag = null;
 $('cardList').addEventListener('pointerdown', e => {
   const grip = e.target.closest('.grip'); if (!grip) return;
@@ -2684,7 +2684,7 @@ $('resetCards').onclick = () => {
   try { localStorage.removeItem(CARDS_KEY); } catch (e) {}
   applyCards(); renderCardList();
 };
-// <dialog> met showModal waar het kan; anders (oude browsers, jsdom) gewoon het open-attribuut
+// <dialog> with showModal where possible; otherwise (old browsers, jsdom) just the open attribute
 function openSettings(){
   renderCardList();
   renderQuietForm();
@@ -2701,7 +2701,7 @@ function onSettingsClosed(){ $('openSettings').setAttribute('aria-expanded', 'fa
 $('openSettings').onclick = openSettings;
 $('settingsDone').onclick = closeSettings;
 $('settings').addEventListener('close', onSettingsClosed);
-// klik op de achtergrond sluit; een klik in de eigen opvulling van de dialoog heeft ook de dialoog als target
+// a click on the backdrop closes; a click in the dialog's own padding also has the dialog as target
 $('settings').addEventListener('click', e => {
   if (e.target !== $('settings')) return;
   const r = e.target.getBoundingClientRect();
@@ -2709,8 +2709,8 @@ $('settings').addEventListener('click', e => {
 });
 applyCards();
 
-// pools/array samenvoegen: onthouden in de browser en meteen opnieuw tekenen
-// verborgen paden: bij typen (even wachten) opnieuw filteren en tekenen
+// merging pools/the array: remembered in the browser and redrawn at once
+// hidden paths: while typing (after a short wait) filter and draw again
 function hideCountText(){
   if (!data || !hidePatterns.length) return '';
   return t('hideCount', {n: data.allAct.length - data.act.length, total: data.allAct.length});
@@ -2722,7 +2722,7 @@ function refilter(){
   if (data){ data.act = data.allAct.filter(e => !isHidden(e)); render(); }
   $('hideCount').textContent = hideCountText();
 }
-// Lijst naar de server; bij een fout blijft hij in deze browser bewaard en zegt de instelling dat
+// List to the server; on an error it stays saved in this browser and the setting says so
 async function saveHideServer(list){
   const ok = await fetch('data/settings.json', {method: 'POST', headers: {'Content-Type': 'application/json'},
                                                 body: JSON.stringify({hide: list})})
@@ -2738,10 +2738,10 @@ function applyHide(){
   if (changed && hideOnServer) saveHideServer(hidePatterns);
   refilter();
 }
-/* ---------- stille uren (instellingen op de server, zodat de backend kan melden) ---------- */
+/* ---------- quiet hours (settings on the server, so the backend can notify) ---------- */
 let quietOpt = null, webhookUrl = '';
 const hm = x => +x.slice(0, 2) * 60 + +x.slice(3, 5);
-// zelfde regel als lane_key() in de backend: parity en diskN horen bij de array, poolleden bij hun pool
+// same rule as lane_key() in the backend: parity and diskN belong to the array, pool members to their pool
 const laneKeyOfName = n => /^(parity\d*|disk\d+)$/.test(n) ? 'array' : n.replace(/\d+$/, '');
 const laneKeyOf = dev => dev === ARRAY ? 'array' : dev.startsWith('pool:') ? dev.slice(5) : laneKeyOfName((data.names || {})[dev] || dev);
 const quietApplies = dev => !!quietOpt && (!quietOpt.drives.length || quietOpt.drives.includes(laneKeyOf(dev)));
@@ -2750,7 +2750,7 @@ function inQuiet(ms){
   const d = new Date(ms), m = d.getHours() * 60 + d.getMinutes(), f = hm(quietOpt.from), to = hm(quietOpt.to);
   return f < to ? m >= f && m < to : m >= f || m < to;
 }
-// de stille-uren-vensters die [a, b] raken, als [van, tot] in ms
+// the quiet-hours windows that touch [a, b], as [from, to] in ms
 function quietSpans(a, b){
   if (!quietOpt) return [];
   const f = hm(quietOpt.from), to = hm(quietOpt.to), out = [];
@@ -2777,7 +2777,7 @@ async function saveQuiet(){
   webhookUrl = $('webhookUrl').value.trim();
   $('quietBox').hidden = !quietOpt;
   if (data) render();
-  if (!hideOnServer){ $('quietStatus').textContent = ''; return; }        // demo of geen server: alleen deze pagina
+  if (!hideOnServer){ $('quietStatus').textContent = ''; return; }        // demo or no server: this page only
   const r = await fetch('data/settings.json', {method: 'POST', headers: {'Content-Type': 'application/json'},
                                                body: JSON.stringify({quiet: quietOpt, webhook: webhookUrl})})
     .then(x => x.ok ? x.json() : x.json().then(j => ({error: j.error || x.status}))).catch(e => ({error: String(e)}));
@@ -2793,11 +2793,11 @@ $('webhookTest').onclick = async () => {
   $('quietStatus').textContent = r.ok ? t('webhookOk') : t('webhookFail', {error: r.error});
 };
 
-// Bij het starten: de lijst van de server gebruiken. Heeft de server er nog geen, dan eenmalig de
-// lijst uit deze browser (van vóór de opslag op de server) daarheen overzetten.
+// On start: use the list from the server. When the server has none yet, move the list
+// from this browser (from before it was stored on the server) there once.
 async function loadHideServer(){
   const s = await fetch('data/settings.json', {cache: 'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
-  if (!s || typeof s !== 'object') return;            // geen server: localStorage blijft gelden
+  if (!s || typeof s !== 'object') return;            // no server: localStorage stays in effect
   hideOnServer = true;
   quietOpt = s.quiet && s.quiet.from ? {from: s.quiet.from, to: s.quiet.to, drives: s.quiet.drives || []} : null;
   webhookUrl = typeof s.webhook === 'string' ? s.webhook : '';
@@ -2829,14 +2829,14 @@ let resizeTimer;
 addEventListener('resize', () => {
   $('tip').hidden = true;
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { if (data) render(); }, 200);   // aslabels passen bij de breedte
+  resizeTimer = setTimeout(() => { if (data) render(); }, 200);   // axis labels fit the width
 });
 
-/* ---------- voorbeelddata ---------- */
+/* ---------- sample data ---------- */
 function demoLog(){
   const lines = [];
   const add = (t, l) => lines.push({t, l:`${Math.floor(t/1000)},${l}`});
-  const end = Date.now(), start = end - 15*DAY;   // ruim twee weken: ook de weekweergave heeft een vorige week
+  const end = Date.now(), start = end - 15*DAY;   // a little over two weeks: the week view also has a previous week
   const disks = {sdb:['parity',.1], sdc:['disk1',1], sdd:['disk2',.8], sde:['disk3',.4], sdf:['disk4',.15], sdg:['disk5',.6]};
   let seed = 7; const rnd = () => (seed = (seed*16807) % 2147483647) / 2147483647;
   const pick = arr => arr[Math.floor(rnd()*arr.length)];
@@ -2878,9 +2878,9 @@ function demoLog(){
         else if (r < .9) act(at, disk, 'OPEN', `/mnt/${disk}/Backups/homey/${pick(['backup-0921.tar','backup-0922.tar'])}`);
       }
     }
-    // Schrijfactiviteit die de schijf wakker houdt zonder spin-up: een container die logs en
-    // een database bijwerkt (W-events en opens met schrijfintentie). Zo is de Actieve-schijven-
-    // weergave ook in het voorbeeld gevuld.
+    // Write activity that keeps the drive awake without a spin-up: a container that updates logs and
+    // a database (W events and opens with write intent). That way Active drives
+    // is filled in the sample too.
     if (name !== 'parity'){
       const w1 = pick(['appdata/plex/Logs/Plex Media Server.log','appdata/sonarr/sonarr.db','appdata/homeassistant/home-assistant_v2.db']);
       const container = w1.includes('plex') ? 'plex' : w1.includes('sonarr') ? 'sonarr' : 'homeassistant';
@@ -2889,7 +2889,7 @@ function demoLog(){
         who(w, 'container', container, 40 + name.length, 'geschreven', `/mnt/${name}/${w1}`);
         w += (3 + rnd()*5) * HOUR;
       }
-      // en wat leesactiviteit van een andere bron
+      // and some read activity from another source
       let rr = start + 5*HOUR;
       while (rr < end){
         who(rr, 'gebruiker', 'SMB-share', 60, 'geopend', `/mnt/${name}/Documenten/`);
@@ -2897,13 +2897,13 @@ function demoLog(){
       }
     }
   }
-  // Vaste ritmes, zodat het Ritme-kaartje in het voorbeeld iets herkent: radarr elke 2 uur, de mover dagelijks om 03:30
+  // Fixed rhythms, so the Rhythm card recognises something in the sample: radarr every 2 hours, the mover daily at 03:30
   for (let r = start + 40*60e3; r < end; r += 2*HOUR) who(r, 'container', 'radarr', 45, 'geschreven', '/mnt/disk1/appdata/radarr/radarr.db');
   for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
     const m = new Date(d); m.setHours(3, 30, 0, 0);
     if (m > start && m < end) who(m.getTime(), 'unraid', 'mover', 46, 'verplaatst', '/mnt/disk2/Media/Films/De Vuurtoren (2019)/De Vuurtoren.mkv');
   }
-  // Recente activiteit (laatste uur) zodat de live-feed in het voorbeeld direct gevuld is
+  // Recent activity (last hour) so the live feed is filled in the sample right away
   const recent = [
     [4,  'container', 'sonarr', 41, 'geschreven', '/mnt/disk1/appdata/sonarr/sonarr.db'],
     [11, 'container', 'plex', 42, 'geschreven', '/mnt/disk1/appdata/plex/Logs/Plex Media Server.log'],
@@ -2912,12 +2912,12 @@ function demoLog(){
     [47, 'container', 'homeassistant', 44, 'geschreven', '/mnt/disk2/appdata/homeassistant/home-assistant_v2.db'],
   ];
   for (const [mins, kind, nm, pid, op, path] of recent) who(end - mins * 60e3, kind, nm, pid, op, path);
-  // welk proces binnen plex: de scanner en de transcoder
+  // which process inside plex: the scanner and the transcoder
   add(end - 9 * 60e3, 'proc,47,Plex Media Scan');
   who(end - 9 * 60e3, 'container', 'plex', 47, 'geopend', '/mnt/disk3/Media/Films/Laag Water (2017)/Laag Water.mkv');
   add(end - 6 * 60e3, 'proc,48,Plex Transcoder');
   who(end - 6 * 60e3, 'container', 'plex', 48, 'geopend', '/mnt/disk3/Media/Films/Laag Water (2017)/Laag Water.mkv');
-  // levenscyclus: radarr wordt elke nacht om 05:00 bijgewerkt (herstart), sonarr was eergisteren even ongezond
+  // lifecycle: radarr is updated every night at 05:00 (restart), sonarr was briefly unhealthy two days ago
   for (let d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
     const m = new Date(d); m.setHours(5, 0, 0, 0);
     if (m > start && m < end){ add(m.getTime(), 'ctr,radarr,die,0'); add(m.getTime() + 20e3, 'ctr,radarr,start'); }
@@ -2926,17 +2926,17 @@ function demoLog(){
   return lines.sort((x,y) => x.t - y.t).map(x => x.l).join('\n');
 }
 
-/* ---------- live data van de server (docker) ---------- */
+/* ---------- live data from the server (docker) ---------- */
 // 'ok' | 'missing' | 'empty'
-/* ---------- laadpaneel: alleen bij de eerste lading, verversen gebeurt stil ---------- */
-// Een verborgen tabblad voert requestAnimationFrame niet uit; de timer zorgt dat het laden dan doorgaat
+/* ---------- loading panel: only on the first load, refreshing happens silently ---------- */
+// A hidden tab does not run requestAnimationFrame; the timer makes sure loading continues then
 const nextFrame = () => new Promise(r => {
   let done = false;
   const go = () => { if (!done){ done = true; setTimeout(r, 0); } };
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(go);
   setTimeout(go, 50);
 });
-// Laadweergave aan/uit: skelet, balk bovenaan en staptekst in plaats van de ondertitel
+// Loading view on/off: skeleton, bar at the top and step text instead of the subtitle
 function loading(on){
   $('loader').hidden = $('loaderBar').hidden = $('loaderLine').hidden = !on;
   $('sourceLine').hidden = on;
@@ -2949,13 +2949,13 @@ function setProgress(frac, text){
   $('loaderText').textContent = text;
 }
 const mb = n => (n / 1048576).toLocaleString(locale(), {minimumFractionDigits:1, maximumFractionDigits:1});
-// Tekst ophalen en tussendoor de ontvangen bytes melden (als de browser de body kan streamen)
+// Fetch text and report the received bytes along the way (when the browser can stream the body)
 async function fetchText(url, onBytes){
   const r = await fetch(url, {cache:'no-cache'});
   if (!r.ok) return '';
   if (!onBytes || !r.body || !r.body.getReader){
     const txt = await r.text();
-    if (onBytes) onBytes(new Blob([txt]).size);      // geen stream: in één keer melden
+    if (onBytes) onBytes(new Blob([txt]).size);      // no stream: report at once
     return txt;
   }
   const reader = r.body.getReader(), chunks = [];
@@ -2967,25 +2967,25 @@ async function fetchText(url, onBytes){
   return new Blob(chunks).text();
 }
 
-/* ---------- dagen: alleen ophalen wat de getoonde periode nodig heeft ---------- */
-let index = null;               // laatste days.json
-const dayTexts = new Map();     // dag -> inhoud; oude dagen veranderen niet en blijven in het geheugen
+/* ---------- days: only fetch what the shown period needs ---------- */
+let index = null;               // last days.json
+const dayTexts = new Map();     // day -> content; old days do not change and stay in memory
 const dayStartMs = d => { const [y, m, dd] = d.split('-').map(Number); return new Date(y, m - 1, dd).getTime(); };
-// vandaag en gisteren: voor de live feed en het laatste uur, en die worden elke minuut opnieuw opgevraagd
+// today and yesterday: for the live feed and the last hour, and those are requested again every minute
 const liveDays = () => new Set(index.days.slice(-2));
-// De dagen van het venster, met een dag marge aan beide kanten (oorzaak vlak na middernacht,
-// duur van een sessie die de volgende dag eindigt), plus de live dagen.
+// The days of the window, with a day of margin on both sides (a cause just after midnight,
+// the duration of a session that ends the next day), plus the live days.
 function neededDays(){
   if (range === 'all') return index.days.slice();
   const [a, b] = bounds(), live = liveDays();
   return index.days.filter(d => { const s = dayStartMs(d); return live.has(d) || (s < b + DAY && s + DAY > a - DAY); });
 }
-// Haalt dagen op die nog niet in het geheugen staan, plus de live dagen. Geeft true als er iets veranderde.
+// Fetches days that are not in memory yet, plus the live days. Returns true when something changed.
 async function fetchDays(days, onProgress){
   const live = liveDays();
   const todo = days.filter(d => !dayTexts.has(d) || live.has(d));
   const size = Object.fromEntries(index.days.map((d, i) => [d, (index.sizes || [])[i] || 0]));
-  // oudere server: alleen het totaal, geen grootte per dag; dat klopt alleen als alle dagen nodig zijn
+  // older server: only the total, no size per day; that is only right when all days are needed
   const bytes = index.sizes ? todo.reduce((n, d) => n + size[d], 0)
               : todo.length === index.days.length ? (index.bytes || 0) : 0;
   let got = 0, done = 0, changed = false;
@@ -3001,7 +3001,7 @@ async function fetchDays(days, onProgress){
       })));
   return changed;
 }
-// Alle geladen dagen opnieuw tot één dataset verwerken
+// Process all loaded days into one data set again
 function rebuild(step){
   const text = index.days.filter(d => dayTexts.has(d)).map(d => dayTexts.get(d)).join('\n');
   return load(text, LIVE, false, true, step);
@@ -3013,26 +3013,26 @@ async function fetchLive(){
   const idx = await fetch('data/days.json', {cache:'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null);
   if (!idx || !idx.days || !idx.days.length) return 'missing';
   index = idx;
-  for (const d of [...dayTexts.keys()]) if (!idx.days.includes(d)) dayTexts.delete(d);   // opgeruimd
+  for (const d of [...dayTexts.keys()]) if (!idx.days.includes(d)) dayTexts.delete(d);   // cleaned up
   if (first){ range = '1'; offset = 0; }
-  // eerste lading: 0-80% downloaden, daarna verwerken; verversen gebeurt stil
+  // first load: 0-80% downloading, then processing; refreshing happens silently
   const [changed, spinsChanged, ctrsChanged] = await Promise.all([
     fetchDays(neededDays(), first ? (frac, text) => setProgress(.8 * frac, text) : null), fetchSpins(), fetchContainers()]);
   if (!first && !changed){
-    if ((spinsChanged || ctrsChanged) && data && !navBusy) render();   // alleen kerncijfers, trend of opslag veranderd
+    if ((spinsChanged || ctrsChanged) && data && !navBusy) render();   // only key figures, trend or storage changed
     return 'ok';
   }
-  if (navBusy){ pendingRebuild = true; return 'ok'; }   // een wissel is bezig; die verwerkt het mee
+  if (navBusy){ pendingRebuild = true; return 'ok'; }   // a switch is in progress; it handles this too
   const step = first ? async (frac, key) => { setProgress(frac, t(key)); await nextFrame(); } : null;
   return (await rebuild(step)) ? 'ok' : 'empty';
 }
-// Periode of venster wijzigen; ontbrekende dagen eerst ophalen (voortgang in de regel onder de titel)
-// Bij elke wissel: skelet en laadbalk, ontbrekende dagen ophalen, verwerken en tekenen.
-// Bij snel achter elkaar klikken wint de laatste klik; de minuten-verversing wacht tot de wissel klaar is.
+// Change the period or window; fetch missing days first (progress in the line under the title)
+// On every switch: skeleton and loading bar, fetch missing days, process and draw.
+// When clicking quickly in a row the last click wins; the per-minute refresh waits until the switch is done.
 let navSeq = 0, navBusy = false, pendingRebuild = false;
 async function navigate(change){
   change();
-  if (!(index && data && data.source === LIVE)){ render(); return; }     // demo: alles staat al klaar
+  if (!(index && data && data.source === LIVE)){ render(); return; }     // demo: everything is ready already
   const seq = ++navSeq;
   navBusy = true;
   document.querySelectorAll('[data-range]').forEach(btn => btn.setAttribute('aria-pressed', btn.dataset.range === range));
@@ -3041,7 +3041,7 @@ async function navigate(change){
   setProgress(missing.length ? 0 : .85, t(missing.length ? 'loadingIndex' : 'loadingRender'));
   if (missing.length) await fetchDays(missing, (frac, text) => { if (seq === navSeq) setProgress(.8 * frac, text); });
   else await nextFrame();
-  if (seq !== navSeq) return;                                            // ingehaald door een nieuwere klik
+  if (seq !== navSeq) return;                                            // overtaken by a newer click
   const step = async (frac, key) => { setProgress(frac, t(key)); await nextFrame(); };
   if (missing.length || pendingRebuild){ pendingRebuild = false; await rebuild(step); }
   else show();
@@ -3049,7 +3049,7 @@ async function navigate(change){
 }
 let lastStatus = null;
 function showStatus(result){
-  if (data) return;   // laatst geladen data blijft staan bij een tijdelijke fout
+  if (data) return;   // the last loaded data stays on a temporary error
   lastStatus = result;
   loading(false);
   const msg = t({missing: 'statusMissing', empty: 'statusEmpty'}[result]);
@@ -3068,22 +3068,22 @@ async function tick(){
   await loadHideServer();
   await tick();
   setInterval(() => { if (!document.hidden) tick(); }, 60000);
-  // de feed toont relatieve tijden ("2 min geleden"); ververs die vaker dan de data zelf
+  // the feed shows relative times ("2 min ago"); refresh those more often than the data itself
   setInterval(() => { if (!document.hidden && data) renderFeed(); }, 30000);
   streamLive();
 })();
 
 /* ---------- live stream (Server-Sent Events) ---------- */
-// De server stuurt elke nieuwe who-regel direct; zo stroomt de feed in plaats van per minuut.
-// De minuten-fetch blijft de bron van waarheid; de stream is een versneller daar bovenop.
+// The server sends every new who line right away; so the feed streams instead of per minute.
+// The per-minute fetch stays the source of truth; the stream is an accelerator on top of it.
 function streamLive(){
   if (!('EventSource' in window)) return;
   const es = new EventSource('data/stream');
   es.onmessage = ev => { if (data && data.source === LIVE) ingestWho(ev.data); };
-  es.onerror = () => { /* EventSource herverbindt zelf */ };
+  es.onerror = () => { /* EventSource reconnects by itself */ };
 }
-// Eén who-regel live verwerken: toevoegen aan de who-index en de activiteitenstroom,
-// daarna alleen de feed opnieuw tekenen (de rest volgt bij de minuten-fetch).
+// Handle one who line live: add it to the who index and the activity stream,
+// then redraw only the feed (the rest follows with the per-minute fetch).
 function ingestWho(line){
   const {who, procs} = parseText(line);
   for (const p of procs) (data.procs.get(p.pid) || data.procs.set(p.pid, []).get(p.pid)).push(p);
@@ -3091,13 +3091,13 @@ function ingestWho(line){
   setComms(data.procs, who);
   const w0 = who[0];
   addWho(w0);
-  for (const e of mergeActivity([], [w0])){        // zelfde omzetting als bij het laden
+  for (const e of mergeActivity([], [w0])){        // same conversion as when loading
     data.allAct.splice(lowerBound(data.allAct, e.t + 1), 0, e);
     if (!isHidden(e)) data.act.splice(lowerBound(data.act, e.t + 1), 0, e);
   }
   scheduleLive();
 }
-// Het eerste event direct tekenen; bij een drukke stroom daarna hooguit eens per 300 ms (de laatste altijd)
+// Draw the first event at once; on a busy stream then at most once per 300 ms (always the last one)
 let liveTimer = null, livePending = false;
 function scheduleLive(){
   if (liveTimer){ livePending = true; return; }

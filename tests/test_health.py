@@ -15,7 +15,7 @@ class T:
 
 def test_healthy_after_start_and_while_the_poller_keeps_succeeding(sd):
     sd.threads.update(poller=T(True), watcher=T(True), housekeeping=T(True), docker_events=T(True))
-    ok, body = sd.health_status(now=1010)                     # net gestart, nog geen peiling
+    ok, body = sd.health_status(now=1010)                     # just started, no poll yet
     assert ok and body["poller"]["last_success"] is None and body["docker"] == "connecting"
     sd.health.update(poll=1500, mounts=["/mnt/trunk"], docker="connected")
     ok, body = sd.health_status(now=1560)
@@ -37,7 +37,7 @@ def test_unhealthy_when_the_poller_stalls_or_a_thread_dies(sd):
 
 
 def test_no_docker_socket_or_fatrace_does_not_make_it_unhealthy(sd):
-    """Anders herstart een autoheal-container hem eindeloos op een systeem zonder socket of HDD's."""
+    """Otherwise an auto-heal container restarts it forever on a system without a socket or HDDs."""
     sd.threads.update(poller=T(True), watcher=T(True), housekeeping=T(True), docker_events=T(False))
     sd.health.update(poll=1000, docker="no socket", mounts=[])
     ok, body = sd.health_status(now=1010)
@@ -52,7 +52,7 @@ def test_health_endpoint_answers_200_or_503(sd):
         sd.health["poll"] = __import__("time").time()
         r = urllib.request.urlopen(url, timeout=5)
         assert r.status == 200 and json.loads(r.read())["ok"] is True
-        sd.health["poll"] = 1.0                                # lang geleden
+        sd.health["poll"] = 1.0                                # long ago
         try:
             urllib.request.urlopen(url, timeout=5)
             raise AssertionError("verwacht 503")

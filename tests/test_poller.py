@@ -26,8 +26,8 @@ def setup_disks(sd, monkeypatch):
 def test_poll_once_writes_state_then_only_changes(sd, monkeypatch):
     states = setup_disks(sd, monkeypatch)
     last = {}
-    assert sd.poll_once(last, now=T) == 2           # eerste peiling: huidige status
-    assert sd.poll_once(last, now=T + 60) == 0      # niets veranderd, niets geschreven
+    assert sd.poll_once(last, now=T) == 2           # first poll: current state
+    assert sd.poll_once(last, now=T + 60) == 0      # nothing changed, nothing written
     states["sdd"] = "active"
     assert sd.poll_once(last, now=T + 120) == 1
     assert open(sd.day_path("2026-10-09")).read().splitlines() == [
@@ -42,7 +42,7 @@ def test_poll_once_starts_each_day_with_names_and_state(sd, monkeypatch):
     last = {}
     sd.poll_once(last, now=T)
     midnight = 1791496800 + 86400 + 30               # 2026-10-10 00:00:30
-    states["sdc"] = "standby"                        # verandert precies bij de dagwissel
+    states["sdc"] = "standby"                        # changes exactly at the day change
     assert sd.poll_once(last, now=midnight) == 2
     assert open(sd.day_path("2026-10-10")).read().splitlines() == [
         f"{midnight},disk,sdc,disk1", f"{midnight},disk,sdd,trunk",

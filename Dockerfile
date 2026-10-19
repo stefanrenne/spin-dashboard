@@ -1,5 +1,5 @@
-# Spin Dashboard voor Unraid
-# Debian trixie: fatrace >= 0.17 (filesystem-brede fanotify-marks, ook voor ZFS-datasets)
+# Spin Dashboard for Unraid
+# Debian trixie: fatrace >= 0.17 (filesystem-wide fanotify marks, also for ZFS datasets)
 FROM python:3.13-slim-trixie
 
 RUN apt-get update \
