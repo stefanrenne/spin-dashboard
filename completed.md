@@ -33,6 +33,11 @@ Newest first.
 - Tested on an array-less setup with a Btrfs HDD pool (Unraid 7.3.3, pool `trunk` with four HDDs, NVMe pool `frunk` for appdata): the image runs, watches `/mnt/trunk` and logs spin state, file access and container events
 - Documented in `docs/publishing.md` why the image is amd64 only
 
+## 2026-10-19: drive pages from everywhere, period in the dialog, healthcheck examples
+- Drive names in Timeline per drive and in Events open the drive page (a merged pool or the array as a whole, otherwise the single drive)
+- The detail dialog has the period buttons (last hour, 24 hours, 7 days, 30 days, All); they switch the dashboard's period, so the right days are loaded, and recalculate the open page
+- README: `docker run` and Docker Compose examples show the healthcheck on `/health`
+
 ## 2026-10-19: overview and drive detail pages
 - An ⓘ button next to Settings opens an Overview: every pool and the array with their drives (state, spin-ups, % active) and every Docker container (status, Compose project, location labels, activity in the period)
 - Every container, pool, the array and every single drive has a detail page; a drive page shows key figures, the drives of a pool or the array, who reads and writes, what woke it, folders, files and which containers map it. Pages open in one dialog with a Back button; a container without activity in the period still gets a profile

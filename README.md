@@ -56,6 +56,8 @@ docker run -d --name spin-dashboard \
   -v /mnt:/mnt:ro,slave \
   -v /var/local/emhttp:/emhttp:ro \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  --health-cmd "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8089/health', timeout=4).read()\"" \
+  --health-interval 60s --health-timeout 5s --health-retries 3 --health-start-period 30s \
   --restart unless-stopped \
   ghcr.io/stefanrenne/spin-dashboard:latest
 ```
@@ -81,8 +83,19 @@ services:
       RETENTION_DAYS: "30"    # days of history to keep
       # WATCH: "/mnt/disk1 /mnt/tank"  # optional, overrides automatic mount detection
       # IGNORE_PROCS: "cache_dirs"     # processes (and their children) that are not logged
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8089/health', timeout=4).read()"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     restart: unless-stopped
 ```
+
+The image already has this healthcheck built in; the examples above show it so you can tune it or
+use it with an auto-heal container. `/health` only reports unhealthy when the drive poller is stuck or
+a background thread stopped, so a missing Docker socket or a system without HDDs does not cause
+restart loops. If you change `PORT`, use that port in the healthcheck too.
 
 Keep the `/data` path on an SSD/cache pool (see [Tips](#tips)). The `/mnt`, `/emhttp` and Docker
 socket mounts and the privileged/host-PID settings are explained under

@@ -1649,3 +1649,42 @@ test('a container without known paths has no paths section in its profile', asyn
   assert.equal(d.querySelector('#profileBody .prof-paths'), null);
   dom.window.close();
 });
+
+test('a drive name in the timeline and in Events opens the drive page', async () => {
+  const dom = await load(POOL);
+  const d = dom.window.document, w = dom.window;
+  // samengevoegd (standaard): de baan is de pool als geheel
+  d.querySelector('#laneList .lane-name .drvbtn').click();
+  assert.match(text(d.getElementById('profileTitle')), /^trunk /);
+  assert.equal(d.querySelectorAll('#profileBody tr[data-dev]').length, 2);
+  d.getElementById('profileDone').click();
+  const ev = d.querySelector('#events td.disks .drvbtn');
+  assert.equal(ev.dataset.drive, 'g:trunk');
+  // los: elke baan en elke rij is één schijf
+  d.getElementById('openSettings').click();
+  const box = d.getElementById('groupDrives');
+  box.checked = false; box.dispatchEvent(new w.Event('change'));
+  d.getElementById('settingsDone').click();
+  assert.deepEqual([...d.querySelectorAll('#laneList .lane-name .drvbtn')].map((b) => b.dataset.drive), ['d:sdd', 'd:sde']);
+  d.querySelector('#events td.disks .drvbtn[data-drive="d:sde"]').click();
+  assert.match(text(d.getElementById('profileTitle')), /^trunk2 sde /);
+  dom.window.close();
+});
+
+test('the detail dialog switches the period and recalculates the open page', async () => {
+  const dom = await load({ ...byDay(HISTORY), 'spins.csv': HISTORY.filter((l) => !/,who,/.test(l)).join('\n') + '\n' });
+  const d = dom.window.document;
+  d.getElementById('openInfo').click();
+  d.querySelector('#profileBody .drvbtn[data-drive="g:trunk"]').click();
+  const ups = () => text([...d.querySelectorAll('#profileBody .kpi')][0].querySelector('.k-val'));
+  assert.equal(d.querySelector('[data-drange="1"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(ups(), '1');                                                 // laatste 24 uur
+  d.querySelector('[data-drange="7"]').click();
+  await until(() => ups() === '4');
+  assert.equal(ups(), '4');                                                 // ook de 3 van gisteren
+  assert.equal(d.querySelector('[data-drange="7"]').getAttribute('aria-pressed'), 'true');
+  assert.equal(d.querySelector('#ranges [data-range="7"]').getAttribute('aria-pressed'), 'true');   // het dashboard volgt
+  assert.match(text(d.getElementById('profileTitle')), /^trunk /);         // nog steeds dezelfde pagina
+  assert.equal(d.getElementById('profileBack').hidden, false);
+  dom.window.close();
+});
