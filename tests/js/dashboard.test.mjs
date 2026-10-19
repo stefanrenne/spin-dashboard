@@ -1683,7 +1683,7 @@ test('the detail dialog switches the period and recalculates the open page', asy
   await until(() => ups() === '4');
   assert.equal(ups(), '4');                                                 // also the 3 of yesterday
   assert.equal(d.querySelector('[data-drange="7"]').getAttribute('aria-pressed'), 'true');
-  assert.equal(d.querySelector('#ranges [data-range="7"]').getAttribute('aria-pressed'), 'true');   // the dashboard follows
+  assert.equal(d.querySelector('#ranges [data-range="1"]').getAttribute('aria-pressed'), 'true');   // the dashboard keeps its period
   assert.match(text(d.getElementById('profileTitle')), /^trunk /);         // still the same page
   assert.equal(d.getElementById('profileBack').hidden, false);
   dom.window.close();
@@ -1716,5 +1716,36 @@ test('every place that names a drive, pool or the array links to its page', asyn
   assert.equal(text(d.getElementById('profileTitle')), 'frunk');
   assert.match(text(d.getElementById('profileBody')), /frunk heeft geen harde schijven/);
   assert.match(text(d.getElementById('profileBody')), /Containers die ernaar mappen\s*plex \/mnt\/frunk\/appdata/);
+  dom.window.close();
+});
+
+test('the detail dialog steps a period back and forward without moving the dashboard', async () => {
+  const dom = await load({ ...byDay(HISTORY), 'spins.csv': HISTORY.filter((l) => !/,who,/.test(l)).join('\n') + '\n' });
+  const d = dom.window.document;
+  const before = text(d.getElementById('sourceLine'));
+  d.getElementById('openInfo').click();
+  d.querySelector('#profileBody .drvbtn[data-drive="g:trunk"]').click();
+  const ups = () => text([...d.querySelectorAll('#profileBody .kpi')][0].querySelector('.k-val'));
+  const nav = (k) => d.querySelector(`#detailNav [data-dnav="${k}"]`);
+  assert.equal(ups(), '1');
+  assert.equal(nav('next').disabled, true);                               // already at now
+  assert.equal(nav('prev').getAttribute('aria-label'), 'Vorige dag');
+  nav('prev').click();
+  await until(() => ups() === '3');
+  assert.equal(ups(), '3');                                               // the 24 hours before: 3 spin-ups
+  assert.equal(nav('next').disabled, false);
+  assert.equal(nav('now').getAttribute('aria-pressed'), 'false');
+  assert.equal(text(d.getElementById('sourceLine')), before);             // the dashboard did not move
+  assert.equal(d.querySelector('#ranges [data-range="1"]').getAttribute('aria-pressed'), 'true');
+  nav('now').click();
+  await until(() => ups() === '1');
+  assert.equal(ups(), '1');
+  assert.equal(nav('next').disabled, true);
+  d.querySelector('[data-drange="all"]').click();
+  await until(() => d.getElementById('detailNav').hidden);
+  assert.equal(d.getElementById('detailNav').hidden, true);               // "All" has nothing to step through
+  d.getElementById('profileDone').click();
+  d.getElementById('openInfo').click();                                   // a new dialog starts at the dashboard's period
+  assert.equal(d.querySelector('[data-drange="1"]').getAttribute('aria-pressed'), 'true');
   dom.window.close();
 });

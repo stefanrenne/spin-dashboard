@@ -33,6 +33,11 @@ Newest first.
 - Tested on an array-less setup with a Btrfs HDD pool (Unraid 7.3.3, pool `trunk` with four HDDs, NVMe pool `frunk` for appdata): the image runs, watches `/mnt/trunk` and logs spin state, file access and container events
 - Documented in `docs/publishing.md` why the image is amd64 only
 
+## 2026-10-19: the detail dialog has its own period
+- The period buttons in the detail dialog no longer change the dashboard: the dialog keeps its own period (starting at the dashboard's), fetches missing days quietly and calculates its pages for that window
+- Previous / Now / Next buttons in the dialog step a whole period back or forward, like on the dashboard; more space below the controls
+- docs/development.md describes the dialog's own period
+
 ## 2026-10-19: English comments
 - All code comments and docstrings are English now (backend, frontend, tests, scripts, Dockerfile); CLAUDE.md requires English everywhere except the UI texts in `I18N` and the Dutch values of the data format. Only comments changed: the code of every file is identical before and after
 

@@ -328,8 +328,10 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 dialog.profile{width:min(820px, calc(100% - 32px))}
 #profileTitle{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
 #profileBack{flex:none}
-.detail-ranges{margin:-6px 0 12px;display:flex;flex-wrap:wrap}
-.prof-sub{font-size:0.8125rem;margin:-8px 0 12px}
+#profileBody[aria-busy="true"]{opacity:.5}
+.detail-controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:-4px 0 18px}
+.detail-ranges{display:flex;flex-wrap:wrap}
+.prof-sub{font-size:0.8125rem;margin:0 0 14px}
 .prof-rhythm{font-size:0.8438rem;margin:12px 0 0}
 .heat{display:grid;grid-template-columns:6.5rem repeat(24,minmax(0,1fr));gap:2px;font-size:0.6875rem;color:var(--muted)}
 .heat .hd{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -552,12 +554,19 @@ td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
     <h2 id="profileTitle"></h2>
     <button type="button" class="btn primary" id="profileDone" data-i18n="done">Done</button>
   </div>
-  <div class="seg detail-ranges" role="group" data-i18n-aria="period" id="detailRanges">
-    <button type="button" data-drange="h" data-i18n="rh">Last hour</button>
-    <button type="button" data-drange="1" data-i18n="r1">24 hours</button>
-    <button type="button" data-drange="7" data-i18n="r7">7 days</button>
-    <button type="button" data-drange="30" data-i18n="r30">30 days</button>
-    <button type="button" data-drange="all" data-i18n="rall">All</button>
+  <div class="detail-controls">
+    <div class="seg detail-ranges" role="group" data-i18n-aria="period" id="detailRanges">
+      <button type="button" data-drange="h" data-i18n="rh">Last hour</button>
+      <button type="button" data-drange="1" data-i18n="r1">24 hours</button>
+      <button type="button" data-drange="7" data-i18n="r7">7 days</button>
+      <button type="button" data-drange="30" data-i18n="r30">30 days</button>
+      <button type="button" data-drange="all" data-i18n="rall">All</button>
+    </div>
+    <div class="seg nav" role="group" id="detailNav">
+      <button type="button" data-dnav="prev">‹</button>
+      <button type="button" data-dnav="now" data-i18n="now">Now</button>
+      <button type="button" data-dnav="next">›</button>
+    </div>
   </div>
   <div id="profileBody"></div>
 </dialog>
@@ -1337,10 +1346,12 @@ function extent(){
   return [min, (Date.now() - max < 2*DAY) ? Date.now() : max];
 }
 // Window of one period (1, 7 or 30 days), `offset` periods back from now
-function bounds(){
+function bounds(){ return boundsFor(range, offset); }
+// the same for any period, e.g. the one chosen in the detail dialog
+function boundsFor(r, off){
   const [min, end0] = extent();
-  if (range === 'all') return [min, end0];
-  const len = range === 'h' ? HOUR : (+range)*DAY, end = end0 - offset*len;
+  if (r === 'all') return [min, end0];
+  const len = r === 'h' ? HOUR : (+r)*DAY, end = end0 - off*len;
   return [Math.max(min, end - len), end];
 }
 // snap: the segment starts with a measured state, not with a spin-up
@@ -1938,23 +1949,53 @@ function lifeHtml(s, a, b){
 }
 // One dialog for the overview, a source and a drive. Clicking through inside the dialog puts a
 // new view on top; "Back" takes it off. From outside the dialog a new stack starts.
-let viewStack = [];
+// The dialog has its own period (det): it starts as the dashboard's and can be changed without
+// touching the dashboard. Its numbers come from an index for that window (detailIdx).
+let viewStack = [], det = {range: '1', offset: 0};
 const dialogOpen = () => $('profile').open || $('profile').hasAttribute('open');
 function showDetail(view, from){
   if (!srcIdx) return;
   if (dialogOpen() && from && $('profile').contains(from)) viewStack.push(view);
-  else { viewStack = [view]; profileFrom = from || null; }
+  else { viewStack = [view]; profileFrom = from || null; det = {range, offset}; }
   renderDetail();
   const d = $('profile');
   if (!dialogOpen()){ if (d.showModal) d.showModal(); else d.setAttribute('open', ''); }
 }
+// Spin-ups of every lane in [a, b], like render() collects them for the dashboard's window
+function upsIn(a, b, devs){
+  const ups = [];
+  for (const dev of devs){
+    const list = view.disks[dev];
+    if (list && list.length) for (const sg of segments(list, a, b)) if (isUp(sg, a)) ups.push({t: sg.from, dev, cause: causeOf(dev, sg.from)});
+  }
+  return ups;
+}
+function detailIndex(){
+  const [a, b] = boundsFor(det.range, det.offset), devs = viewDevs();
+  const list = sourceIndex(a, b, devs, groupUps(upsIn(a, b, devs)));
+  return {a, b, list, keys: new Set(list.map(x => x.k))};
+}
 function renderDetail(){
   const v = viewStack[viewStack.length - 1];
   $('profileBack').hidden = viewStack.length < 2;
-  document.querySelectorAll('[data-drange]').forEach(btn => btn.setAttribute('aria-pressed', btn.dataset.drange === range && offset === 0));
-  if (v.type === 'overview') renderOverview();
-  else if (v.type === 'drive') renderDriveView(v.key);
-  else renderSourceView(v.k);
+  document.querySelectorAll('[data-drange]').forEach(btn => btn.setAttribute('aria-pressed', btn.dataset.drange === det.range));
+  const [a] = boundsFor(det.range, det.offset);
+  $('detailNav').hidden = det.range === 'all';
+  $('detailNav').querySelector('[data-dnav="prev"]').disabled = a <= extent()[0];
+  $('detailNav').querySelector('[data-dnav="next"]').disabled = det.offset === 0;
+  $('detailNav').querySelector('[data-dnav="now"]').setAttribute('aria-pressed', det.offset === 0);
+  for (const [k, key] of [['prev', 'prev_'], ['next', 'next_']]){
+    const btn = $('detailNav').querySelector(`[data-dnav="${k}"]`);
+    btn.title = t(key + det.range); btn.setAttribute('aria-label', t(key + det.range));
+  }
+  // the renderers read srcIdx; for the dialog that is the index of its own window
+  const keep = srcIdx;
+  srcIdx = detailIndex();
+  try {
+    if (v.type === 'overview') renderOverview();
+    else if (v.type === 'drive') renderDriveView(v.key);
+    else renderSourceView(v.k);
+  } finally { srcIdx = keep; }
   $('profile').scrollTop = 0;
 }
 $('profileBack').onclick = () => { viewStack.pop(); renderDetail(); ($('profileBack').hidden ? $('profileDone') : $('profileBack')).focus(); };
@@ -1986,14 +2027,31 @@ document.addEventListener('click', e => {
   else openProfile(b.dataset.src, b);
 });
 $('openInfo').onclick = () => showDetail({type: 'overview'}, $('openInfo'));
-// Switch the period from a detail page: the same period as the dashboard (so the right
-// days are loaded), then recalculate the open page
-$('detailRanges').addEventListener('click', async e => {
-  const btn = e.target.closest('[data-drange]');
-  if (!btn) return;
-  await navigate(() => { range = btn.dataset.drange; offset = 0; });
+// Switch the dialog's period or step back/forward. The dashboard keeps its own period; missing
+// days are fetched quietly (the dashboard is redrawn with the same period, so nothing moves there).
+async function detailNav(change, btn){
+  change();
+  if (index && data && data.source === LIVE){
+    const missing = neededDays(det.range, det.offset).filter(d => !dayTexts.has(d));
+    if (missing.length){
+      $('profileBody').setAttribute('aria-busy', 'true');
+      await fetchDays(missing);
+      await rebuild(null);
+      $('profileBody').removeAttribute('aria-busy');
+    }
+  }
   if (dialogOpen() && viewStack.length) renderDetail();
-  btn.focus();
+  if (btn && !btn.disabled) btn.focus();
+}
+$('detailRanges').addEventListener('click', e => {
+  const btn = e.target.closest('[data-drange]');
+  if (btn) detailNav(() => { det = {range: btn.dataset.drange, offset: 0}; }, btn);
+});
+$('detailNav').addEventListener('click', e => {
+  const btn = e.target.closest('[data-dnav]');
+  if (!btn || btn.disabled) return;
+  const step = {prev: 1, next: -1, now: -det.offset}[btn.dataset.dnav];
+  detailNav(() => { det = {...det, offset: Math.max(0, det.offset + step)}; }, btn);
 });
 $('profileDone').onclick = closeProfile;
 $('profile').addEventListener('close', onProfileClosed);
@@ -2975,9 +3033,9 @@ const dayStartMs = d => { const [y, m, dd] = d.split('-').map(Number); return ne
 const liveDays = () => new Set(index.days.slice(-2));
 // The days of the window, with a day of margin on both sides (a cause just after midnight,
 // the duration of a session that ends the next day), plus the live days.
-function neededDays(){
-  if (range === 'all') return index.days.slice();
-  const [a, b] = bounds(), live = liveDays();
+function neededDays(r = range, off = offset){
+  if (r === 'all') return index.days.slice();
+  const [a, b] = boundsFor(r, off), live = liveDays();
   return index.days.filter(d => { const s = dayStartMs(d); return live.has(d) || (s < b + DAY && s + DAY > a - DAY); });
 }
 // Fetches days that are not in memory yet, plus the live days. Returns true when something changed.
