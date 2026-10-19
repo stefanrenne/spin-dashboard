@@ -51,6 +51,10 @@ spin-ups within 30 minutes of going to standby (`QUICK_MS`).
 `/data/containers.json` feeds Settings › Paths per container, and `?demo` uses `demoContainers()`. Without a
 Docker socket the backend logs one line and the card says so; tests use `FakeDocker` in `tests/conftest.py`,
 a Docker API on a Unix socket.
+The source profile, the Overview (ⓘ) and the drive detail pages share one dialog (`#profile`) with a view stack:
+clicking a `.srcbtn` or `.drvbtn` inside the dialog pushes a view, "Back" pops it, and a click from outside starts
+a new stack. Drive pages work on the spin lines of all days and group drives by lane key (the array, or a pool
+and its members) regardless of the merge setting; activity uses `devsMatcher()`, the same rule as the lanes.
 The source cards (Timeline per source, Kept awake per source, Activity per source, Rhythm per source and the profile dialog) share one
 index per render (`sourceIndex()`): per source the spin-ups it caused, reads and writes per lane, every access
 in the window and the kept-awake time. Kept awake: within each spinning period of a lane, every access gets the

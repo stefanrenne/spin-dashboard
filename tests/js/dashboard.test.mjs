@@ -500,7 +500,7 @@ test('first load shows a loading panel with progress, then the dashboard', async
   assert.match(d.getElementById('loaderText').textContent, /^1 van 2 dagen geladen · 0,0 van 2,0 MB$/);
   assert.equal(bar.classList.contains('indeterminate'), false);
   release();
-  await new Promise((r) => setTimeout(r, 200));
+  await until(() => d.getElementById('loader').hidden);
   assert.equal(d.getElementById('loader').hidden, true);
   assert.equal(d.getElementById('dash').hidden, false);
   assert.equal(bar.getAttribute('aria-valuenow'), '96');                 // laatste stap: opbouwen
@@ -1239,7 +1239,7 @@ test('a container restart just before a spin-up is named in the events table', a
   dom.window.close();
 });
 
-test('settings list the paths each container maps and where they live', async () => {
+test('the overview lists every container with its storage labels and opens its profile', async () => {
   const containers = { docker: true, containers: [
     { name: 'plex', state: 'running', mounts: [
       { source: '/mnt/user/appdata/plex', target: '/config', rw: true, where: { kind: 'share', share: 'appdata', storage: 'pool>array', pool: 'cache', hdd: true } },
@@ -1248,43 +1248,89 @@ test('settings list the paths each container maps and where they live', async ()
       { source: '/mnt/disk1/appdata/radarr', target: '/config', rw: true, where: { kind: 'disk', name: 'disk1', hdd: true } }] },
     { name: 'nginx', state: 'exited', mounts: [
       { source: '/mnt/cache/appdata/nginx', target: '/config', rw: true, where: { kind: 'pool', name: 'cache', hdd: false } },
-      { source: '/mnt/cache/appdata/nginx', target: '/data', rw: true, where: { kind: 'pool', name: 'cache', hdd: false } }] },   // zelfde map twee keer
-    { name: 'empty', state: 'running', mounts: [] },
+      { source: '/mnt/cache/appdata/nginx', target: '/data', rw: true, where: { kind: 'pool', name: 'cache', hdd: false } }] },
+    { name: 'idle', state: 'running', mounts: [] },
   ] };
   const dom = await load({ ...DOCK, 'containers.json': JSON.stringify(containers) });
   const d = dom.window.document;
-  assert.equal(d.querySelector('[data-card="storage"]'), null);            // geen kaartje meer
   d.getElementById('openSettings').click();
-  const li = (n) => text(d.querySelector(`#mountList li[data-ctr="${n}"]`));
-  assert.deepEqual([...d.querySelectorAll('#mountList li')].map((x) => x.dataset.ctr), ['plex', 'radarr', 'nginx']);
-  // het pad met de pool of array waar het staat; met de mover beide plekken; onbekend: '?'
-  assert.deepEqual([...d.querySelectorAll('#mountList li[data-ctr="plex"] .map')].map(text), ['/mnt/user/appdata/plex cache → Array', '/mnt/user/Media ?']);
-  assert.equal(li('radarr'), 'radarr /mnt/disk1/appdata/radarr Array');
-  assert.equal(li('nginx'), 'nginx (gestopt) /mnt/cache/appdata/nginx cache');   // dubbele map maar één keer
-  // elke plek een eigen, vaste kleur: dezelfde naam overal dezelfde kleur
+  assert.equal(d.getElementById('mountList'), null);                       // niet meer in de instellingen
+  d.getElementById('settingsDone').click();
+  d.getElementById('openInfo').click();
+  assert.equal(text(d.getElementById('profileTitle')), 'Overzicht');
+  assert.equal(d.getElementById('profileBack').hidden, true);
+  const tr = (n) => d.querySelector(`#profileBody tr[data-ctr="${n}"]`);
+  assert.deepEqual([...d.querySelectorAll('#profileBody tr[data-ctr]')].map((x) => x.dataset.ctr), ['plex', 'radarr', 'nginx', 'idle']);
+  assert.deepEqual([...tr('plex').querySelectorAll('.loc')].map((x) => x.textContent), ['cache', 'Array', '?']);
+  assert.equal(text(tr('nginx')), 'nginx gestopt cache –');                // één label per plek, geen activiteit
+  assert.match(text(tr('plex')), /2 gelezen · 0 geschreven/);
   const colors = {};
-  for (const tg of d.querySelectorAll('#mountList .loc:not(.unknown)')) {
+  for (const tg of d.querySelectorAll('#profileBody .loc:not(.unknown)')) {
     const c = tg.style.getPropertyValue('--c');
-    assert.ok(!colors[tg.textContent] || colors[tg.textContent] === c, tg.textContent);
+    assert.ok(!colors[tg.textContent] || colors[tg.textContent] === c);
     colors[tg.textContent] = c;
   }
-  assert.deepEqual(Object.keys(colors).sort(), ['Array', 'cache']);
   assert.notEqual(colors.Array, colors.cache);
-  assert.match(d.querySelector('#mountList li[data-ctr="plex"] .loc').title, /cache · kan op een harde schijf staan/);
-  // onder de kaartjes
-  const order = [...d.querySelectorAll('#settings h3')].map((h) => h.dataset.i18n);
-  assert.deepEqual(order.slice(-2), ['cardsTitle', 'mountsTitle']);
+  // doorklikken en terug
+  tr('plex').querySelector('.srcbtn').click();
+  assert.equal(text(d.getElementById('profileTitle')), 'plex');
+  assert.equal(d.getElementById('profileBack').hidden, false);
+  d.getElementById('profileBack').click();
+  assert.equal(text(d.getElementById('profileTitle')), 'Overzicht');
+  // ook een container zonder activiteit heeft een profiel
+  tr('idle').querySelector('.srcbtn').click();
+  assert.equal(text(d.getElementById('profileTitle')), 'idle');
+  assert.match(text(d.getElementById('profileBody')), /Gelezen\s*0/);
   dom.window.close();
 });
 
-test('settings explain a missing Docker socket or a failed request', async () => {
+test('the overview explains a missing Docker socket or a failed request', async () => {
   let dom = await load({ ...DOCK, 'containers.json': JSON.stringify({ docker: false, containers: [] }) });
-  dom.window.document.getElementById('openSettings').click();
-  assert.match(text(dom.window.document.getElementById('mountList')), /Geen Docker-socket/);
+  dom.window.document.getElementById('openInfo').click();
+  assert.match(text(dom.window.document.getElementById('profileBody')), /Geen Docker-socket/);
   dom.window.close();
   dom = await load(DOCK);                                                  // containers.json: 404
-  dom.window.document.getElementById('openSettings').click();
-  assert.equal(text(dom.window.document.getElementById('mountList')), 'De containers konden niet gelezen worden.');
+  dom.window.document.getElementById('openInfo').click();
+  assert.match(text(dom.window.document.getElementById('profileBody')), /De containers konden niet gelezen worden\./);
+  dom.window.close();
+});
+
+test('the overview lists pools and the array with their drives, each with a detail page', async () => {
+  const containers = { docker: true, containers: [
+    { name: 'plex', state: 'running', mounts: [{ source: '/mnt/trunk/Media', target: '/media', rw: true, where: { kind: 'pool', name: 'trunk', hdd: true } }] },
+    { name: 'nginx', state: 'running', mounts: [{ source: '/mnt/cache/appdata/nginx', target: '/config', rw: true, where: { kind: 'pool', name: 'cache', hdd: false } }] },
+  ] };
+  const dom = await load({ ...POOL, 'containers.json': JSON.stringify(containers) });
+  const d = dom.window.document;
+  d.getElementById('openInfo').click();
+  const group = d.querySelector('#profileBody .ov-group[data-group="trunk"]');
+  assert.match(text(group.querySelector('.ov-row')), /^trunk standby 1 spin-ups · \d+% actief$/);
+  assert.deepEqual([...group.querySelectorAll('.ov-members li')].map((li) => li.dataset.dev), ['sdd', 'sde']);
+  // de hele pool
+  group.querySelector('.drvbtn[data-drive="g:trunk"]').click();
+  assert.match(text(d.getElementById('profileTitle')), /^trunk standby$/);
+  const kpis = [...d.querySelectorAll('#profileBody .kpi')].map((k) => `${text(k.querySelector('.k-label'))} ${text(k.querySelector('.k-val'))}`);
+  assert.equal(kpis[0], 'Spin-ups 1');
+  assert.deepEqual([...d.querySelectorAll('#profileBody tr[data-dev]')].map((r) => r.dataset.dev), ['sdd', 'sde']);
+  const body = text(d.getElementById('profileBody'));
+  assert.match(body, /Wie leest en schrijft.*bazarr 1.*Wat hem wekte/);   // bazarr las op de pool
+  assert.match(body, /Wat hem wekte\s*Media\/series 1/);
+  assert.match(body, /Containers die ernaar mappen\s*plex \/mnt\/trunk\/Media/);
+  assert.doesNotMatch(body, /nginx/);
+  // één schijf uit de pool, met een link terug naar de pool
+  d.querySelector('#profileBody tr[data-dev="sde"] .drvbtn').click();
+  assert.match(text(d.getElementById('profileTitle')), /^trunk2 sde standby$/);
+  assert.ok(d.querySelector('#profileBody .prof-sub .drvbtn[data-drive="g:trunk"]'));
+  assert.match(text(d.getElementById('profileBody')), /verspreid over zijn schijven/);
+  d.querySelector('#profileBody .drvbtn[data-drive="g:trunk"]').click();
+  assert.match(text(d.getElementById('profileTitle')), /^trunk standby$/);
+  d.getElementById('profileBack').click();                                // terug naar trunk2
+  d.getElementById('profileBack').click();                                // terug naar trunk
+  d.getElementById('profileBack').click();                                // terug naar het overzicht
+  assert.equal(text(d.getElementById('profileTitle')), 'Overzicht');
+  assert.equal(d.getElementById('profileBack').hidden, true);
+  d.getElementById('profileDone').click();
+  assert.equal(d.activeElement, d.getElementById('openInfo'));          // focus terug op het icoontje
   dom.window.close();
 });
 
@@ -1584,10 +1630,10 @@ test('the container profile lists the paths of that container with their locatio
   // dezelfde kleur als in de instellingen
   const inProfile = paths.querySelector('.loc').style.getPropertyValue('--c');
   d.getElementById('profileDone').click();
-  d.getElementById('openSettings').click();
-  const inSettings = [...d.querySelectorAll('#mountList .loc')].find((x) => x.textContent === 'frunk').style.getPropertyValue('--c');
-  assert.equal(inProfile, inSettings);
-  d.getElementById('settingsDone').click();
+  d.getElementById('openInfo').click();
+  const inOverview = [...d.querySelectorAll('#profileBody .loc')].find((x) => x.textContent === 'frunk').style.getPropertyValue('--c');
+  assert.equal(inProfile, inOverview);                                     // dezelfde kleur als in het overzicht
+  d.getElementById('profileDone').click();
   // als Compose-project: de paden van elk lid onder zijn naam
   const box = d.getElementById('groupCompose');
   box.checked = true; box.dispatchEvent(new w.Event('change'));
