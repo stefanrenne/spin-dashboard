@@ -1688,3 +1688,33 @@ test('the detail dialog switches the period and recalculates the open page', asy
   assert.equal(d.getElementById('profileBack').hidden, false);
   dom.window.close();
 });
+
+test('every place that names a drive, pool or the array links to its page', async () => {
+  const containers = { docker: true, containers: [
+    { name: 'plex', state: 'running', mounts: [
+      { source: '/mnt/frunk/appdata', target: '/config', rw: true, where: { kind: 'pool', name: 'frunk', hdd: false } },
+      { source: '/mnt/trunk/Media', target: '/media', rw: true, where: { kind: 'pool', name: 'trunk', hdd: true } }] },
+  ] };
+  const dom = await load({ ...DOCK, 'containers.json': JSON.stringify(containers) });
+  const d = dom.window.document;
+  const drives = (sel) => [...d.querySelectorAll(`${sel} .drvbtn`)].map((b) => b.dataset.drive);
+  // trunk heeft hier één schijf, dus de baan is de schijf zelf (sdd)
+  assert.ok(drives('#sources .src-sub').includes('d:sdd'), 'Activiteit per bron');
+  assert.ok(drives('#actReads .actdisk .head').includes('d:sdd'), 'Lezen per schijf');
+  assert.ok(drives('#actWrites .actdisk .head').includes('d:sdd'), 'Schrijven per schijf');
+  assert.ok(drives('#rest tbody').includes('d:sdd'), 'Draaitijd en rust');
+  // in het profiel: de schijven en de opslaglabels bij de paden
+  d.querySelector('#sources .srcbtn[data-src="container|plex"]').click();
+  assert.ok(drives('#profileBody .prof-rhythm').includes('d:sdd'));
+  assert.deepEqual(drives('#profileBody .prof-paths'), ['g:frunk', 'g:trunk']);
+  // het label van een gevolgde pool opent die pool
+  d.querySelector('#profileBody .prof-paths .loc[data-drive="g:trunk"]').click();
+  assert.match(text(d.getElementById('profileTitle')), /^trunk /);
+  d.getElementById('profileBack').click();
+  // een pool zonder harde schijven: uitleg en wie ernaar mapt
+  d.querySelector('#profileBody .prof-paths .loc[data-drive="g:frunk"]').click();
+  assert.equal(text(d.getElementById('profileTitle')), 'frunk');
+  assert.match(text(d.getElementById('profileBody')), /frunk heeft geen harde schijven/);
+  assert.match(text(d.getElementById('profileBody')), /Containers die ernaar mappen\s*plex \/mnt\/frunk\/appdata/);
+  dom.window.close();
+});

@@ -33,6 +33,10 @@ Newest first.
 - Tested on an array-less setup with a Btrfs HDD pool (Unraid 7.3.3, pool `trunk` with four HDDs, NVMe pool `frunk` for appdata): the image runs, watches `/mnt/trunk` and logs spin state, file access and container events
 - Documented in `docs/publishing.md` why the image is amd64 only
 
+## 2026-10-19: links to drive pages everywhere
+- The pool/array labels at a container's paths and in the Overview, the drives in a source profile, the line under each source in Activity per source, the drive heading in Reads/Writes per drive and the first column of Spin time and rest per drive all open the drive page
+- A pool without hard drives (such as an NVMe pool) gets a page that says it is not watched and lists the containers that map it
+
 ## 2026-10-19: drive pages from everywhere, period in the dialog, healthcheck examples
 - Drive names in Timeline per drive and in Events open the drive page (a merged pool or the array as a whole, otherwise the single drive)
 - The detail dialog has the period buttons (last hour, 24 hours, 7 days, 30 days, All); they switch the dashboard's period, so the right days are loaded, and recalculate the open page
