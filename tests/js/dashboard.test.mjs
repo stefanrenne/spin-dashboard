@@ -1562,3 +1562,41 @@ test('pool and array tag colours keep white text readable (4.5:1)', () => {
   assert.ok(list.length >= 6);
   for (const c of list) assert.ok(1.05 / (lum(c) + 0.05) >= 4.5, `${c}: ${(1.05 / (lum(c) + 0.05)).toFixed(2)}`);
 });
+
+test('the container profile lists the paths of that container with their location labels', async () => {
+  const containers = { docker: true, containers: [
+    { name: 'plex', state: 'running', project: 'media', mounts: [
+      { source: '/mnt/frunk/appdata', target: '/config', rw: true, where: { kind: 'pool', name: 'frunk', hdd: false } },
+      { source: '/mnt/frunk/appdata', target: '/transcode', rw: true, where: { kind: 'pool', name: 'frunk', hdd: false } },
+      { source: '/mnt/trunk/Media', target: '/media', rw: true, where: { kind: 'pool', name: 'trunk', hdd: true } }] },
+    { name: 'sonarr', state: 'running', project: 'media', mounts: [
+      { source: '/mnt/trunk/Media', target: '/tv', rw: true, where: { kind: 'pool', name: 'trunk', hdd: true } }] },
+  ] };
+  const dom = await load({ ...DOCK, 'containers.json': JSON.stringify(containers) });
+  const d = dom.window.document, w = dom.window;
+  d.querySelector('#sources .srcbtn[data-src="container|plex"]').click();
+  const paths = d.querySelector('#profileBody .prof-paths');
+  assert.equal(text(paths.querySelector('h4')), 'Paden');
+  assert.deepEqual([...paths.querySelectorAll('.map')].map(text), ['/mnt/frunk/appdata frunk', '/mnt/trunk/Media trunk']);
+  // dezelfde kleur als in de instellingen
+  const inProfile = paths.querySelector('.loc').style.getPropertyValue('--c');
+  d.getElementById('profileDone').click();
+  d.getElementById('openSettings').click();
+  const inSettings = [...d.querySelectorAll('#mountList .loc')].find((x) => x.textContent === 'frunk').style.getPropertyValue('--c');
+  assert.equal(inProfile, inSettings);
+  d.getElementById('settingsDone').click();
+  // als Compose-project: de paden van elk lid onder zijn naam
+  const box = d.getElementById('groupCompose');
+  box.checked = true; box.dispatchEvent(new w.Event('change'));
+  d.querySelector('#sources .srcbtn[data-src="container|media"]').click();
+  assert.deepEqual([...d.querySelectorAll('#profileBody .prof-paths .prof-ctr')].map(text), ['plex', 'sonarr']);
+  dom.window.close();
+});
+
+test('a container without known paths has no paths section in its profile', async () => {
+  const dom = await load({ ...DOCK, 'containers.json': JSON.stringify({ docker: true, containers: [] }) });
+  const d = dom.window.document;
+  d.querySelector('#sources .srcbtn[data-src="container|sonarr"]').click();   // geen mounts bekend
+  assert.equal(d.querySelector('#profileBody .prof-paths'), null);
+  dom.window.close();
+});

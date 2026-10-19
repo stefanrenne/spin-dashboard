@@ -36,6 +36,7 @@ Newest first.
 ## 2026-10-19: Paths per container: location labels
 - Each folder gets a label with the pool or "Array" it lives on according to the share settings, both with an arrow when the mover moves it; every pool and the array has its own colour (white text at 4.5:1 or better, checked by a test). The tooltip says when the folder can be on a hard drive
 - The same folder mapped more than once (a volume on several targets) shows once
+- The container profile lists the container's paths with the same labels and colours; for a Compose project the paths of each container under its name
 
 ## 2026-10-18: open the source profile from everywhere
 - Source names in the live feed (the process name stays behind it), the source label next to a cause and in the file list of Events, and the processes in Reads/Writes per drive open the source profile, like in the source cards. A source that does not occur in the selected period (the feed always shows the newest) stays plain text
