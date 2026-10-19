@@ -1220,7 +1220,7 @@ test('container start and stop show on the source timeline, in the profile and b
   const ups = rows(d).filter((x) => /Opgespind/.test(x));
   assert.ok(ups.every((x) => !/radarr/.test(x)), ups.join('\n'));
   d.querySelector('#sources .srcbtn[data-src="container|plex"]').click();
-  assert.match(text(d.getElementById('profileBody')), /Start en stop\s*Start zo/);
+  assert.match(text(d.getElementById('profileBody')), /Start en stop\s*Start \S+ \d+ /);
   dom.window.close();
 });
 
@@ -1245,7 +1245,8 @@ test('settings list the paths each container maps and where they live', async ()
     { name: 'radarr', state: 'running', mounts: [
       { source: '/mnt/disk1/appdata/radarr', target: '/config', rw: true, where: { kind: 'disk', name: 'disk1', hdd: true } }] },
     { name: 'nginx', state: 'exited', mounts: [
-      { source: '/mnt/cache/appdata/nginx', target: '/config', rw: true, where: { kind: 'pool', name: 'cache', hdd: false } }] },
+      { source: '/mnt/cache/appdata/nginx', target: '/config', rw: true, where: { kind: 'pool', name: 'cache', hdd: false } },
+      { source: '/mnt/cache/appdata/nginx', target: '/data', rw: true, where: { kind: 'pool', name: 'cache', hdd: false } }] },   // zelfde map twee keer
     { name: 'empty', state: 'running', mounts: [] },
   ] };
   const dom = await load({ ...DOCK, 'containers.json': JSON.stringify(containers) });
@@ -1254,10 +1255,20 @@ test('settings list the paths each container maps and where they live', async ()
   d.getElementById('openSettings').click();
   const li = (n) => text(d.querySelector(`#mountList li[data-ctr="${n}"]`));
   assert.deepEqual([...d.querySelectorAll('#mountList li')].map((x) => x.dataset.ctr), ['plex', 'radarr', 'nginx']);
-  // alleen het pad, met een HDD-label als het op een harde schijf kan staan (onbekend: geen label)
-  assert.deepEqual([...d.querySelectorAll('#mountList li[data-ctr="plex"] .map')].map(text), ['/mnt/user/appdata/plex HDD', '/mnt/user/Media']);
-  assert.equal(li('radarr'), 'radarr /mnt/disk1/appdata/radarr HDD');
-  assert.equal(li('nginx'), 'nginx (gestopt) /mnt/cache/appdata/nginx');
+  // het pad met de pool of array waar het staat; met de mover beide plekken; onbekend: '?'
+  assert.deepEqual([...d.querySelectorAll('#mountList li[data-ctr="plex"] .map')].map(text), ['/mnt/user/appdata/plex cache → Array', '/mnt/user/Media ?']);
+  assert.equal(li('radarr'), 'radarr /mnt/disk1/appdata/radarr Array');
+  assert.equal(li('nginx'), 'nginx (gestopt) /mnt/cache/appdata/nginx cache');   // dubbele map maar één keer
+  // elke plek een eigen, vaste kleur: dezelfde naam overal dezelfde kleur
+  const colors = {};
+  for (const tg of d.querySelectorAll('#mountList .loc:not(.unknown)')) {
+    const c = tg.style.getPropertyValue('--c');
+    assert.ok(!colors[tg.textContent] || colors[tg.textContent] === c, tg.textContent);
+    colors[tg.textContent] = c;
+  }
+  assert.deepEqual(Object.keys(colors).sort(), ['Array', 'cache']);
+  assert.notEqual(colors.Array, colors.cache);
+  assert.match(d.querySelector('#mountList li[data-ctr="plex"] .loc').title, /cache · kan op een harde schijf staan/);
   // onder de kaartjes
   const order = [...d.querySelectorAll('#settings h3')].map((h) => h.dataset.i18n);
   assert.deepEqual(order.slice(-2), ['cardsTitle', 'mountsTitle']);
@@ -1540,4 +1551,14 @@ test('a process in Reads and Writes per drive opens its profile', async () => {
   assert.ok(d.getElementById('profile').hasAttribute('open'));
   assert.equal(text(d.getElementById('profileTitle')), 'bazarr');
   dom.window.close();
+});
+
+test('pool and array tag colours keep white text readable (4.5:1)', () => {
+  const list = HTML.match(/const LOC_COLORS = \[([^\]]+)\]/)[1].match(/#[0-9A-Fa-f]{6}/g);
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  assert.ok(list.length >= 6);
+  for (const c of list) assert.ok(1.05 / (lum(c) + 0.05) >= 4.5, `${c}: ${(1.05 / (lum(c) + 0.05)).toFixed(2)}`);
 });

@@ -33,6 +33,10 @@ Newest first.
 - Tested on an array-less setup with a Btrfs HDD pool (Unraid 7.3.3, pool `trunk` with four HDDs, NVMe pool `frunk` for appdata): the image runs, watches `/mnt/trunk` and logs spin state, file access and container events
 - Documented in `docs/publishing.md` why the image is amd64 only
 
+## 2026-10-19: Paths per container: location labels
+- Each folder gets a label with the pool or "Array" it lives on according to the share settings, both with an arrow when the mover moves it; every pool and the array has its own colour (white text at 4.5:1 or better, checked by a test). The tooltip says when the folder can be on a hard drive
+- The same folder mapped more than once (a volume on several targets) shows once
+
 ## 2026-10-18: open the source profile from everywhere
 - Source names in the live feed (the process name stays behind it), the source label next to a cause and in the file list of Events, and the processes in Reads/Writes per drive open the source profile, like in the source cards. A source that does not occur in the selected period (the feed always shows the newest) stays plain text
 
