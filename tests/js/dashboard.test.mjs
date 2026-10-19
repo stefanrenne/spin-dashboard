@@ -44,6 +44,8 @@ function load(files, url = 'http://dash/?lang=nl', languages = ['en-US'], stored
   return new Promise((resolve) => setTimeout(() => resolve(dom), 300));
 }
 const text = (el) => el.textContent.replace(/\s+/g, ' ').trim();
+// wachten tot iets klopt (een periodewissel is asynchroon); hooguit 2 s, daarna beslist de assert
+const until = async (ok, ms = 2000) => { for (const end = Date.now() + ms; !ok() && Date.now() < end;) await new Promise((r) => setTimeout(r, 20)); };
 // naam van een kaartje in de instellingen, zonder de positie die alleen voor schermlezers is
 const cardName = (label) => [...label.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
 const rows = (doc) => [...doc.querySelectorAll('#events tr')].map(text);
@@ -416,7 +418,7 @@ test('last hour toggle narrows the window and shows minute ticks', async () => {
   const dom = await load(RW);
   const d = dom.window.document, w = dom.window;
   d.querySelector('[data-range="h"]').click();
-  await new Promise((r) => setTimeout(r, 50));
+  await until(() => rows(d).filter((x) => /Opgespind|Naar standby/.test(x)).length === 0);
   assert.equal(d.querySelector('[data-range="h"]').getAttribute('aria-pressed'), 'true');
   // gebeurtenissen ouder dan een uur vallen buiten de tabel
   const r = rows(d);
@@ -470,7 +472,7 @@ test('a streamed who line appears in the feed immediately', async () => {
   const before = d.querySelectorAll('#feed li').length;
   // simuleer een event dat de server net heeft gelogd
   w.__push(`${Math.floor(Date.now() / 1000)},who,container,radarr,99,geschreven,/mnt/trunk/appdata/radarr/radarr.db`);
-  await new Promise((r) => setTimeout(r, 50));
+  await until(() => /radarr\.db/.test(d.getElementById('feed').textContent));
   const items = [...d.querySelectorAll('#feed li')];
   assert.ok(items.length > before, 'feed groeit zonder te wachten op de minuten-fetch');
   assert.match(text(items[0]), /radarr\.db/);          // nieuwste bovenaan
@@ -983,7 +985,7 @@ test('key figures say when there is no previous period to compare with', async (
   assert.equal(d.querySelectorAll('.k-cmp').length, 0);
   assert.equal(d.getElementById('kpiNote').textContent, 'Nog te weinig geschiedenis om met de vorige periode te vergelijken.');
   d.querySelector('[data-range="all"]').click();          // "alles" heeft geen vorige periode, en dat is geen gebrek
-  await new Promise((r) => setTimeout(r, 100));
+  await until(() => d.getElementById('kpiNote').textContent === '');
   assert.equal(d.getElementById('kpiNote').textContent, '');
   dom.window.close();
 });
@@ -1009,7 +1011,7 @@ test('the previous-hour button reads "Vorig uur" in Dutch', async () => {
   const dom = await load(POOL);
   const d = dom.window.document;
   d.querySelector('[data-range="h"]').click();
-  await new Promise((r) => setTimeout(r, 100));
+  await until(() => d.getElementById('prev').getAttribute('aria-label') === 'Vorig uur');
   assert.equal(d.getElementById('prev').getAttribute('aria-label'), 'Vorig uur');
   dom.window.close();
 });
@@ -1034,9 +1036,9 @@ test('the feed merges repeats, names an unknown source and says it ignores the p
   assert.match(items.find((x) => /x\.log/.test(x)), /Onbekend/);
   assert.equal(d.getElementById('feedNote').textContent, '');
   d.querySelector('[data-range="h"]').click();          // een uur terug kan: daar is data
-  await new Promise((r) => setTimeout(r, 100));
+  await until(() => d.getElementById('prev').getAttribute('aria-label') === 'Vorig uur' && !d.getElementById('prev').disabled);
   d.getElementById('prev').click();
-  await new Promise((r) => setTimeout(r, 100));
+  await until(() => d.getElementById('feedNote').textContent !== '');
   assert.equal(d.getElementById('feedNote').textContent, 'Altijd de nieuwste gebeurtenissen, welke periode je ook kiest.');
   dom.window.close();
 });
@@ -1080,7 +1082,7 @@ test('demo data is long enough to compare a week with the week before', async ()
   const dom = await load({}, 'http://dash/?demo&lang=nl');
   const d = dom.window.document;
   d.querySelector('[data-range="7"]').click();
-  await new Promise((r) => setTimeout(r, 100));
+  await until(() => d.getElementById('kpiNote').textContent === '' && !!kpi(d, 'kpiUps').querySelector('.k-cmp'));
   assert.equal(d.getElementById('kpiNote').textContent, '');
   assert.match(text(kpi(d, 'kpiUps').querySelector('.k-cmp')), /Vorige week: \d+$/);
   dom.window.close();
@@ -1534,7 +1536,8 @@ test('a feed source outside the selected period stays plain text', async () => {
   const dom = await load(DOCK);
   const d = dom.window.document;
   d.querySelector('[data-range="h"]').click();             // laatste uur: plex las 95 min geleden, valt erbuiten
-  await new Promise((r) => setTimeout(r, 100));
+  await until(() => d.querySelector('[data-range="h"]').getAttribute('aria-pressed') === 'true'
+    && ![...d.querySelectorAll('#feed li')].some((x) => /c\.mkv/.test(text(x)) && x.querySelector('.srcbtn')));
   const li = [...d.querySelectorAll('#feed li')].find((x) => /c\.mkv/.test(text(x)));
   assert.equal(li.querySelector('.fs .srcbtn'), null);
   assert.equal(text(li.querySelector('.fs')), 'plex');
