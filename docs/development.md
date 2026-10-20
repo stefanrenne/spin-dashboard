@@ -37,10 +37,13 @@ start, which is a quick way to try the dashboard on real data. For the frontend 
 UI follows the browser language or the last chosen language (`localStorage`, key `spindash.lang`).
 The card layout from Settings is stored per browser under `spindash.cards`: a JSON list of
 `{id, hidden, size}` in display order (`size` is `half` or `full`; missing or unknown means the card's default,
-from `data-half` in the HTML) (ids `kpi`, `lanes`, `days`, `hist`, `causes`, `src`, `actR`, `actW`, `rest`, `feed`, `events`); unknown ids are
+from `data-half` in the HTML) (ids `kpi`, `lanes:<pool>`, `days`, `hist`, `causes`, `src`, `actR`, `actW`, `rest`, `feed`, `events`); unknown ids are
 ignored and missing cards are added at the end. The old id `act` (one Active drives card, before the split) is read as
-`actR` and `actW` in its place, with the same `hidden`. On a wide screen every card with `data-half`
-(by default all but `kpi`, `lanes`, `srcLanes` and `events`; Settings can make any card small or large) takes
+`actR` and `actW` in its place, with the same `hidden`. The timeline is one card per pool and the array, `lanes:array`,
+`lanes:cache`, …; the old single id `lanes` marks where they go: when the data is loaded every pool without a card gets one
+there (or after the last timeline card), with the `hidden` and `size` of the old card, and `lanes` is dropped. The card of a
+pool that is no longer in the data stays in the list but is not shown. This only concerns `localStorage`, not `DATA_DIR`. On a wide screen every card with `data-half`
+(by default all but `kpi`, the timeline cards, `srcLanes` and `events`; Settings can make any card small or large) takes
 half the width, and two small cards in a row sit side by side; below 820px every card is full width.
 `cardLayout()` computes where each card lands (full, left, right, or alone in its row) for the icons in Settings.
 Key figures, Spin-ups per day, Spin-ups per hour of day (at least the last 7 days) and Spin time and rest per drive are

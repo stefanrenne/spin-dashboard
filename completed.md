@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-10-20: activity on every drive, SSDs included, and a timeline per pool
+- The poller names every drive Unraid knows with its kind (`hdd`/`ssd` in the `disk` lines) and writes what every drive read and wrote per poll (`io` lines, from `/sys/block/<dev>/stat`, which never wakes a drive). While every HDD sleeps these lines wait in memory and are served along with the day file, so a busy SSD never makes the dashboard keep a drive awake
+- "Timeline per drive" is one card per pool and the array, each hidden, moved and resized on its own; an old layout puts them where the single card was. HDD lanes show the data read and written below the spin wave, SSD lanes a read/write graph with totals. SSDs stay out of the spin figures, quiet hours and causes
+- Settings › File access on SSD pools: per SSD pool, follow which file is opened by whom (`ssd_watch`, off by default); it then also shows in Reads/Writes per drive and in the sources
+- The overview and the drive pages cover SSD pools and drives too: read, written, the busiest minute and a read/write graph; HDD pages show their reads and writes as well
+- Additive changes to the day files and the settings file, recorded under "Migrations by change"; screenshots refreshed
+
 ## 2026-10-18: quiet hours
 - Settings › Quiet hours: a window (may run over midnight) for all drives or chosen pools / the array, saved on the server (`quiet` in the settings file). The timeline per drive shades it and spin-ups inside it get a "quiet hours" label in Events
 - Optional webhook: the poller POSTs a JSON message on a spin-up in quiet hours (at most once per lane per 10 minutes, in its own thread), with a "Send a test" button (`/data/notify-test`). Unraid's own notifications are not used, see `docs/decisions.md`

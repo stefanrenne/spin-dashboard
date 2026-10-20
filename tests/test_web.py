@@ -127,6 +127,21 @@ def test_unchanged_day_gives_304(server, sd):
     assert status == 200 and gzip.decompress(body).count(b"\n") == 2
 
 
+def test_day_file_includes_io_lines_that_wait_in_memory(server, sd):
+    """io lines are not written while every HDD sleeps, but the dashboard sees them anyway."""
+    _, _, h = fetch(server + "/data/days/2026-10-09.csv", **{"Accept-Encoding": "gzip"})
+    sd.io_pending.extend(["1791496860,io,nvme0n1,4,8,1,2", "1791583260,io,nvme0n1,1,1,1,1"])   # today, tomorrow
+    status, body, h2 = fetch(server + "/data/days/2026-10-09.csv",
+                             **{"Accept-Encoding": "gzip", "If-None-Match": h["ETag"]})
+    assert status == 200 and h2["ETag"] != h["ETag"]
+    assert gzip.decompress(body) == b"1791496800,spin,sdd,active\n1791496860,io,nvme0n1,4,8,1,2\n"
+    status, body, _ = fetch(server + "/data/days/2026-10-09.csv",
+                            **{"Accept-Encoding": "gzip", "If-None-Match": h2["ETag"]})
+    assert status == 304
+    sd.io_pending.append("1791496920,io,nvme0n1,1,0,1,0")                    # a new one: 200 again
+    assert fetch(server + "/data/days/2026-10-09.csv", **{"If-None-Match": h2["ETag"]})[0] == 200
+
+
 # ---------- settings (hidden paths) ----------
 def post(url, body, content_type="application/json"):
     data = body if isinstance(body, bytes) else json.dumps(body).encode()

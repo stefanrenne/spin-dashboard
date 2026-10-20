@@ -28,6 +28,7 @@ def sd(tmp_path, monkeypatch):
     monkeypatch.setattr(spindash, "threads", {})
     monkeypatch.setattr(spindash, "_fd_snap", {"t": 0.0, "by_name": {}})
     monkeypatch.setattr(spindash, "notified", {})
+    monkeypatch.setattr(spindash, "io_pending", [])
     monkeypatch.setattr(spindash, "_containers_cache", {"t": 0.0, "body": None})
     monkeypatch.setenv("TZ", "Europe/Amsterdam")      # fixed days and day start for the tests
     time.tzset()
@@ -56,6 +57,12 @@ def make_disk(tmp_path, dev, rotational=True):
     q = tmp_path / "sys" / dev / "queue"
     q.mkdir(parents=True)
     (q / "rotational").write_text("1\n" if rotational else "0\n")
+
+
+def set_io(tmp_path, dev, rd_sectors, wr_sectors, rd_ops, wr_ops):
+    """/sys/block/<dev>/stat with the given counters (the other fields zero)."""
+    f = [rd_ops, 0, rd_sectors, 0, wr_ops, 0, wr_sectors, 0, 0, 0, 0]
+    (tmp_path / "sys" / dev / "stat").write_text(" ".join(f"{x:8d}" for x in f) + "\n")
 
 
 def make_proc(tmp_path, pid, comm, ppid=1, cgroup="0::/\n"):

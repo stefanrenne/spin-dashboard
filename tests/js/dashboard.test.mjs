@@ -72,7 +72,8 @@ test('missing data shows a status message instead of the dashboard', async () =>
 test('demo mode renders lanes for every disk', async () => {
   const dom = await load({}, 'http://dash/?demo&lang=nl', ['en-US'], null, (w) => w.localStorage.setItem('spindash.group', JSON.stringify({ merge: false })));
   const d = dom.window.document;
-  assert.equal(d.querySelectorAll('.lane').length, 6);
+  assert.equal(d.querySelectorAll('[data-card="lanes:array"] .lane').length, 6);
+  assert.equal(d.querySelectorAll('[data-card="lanes:cache"] .lane.io').length, 2);   // and the SSDs of the cache pool
   assert.match(d.getElementById('sourceLine').textContent, /Voorbeelddata/);
   dom.window.close();
 });
@@ -623,7 +624,7 @@ test('histogram bars and info icons carry text for screen readers', async () => 
   assert.equal(bars.length, 24);
   assert.ok(bars.every((b) => b.getAttribute('role') === 'img' && /spin-ups$/.test(b.getAttribute('aria-label'))));
   assert.equal(d.getElementById('histLabels').getAttribute('aria-hidden'), 'true');
-  assert.equal(d.getElementById('axis').getAttribute('aria-hidden'), 'true');
+  assert.equal(d.querySelector('#dash > .lanes .axis').getAttribute('aria-hidden'), 'true');
   const info = d.querySelector('#causes .info');
   assert.match(d.getElementById(info.getAttribute('aria-describedby')).textContent, /^Root van een pool betekent/);
   dom.window.close();
@@ -652,7 +653,7 @@ test('the settings button opens a dialog with the language choice and the card l
   assert.ok(d.getElementById('settings').hasAttribute('open'));
   assert.equal(gear.getAttribute('aria-expanded'), 'true');
   const names = [...d.querySelectorAll('#cardList li label')].map(cardName);
-  assert.deepEqual(names, ['Kerncijfers', 'Tijdlijn per schijf', 'Tijdlijn per bron', 'Spin-ups per dag', 'Spin-ups per uur van de dag',
+  assert.deepEqual(names, ['Kerncijfers', 'Tijdlijn per schijf · trunk', 'Tijdlijn per bron', 'Spin-ups per dag', 'Spin-ups per uur van de dag',
     'Oorzaken van spin-ups per map', 'Wakker gehouden per bron', 'Activiteit per bron', 'Ritme per bron',
     'Lezen per schijf', 'Schrijven per schijf', 'Draaitijd en rust per schijf', 'Live activiteit', 'Gebeurtenissen']);
   d.getElementById('settingsDone').click();
@@ -664,13 +665,13 @@ test('the settings button opens a dialog with the language choice and the card l
 test('cards can be hidden and moved, and the layout is remembered', async () => {
   const dom = await load(POOL);
   const d = dom.window.document, w = dom.window;
-  assert.deepEqual(cardOrder(d), ['kpi', 'lanes', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed', 'events']);
+  assert.deepEqual(cardOrder(d), ['kpi', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed', 'events']);
   d.getElementById('openSettings').click();
   const box = d.querySelector('#cardList li[data-card="actR"] input');
   box.checked = false; box.dispatchEvent(new w.Event('change', { bubbles: true }));
   assert.equal(d.querySelector('#dash > [data-card="actR"]').hidden, true);
   d.querySelector('#cardList li[data-card="events"] [data-move="-1"]').click();   // events one up
-  assert.deepEqual(cardOrder(d), ['kpi', 'lanes', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actW', 'rest', 'events', 'feed']);
+  assert.deepEqual(cardOrder(d), ['kpi', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actW', 'rest', 'events', 'feed']);
   assert.equal(d.activeElement, d.querySelector('#cardList li[data-card="events"] [data-move="-1"]'));
   assert.equal(d.getElementById('cardLive').textContent, 'Gebeurtenissen: plaats 13 van 14');
   for (let i = 0; i < 4; i++) d.querySelector('#cardList li[data-card="hist"] [data-move="-1"]').click();   // the histogram to the top
@@ -680,7 +681,7 @@ test('cards can be hidden and moved, and the layout is remembered', async () => 
   dom.window.close();
 
   const again = await load(POOL, 'http://dash/?lang=nl', ['en-US'], null, (w2) => w2.localStorage.setItem('spindash.cards', saved));
-  assert.deepEqual(cardOrder(again.window.document), ['hist', 'kpi', 'lanes', 'srcLanes', 'days', 'causes', 'awake', 'src', 'rhythm', 'actW', 'rest', 'events', 'feed']);
+  assert.deepEqual(cardOrder(again.window.document), ['hist', 'kpi', 'lanes:trunk', 'srcLanes', 'days', 'causes', 'awake', 'src', 'rhythm', 'actW', 'rest', 'events', 'feed']);
   again.window.close();
 });
 
@@ -688,10 +689,10 @@ test('a saved layout with unknown or missing cards still shows every known card'
   const stored = JSON.stringify([{ id: 'feed' }, { id: 'nope' }, { id: 'feed', hidden: true }, { id: 'hist', hidden: true }]);
   const dom = await load(POOL, 'http://dash/?lang=nl', ['en-US'], null, (w) => w.localStorage.setItem('spindash.cards', stored));
   const d = dom.window.document;
-  assert.deepEqual(cardOrder(d), ['feed', 'kpi', 'lanes', 'srcLanes', 'days', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'events']);
+  assert.deepEqual(cardOrder(d), ['feed', 'kpi', 'lanes:trunk', 'srcLanes', 'days', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'events']);
   d.getElementById('openSettings').click();
   d.getElementById('resetCards').click();
-  assert.deepEqual(cardOrder(d), ['kpi', 'lanes', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed', 'events']);
+  assert.deepEqual(cardOrder(d), ['kpi', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed', 'events']);
   assert.equal(dom.window.localStorage.getItem('spindash.cards'), null);
   dom.window.close();
 });
@@ -701,7 +702,7 @@ test('a saved layout with the old Active drives card gets the reading and writin
   const dom = await load(POOL, 'http://dash/?lang=nl', ['en-US'], null, (w) => w.localStorage.setItem('spindash.cards', stored));
   const d = dom.window.document;
   assert.deepEqual([...d.querySelectorAll('#dash > [data-card]')].map((el) => el.dataset.card),
-    ['actR', 'actW', 'lanes', 'events', 'hist', 'causes', 'feed', 'kpi', 'srcLanes', 'days', 'awake', 'src', 'rhythm', 'rest']);
+    ['actR', 'actW', 'lanes:trunk', 'events', 'hist', 'causes', 'feed', 'kpi', 'srcLanes', 'days', 'awake', 'src', 'rhythm', 'rest']);
   assert.equal(d.querySelector('#dash > [data-card="actR"]').hidden, true);   // hidden stays hidden
   assert.equal(d.querySelector('#dash > [data-card="actW"]').hidden, true);
   dom.window.close();
@@ -797,11 +798,11 @@ test('cards can be dragged into a new order by their handle', async () => {
   ev('pointermove', grip, 50);    // between the first and second row
   assert.equal(w.localStorage.getItem('spindash.cards'), null);
   ev('pointerup', d, 50);
-  assert.deepEqual(cardOrder(d), ['kpi', 'events', 'lanes', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
-  assert.deepEqual([...d.querySelectorAll('#cardList li')].map((li) => li.dataset.card), ['kpi', 'events', 'lanes', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
+  assert.deepEqual(cardOrder(d), ['kpi', 'events', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
+  assert.deepEqual([...d.querySelectorAll('#cardList li')].map((li) => li.dataset.card), ['kpi', 'events', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
   assert.ok(!d.querySelector('#cardList .dragging'));
   assert.equal(d.getElementById('cardLive').textContent, 'Gebeurtenissen: plaats 2 van 14');
-  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.cards')).map((c) => c.id), ['kpi', 'events', 'lanes', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.cards')).map((c) => c.id), ['kpi', 'events', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
   // the handle is outside the label: dragging does not toggle the card
   assert.ok(!d.querySelector('#cardList li label .grip'));
   dom.window.close();
@@ -810,8 +811,8 @@ test('cards can be dragged into a new order by their handle', async () => {
 test('the timeline card has a heading like the other cards', async () => {
   const dom = await load(POOL);
   const d = dom.window.document;
-  const card = d.querySelector('#dash > [data-card="lanes"]');
-  assert.equal(text(card.querySelector('h2')), 'Tijdlijn per schijf');
+  const card = d.querySelector('#dash > [data-card="lanes:trunk"]');
+  assert.equal(text(card.querySelector('h2')), 'Tijdlijn per schijf · trunk');
   assert.equal(d.getElementById(card.getAttribute('aria-labelledby')), card.querySelector('h2'));
   dom.window.close();
 });
@@ -1141,7 +1142,7 @@ test('the timeline per source draws every access as a tick under the spinning ba
   assert.equal((plex.querySelector('.tw').getAttribute('d').match(/M/g) || []).length, 2);
   assert.equal(plex.querySelector('.tr').getAttribute('d'), '');
   assert.ok(plex.querySelector('.band').getAttribute('d').length > 0);
-  assert.equal(d.getElementById('srcAxis').innerHTML, d.getElementById('axis').innerHTML);
+  assert.equal(d.getElementById('srcAxis').innerHTML, d.querySelector('#dash > .lanes .axis').innerHTML);
   dom.window.close();
 });
 
@@ -1341,7 +1342,7 @@ test('the card list shows which cards are small or large and which sit side by s
   const dom = await load(POOL);
   const d = dom.window.document;
   d.getElementById('openSettings').click();
-  assert.deepEqual(posOf(d), { kpi: 'full', lanes: 'full', srcLanes: 'full', days: 'left', hist: 'right', causes: 'left', awake: 'right',
+  assert.deepEqual(posOf(d), { kpi: 'full', 'lanes:trunk': 'full', srcLanes: 'full', days: 'left', hist: 'right', causes: 'left', awake: 'right',
     src: 'left', rhythm: 'right', actR: 'left', actW: 'right', rest: 'left', feed: 'right', events: 'full' });
   const li = (id) => d.querySelector(`#cardList li[data-card="${id}"]`);
   assert.ok(li('days').classList.contains('pair-l') && li('hist').classList.contains('pair-r'));
@@ -1520,8 +1521,8 @@ test('quiet hours from the server shade the timeline and mark spin-ups inside th
   const quiet = { from: hhmmOf(now - 125 * 60e3), to: hhmmOf(now - 110 * 60e3), drives: [] };
   const dom = await load({ ...DOCK, 'settings.json': JSON.stringify({ hide: [], quiet, webhook: 'https://ntfy.example/x' }) });
   const d = dom.window.document;
-  assert.ok(d.querySelector('#laneList .trace .quiet').getAttribute('d').length > 0);
-  assert.equal(d.getElementById('legQuiet').hidden, false);
+  assert.ok(d.querySelector('.laneList .trace .quiet').getAttribute('d').length > 0);
+  assert.equal(d.querySelector('#dash > .lanes .leg-quiet').hidden, false);
   const ups = [...d.querySelectorAll('#events tr')].filter((tr) => /Opgespind/.test(text(tr)));
   assert.equal(ups.length, 2);
   assert.equal(ups.filter((tr) => tr.querySelector('.quiet-tag')).length, 1);
@@ -1538,7 +1539,7 @@ test('quiet hours apply only to the chosen drives and are saved on the server', 
   const quiet = { from: hhmmOf(now - 125 * 60e3), to: hhmmOf(now - 110 * 60e3), drives: ['array'] };   // trunk does not take part
   const dom = await load({ ...DOCK, 'settings.json': JSON.stringify({ hide: [], quiet }), POSTREPLY: { 'notify-test': { ok: true, status: 200 } } });
   const d = dom.window.document, w = dom.window;
-  assert.equal(d.querySelector('#laneList .trace .quiet').getAttribute('d'), '');
+  assert.equal(d.querySelector('.laneList .trace .quiet').getAttribute('d'), '');
   assert.equal(d.querySelectorAll('#events .quiet-tag').length, 0);
   d.getElementById('openSettings').click();
   const box = d.querySelector('#quietLanes input[value="trunk"]');
@@ -1654,7 +1655,7 @@ test('a drive name in the timeline and in Events opens the drive page', async ()
   const dom = await load(POOL);
   const d = dom.window.document, w = dom.window;
   // merged (default): the lane is the pool as a whole
-  d.querySelector('#laneList .lane-name .drvbtn').click();
+  d.querySelector('.laneList .lane-name .drvbtn').click();
   assert.match(text(d.getElementById('profileTitle')), /^trunk /);
   assert.equal(d.querySelectorAll('#profileBody tr[data-dev]').length, 2);
   d.getElementById('profileDone').click();
@@ -1665,7 +1666,7 @@ test('a drive name in the timeline and in Events opens the drive page', async ()
   const box = d.getElementById('groupDrives');
   box.checked = false; box.dispatchEvent(new w.Event('change'));
   d.getElementById('settingsDone').click();
-  assert.deepEqual([...d.querySelectorAll('#laneList .lane-name .drvbtn')].map((b) => b.dataset.drive), ['d:sdd', 'd:sde']);
+  assert.deepEqual([...d.querySelectorAll('.laneList .lane-name .drvbtn')].map((b) => b.dataset.drive), ['d:sdd', 'd:sde']);
   d.querySelector('#events td.disks .drvbtn[data-drive="d:sde"]').click();
   assert.match(text(d.getElementById('profileTitle')), /^trunk2 sde /);
   dom.window.close();
@@ -1714,7 +1715,7 @@ test('every place that names a drive, pool or the array links to its page', asyn
   // a pool without hard drives: explanation and who maps it
   d.querySelector('#profileBody .prof-paths .loc[data-drive="g:frunk"]').click();
   assert.equal(text(d.getElementById('profileTitle')), 'frunk');
-  assert.match(text(d.getElementById('profileBody')), /frunk heeft geen harde schijven/);
+  assert.match(text(d.getElementById('profileBody')), /Het dashboard kent geen schijven van frunk/);
   assert.match(text(d.getElementById('profileBody')), /Containers die ernaar mappen\s*plex \/mnt\/frunk\/appdata/);
   dom.window.close();
 });
@@ -1747,5 +1748,140 @@ test('the detail dialog steps a period back and forward without moving the dashb
   d.getElementById('profileDone').click();
   d.getElementById('openInfo').click();                                   // a new dialog starts at the dashboard's period
   assert.equal(d.querySelector('[data-drange="1"]').getAttribute('aria-pressed'), 'true');
+  dom.window.close();
+});
+
+// ---------- SSDs: reads and writes, one timeline card per pool ----------
+const SSD = served({ [today]: [
+  `${ep(300)},disk,nvme0n1,cache,ssd`, `${ep(300)},disk,nvme1n1,cache2,ssd`, `${ep(300)},disk,sdd,trunk,hdd`,
+  `${ep(300)},state,sdd,standby`,
+  `${ep(130)},io,sdd,4096,0,8,0`,
+  `${ep(121)},who,container,bazarr,2,geopend,/mnt/trunk/Media/series/a.mkv`,
+  `${ep(120)},spin,sdd,active`, `${ep(60)},spin,sdd,standby`,
+  `${ep(90)},io,nvme0n1,1024,2048,10,20`, `${ep(30)},io,nvme0n1,0,1048576,0,300`, `${ep(30)},io,nvme1n1,512,0,4,0`,
+] });
+
+test('every pool gets its own timeline card, and an SSD lane shows reads and writes instead of spinning', async () => {
+  const dom = await load(SSD);
+  const d = dom.window.document;
+  assert.deepEqual(cardOrder(d).slice(0, 3), ['kpi', 'lanes:cache', 'lanes:trunk']);
+  const cache = d.querySelector('#dash > [data-card="lanes:cache"]');
+  assert.equal(text(cache.querySelector('h2')), 'Tijdlijn per schijf · cache');
+  assert.equal(d.getElementById(cache.getAttribute('aria-labelledby')), cache.querySelector('h2'));
+  // merged (default): one lane for both SSDs of the pool, with what they read and wrote together
+  assert.deepEqual(laneNames(cache), ['cache nvme0n1, nvme1n1']);
+  assert.ok(cache.querySelector('.lane.io'));
+  assert.equal(text(cache.querySelector('.lane-stats')), '1,5 MB gelezen 1 GB geschreven');
+  assert.equal(cache.querySelector('.iotrace').getAttribute('aria-label'), 'cache: 1,5 MB gelezen · 1 GB geschreven');
+  assert.ok(cache.querySelector('.iow').getAttribute('d').length > 0);
+  assert.ok(cache.querySelectorAll('.leg-spin').length && [...cache.querySelectorAll('.leg-spin')].every((x) => x.hidden));
+  // the HDD keeps its spin lane, with its reads as a thin layer
+  const trunk = d.querySelector('#dash > [data-card="lanes:trunk"]');
+  assert.match(trunk.querySelector('.trace').getAttribute('aria-label'), /^trunk: 1 spin-ups/);
+  assert.ok(trunk.querySelector('.ior').getAttribute('d').length > 0);
+  // SSDs do not count as drives that spin: summary, key figures and quiet hours are about the HDD
+  assert.match(d.getElementById('sourceLine').textContent, /^1 schijv/);
+  assert.equal(text(d.querySelector('#kpis .kpi .k-val')), '1');
+  d.getElementById('openSettings').click();
+  assert.deepEqual([...d.querySelectorAll('#quietLanes input')].map((i) => i.value), ['trunk']);
+  assert.deepEqual([...d.querySelectorAll('#cardList li label')].map(cardName).slice(0, 3),
+    ['Kerncijfers', 'Tijdlijn per schijf · cache', 'Tijdlijn per schijf · trunk']);
+  dom.window.close();
+});
+
+test('separate drives give every SSD its own lane', async () => {
+  const dom = await load(SSD, 'http://dash/?lang=nl', ['en-US'], null, (w) => w.localStorage.setItem('spindash.group', JSON.stringify({ merge: false })));
+  const d = dom.window.document;
+  const cache = d.querySelector('#dash > [data-card="lanes:cache"]');
+  assert.deepEqual(laneNames(cache), ['cache nvme0n1', 'cache2 nvme1n1']);
+  assert.deepEqual([...cache.querySelectorAll('.drvbtn')].map((b) => b.dataset.drive), ['d:nvme0n1', 'd:nvme1n1']);
+  dom.window.close();
+});
+
+test('an old layout with one timeline card puts the card of every pool in its place, hidden if it was hidden', async () => {
+  const stored = JSON.stringify([{ id: 'events' }, { id: 'lanes', hidden: true, size: 'half' }, { id: 'kpi' }]);
+  const dom = await load(SSD, 'http://dash/?lang=nl', ['en-US'], null, (w) => w.localStorage.setItem('spindash.cards', stored));
+  const d = dom.window.document, w = dom.window;
+  assert.deepEqual([...d.querySelectorAll('#dash > [data-card]')].map((el) => el.dataset.card).slice(0, 4), ['events', 'lanes:cache', 'lanes:trunk', 'kpi']);
+  assert.ok(d.querySelector('[data-card="lanes:cache"]').hidden && d.querySelector('[data-card="lanes:trunk"]').hidden);
+  assert.ok(d.querySelector('[data-card="lanes:trunk"]').hasAttribute('data-half'));
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.cards')).map((c) => c.id).slice(0, 4), ['events', 'lanes:cache', 'lanes:trunk', 'kpi']);
+  dom.window.close();
+});
+
+test('the card of a pool that is gone stays in the layout but is not shown', async () => {
+  const stored = JSON.stringify([{ id: 'kpi' }, { id: 'lanes:old' }, { id: 'lanes:trunk', hidden: true }]);
+  const dom = await load(POOL, 'http://dash/?lang=nl', ['en-US'], null, (w) => w.localStorage.setItem('spindash.cards', stored));
+  const d = dom.window.document;
+  assert.ok(!d.querySelector('#dash > [data-card="lanes:old"]'));
+  assert.equal(d.querySelector('#dash > [data-card="lanes:trunk"]').hidden, true);
+  d.getElementById('openSettings').click();
+  assert.ok(!d.querySelector('#cardList li[data-card="lanes:old"]'));
+  d.querySelector('#cardList li[data-card="lanes:trunk"] [data-move="-1"]').click();
+  assert.deepEqual(JSON.parse(dom.window.localStorage.getItem('spindash.cards')).map((c) => c.id).slice(0, 3), ['lanes:trunk', 'lanes:old', 'kpi']);   // it keeps its place
+  dom.window.close();
+});
+
+const tilesOf = (d) => [...d.querySelectorAll('#profileBody .kpi')].map((k) => `${text(k.querySelector('.k-label'))} ${text(k.querySelector('.k-val'))}`);
+test('an SSD pool has a detail page with what it read and wrote', async () => {
+  const dom = await load(SSD);
+  const d = dom.window.document;
+  d.querySelector('#dash > [data-card="lanes:cache"] .drvbtn').click();
+  assert.equal(text(d.getElementById('profileTitle')), 'cache SSD');
+  assert.deepEqual(tilesOf(d), ['Gelezen 1,5 MB', 'Geschreven 1 GB', 'Drukste minuut 1 GB']);
+  assert.ok(d.querySelector('#profileBody .io-graph .iow').getAttribute('d').length > 0);
+  assert.deepEqual([...d.querySelectorAll('#profileBody tr[data-dev]')].map((tr) => tr.dataset.dev), ['nvme0n1', 'nvme1n1']);
+  assert.match(text(d.getElementById('profileBody')), /wordt niet bijgehouden/);       // file access is off for this pool
+  assert.doesNotMatch(text(d.getElementById('profileBody')), /Wat hem wekte/);          // an SSD is never woken
+  // one SSD on its own
+  d.querySelector('#profileBody tr[data-dev="nvme1n1"] .drvbtn').click();
+  assert.equal(text(d.getElementById('profileTitle')), 'cache2 nvme1n1 SSD');
+  assert.deepEqual(tilesOf(d).slice(0, 2), ['Gelezen 512 KB', 'Geschreven 0 KB']);
+  dom.window.close();
+});
+
+test('the overview lists SSD pools with their reads and writes, and a HDD page shows its reads too', async () => {
+  const dom = await load(SSD);
+  const d = dom.window.document;
+  d.getElementById('openInfo').click();
+  const cache = d.querySelector('#profileBody .ov-group[data-group="cache"]');
+  assert.match(text(cache.querySelector('.ov-row')), /^cache SSD 1,5 MB gelezen · 1 GB geschreven/);
+  assert.deepEqual([...cache.querySelectorAll('li')].map((li) => li.dataset.dev), ['nvme0n1', 'nvme1n1']);
+  d.querySelector('#profileBody .drvbtn[data-drive="g:trunk"]').click();
+  assert.deepEqual(tilesOf(d).slice(-2), ['Gelezen 4 MB', 'Geschreven 0 KB']);
+  assert.equal(tilesOf(d).length, 6);                                    // spin-ups, active, hours, rest + the two
+  dom.window.close();
+});
+
+test('file access on SSD pools can be switched on per pool and is saved on the server', async () => {
+  const dom = await load({ ...SSD, 'settings.json': JSON.stringify({ hide: [], ssd_watch: [] }) });
+  const d = dom.window.document, w = dom.window;
+  d.getElementById('openSettings').click();
+  const box = d.querySelector('#ssdLanes input[value="cache"]');
+  assert.deepEqual([...d.querySelectorAll('#ssdLanes input')].map((i) => i.value), ['cache']);
+  assert.equal(box.checked, false);
+  box.checked = true; box.dispatchEvent(new w.Event('change', { bubbles: true }));
+  await until(() => w.__posts.length);
+  await new Promise((r) => setTimeout(r, 20));                           // the reply of the save
+  assert.deepEqual(w.__posts[0], { url: 'data/settings.json', type: 'application/json', body: { ssd_watch: ['cache'] } });
+  assert.equal(d.getElementById('ssdStatus').textContent, '');
+  // switched on: the detail page no longer says that nothing is recorded
+  d.getElementById('settingsDone').click();
+  d.querySelector('#dash > [data-card="lanes:cache"] .drvbtn').click();
+  assert.doesNotMatch(text(d.getElementById('profileBody')), /wordt niet bijgehouden/);
+  dom.window.close();
+});
+
+test('file access on an SSD pool shows in reads and writes per drive and in the source activity', async () => {
+  const days = served({ [today]: [
+    `${ep(300)},disk,nvme0n1,cache,ssd`, `${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},state,sdd,standby`,
+    `${ep(50)},who,container,sonarr,5,geschreven,/mnt/cache/appdata/sonarr/sonarr.db`,
+  ] });
+  const dom = await load(days);
+  const d = dom.window.document;
+  assert.deepEqual([...d.querySelectorAll('#actWrites .actdisk .head .drvbtn')].map((b) => b.dataset.drive), ['d:nvme0n1']);
+  assert.match(text(d.getElementById('actWrites')), /^cache/);
+  assert.ok([...d.querySelectorAll('#sources .src-sub .drvbtn')].some((b) => b.dataset.drive === 'd:nvme0n1'));
+  assert.match(text(d.getElementById('kpis')), /^Spin-ups 0/);          // writing to an SSD wakes nothing
   dom.window.close();
 });

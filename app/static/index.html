@@ -315,6 +315,12 @@ h3.sub{font-size:0.8438rem;font-weight:600;margin:18px 0 6px}
 .set-input{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
 #quietStatus:empty{display:none}
 .trace .quiet{fill:var(--line);opacity:.6}
+.trace .ior{fill:var(--spin);opacity:.55} .trace .iow{fill:var(--up);opacity:.7}
+.io-graph .ior{fill:var(--spin);opacity:.8} .io-graph .iow{fill:var(--up);opacity:.9}
+.lane.io .trace .ior{opacity:.8} .lane.io .trace .iow{opacity:.9}
+.lg-ior{background:var(--spin);opacity:.7} .lg-iow{background:var(--up);opacity:.8}
+.io-graph{height:56px;margin:8px 0 4px}
+.io-graph svg{display:block;width:100%;height:100%}
 .lg-quiet{background:var(--line)}
 .quiet-tag{display:inline-block;margin-left:6px;font-size:0.6875rem;font-weight:600;padding:0 5px;border-radius:4px;background:var(--up-text);color:var(--on-accent)}
 .loc{display:inline-block;font-size:0.6875rem;font-weight:700;padding:0 5px;border-radius:4px;background:var(--c);color:#fff;vertical-align:1px}
@@ -350,7 +356,7 @@ dialog.profile{width:min(820px, calc(100% - 32px))}
 .ov-members li{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 0}
 .ov-state{font-size:0.6875rem;font-weight:600;padding:0 6px;border-radius:4px;border:1px solid var(--line)}
 .ov-state.up{background:var(--spin);border-color:var(--spin);color:var(--on-accent)}
-.ov-state.down{color:var(--muted)}
+.ov-state.down,.ov-state.ssd{color:var(--muted)}
 .ov-ctr td{vertical-align:middle;white-space:normal}
 .prof-paths .prof-ctr{font-size:0.75rem;font-weight:600;color:var(--muted);margin-top:6px}
 @media (max-width:600px){.prof-cols{grid-template-columns:1fr} .heat{grid-template-columns:3.5rem repeat(24,minmax(0,1fr))}}
@@ -441,17 +447,22 @@ td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
       <p class="muted kpi-note" id="kpiNote"></p>
     </section>
 
-    <section class="lanes card" data-card="lanes" aria-labelledby="lanesTitle">
-      <h2 id="lanesTitle" data-i18n="lanes">Timeline per drive</h2>
-      <div class="row axis-row"><div></div><div class="axis" id="axis" aria-hidden="true"></div><div class="spacer-r"></div></div>
-      <div id="laneList"></div>
+    <!-- "Timeline per drive": one card per pool and the array (lanes:<key>), made from #laneTpl -->
+    <template id="laneTpl">
+    <section class="lanes card">
+      <h2></h2>
+      <div class="row axis-row"><div></div><div class="axis" aria-hidden="true"></div><div class="spacer-r"></div></div>
+      <div class="laneList"></div>
       <div class="legend">
-        <span><i class="lg-spin"></i><span data-i18n="legSpin">Spinning</span></span>
-        <span><i class="lg-idle"></i><span data-i18n="legIdle">Standby</span></span>
-        <span><i class="lg-up"></i><span data-i18n="legUp">Spin-up</span></span>
-        <span id="legQuiet" hidden><i class="lg-quiet"></i><span data-i18n="legQuiet">Quiet hours</span></span>
+        <span class="leg-spin"><i class="lg-spin"></i><span data-i18n="legSpin">Spinning</span></span>
+        <span class="leg-spin"><i class="lg-idle"></i><span data-i18n="legIdle">Standby</span></span>
+        <span class="leg-spin"><i class="lg-up"></i><span data-i18n="legUp">Spin-up</span></span>
+        <span class="leg-quiet" hidden><i class="lg-quiet"></i><span data-i18n="legQuiet">Quiet hours</span></span>
+        <span><i class="lg-ior"></i><span data-i18n="legIoRead">Read (data)</span></span>
+        <span><i class="lg-iow"></i><span data-i18n="legIoWrite">Written (data)</span></span>
       </div>
     </section>
+    </template>
 
     <section class="panel card" data-card="srcLanes" aria-labelledby="srcLanesTitle">
       <h2 id="srcLanesTitle" data-i18n="srcLanesTitle">Timeline per source</h2>
@@ -606,6 +617,10 @@ td{padding:5px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
     <button type="button" class="btn" id="webhookTest" data-i18n="webhookTest">Send a test</button>
   </div>
   <p class="muted set-note" id="quietStatus" role="status"></p>
+  <h3 class="set-sub" data-i18n="ssdTitle">File access on SSD pools</h3>
+  <p class="muted set-note" data-i18n="ssdNote">Reads and writes of every SSD are always shown. Also record which file is opened by whom on these pools? A pool with appdata or a cache gives many events.</p>
+  <div class="set-lanes" id="ssdLanes"></div>
+  <p class="muted set-note" id="ssdStatus" role="status"></p>
   <h3 class="set-sub" data-i18n="cardsTitle">Cards</h3>
   <p class="muted set-note" data-i18n="cardsNote">Choose which cards to show, in which order, and whether they are small (half width) or large. Two small cards in a row sit side by side; on a phone every card is full width.</p>
   <ol class="set-cards" id="cardList"></ol>
@@ -642,7 +657,7 @@ const I18N = {
     prev_30:'Previous month', next_30:'Next month',
     settings:'Settings', done:'Done', cardsTitle:'Cards', cardsNote:'Choose which cards to show, in which order, and whether they are small (half width) or large. Two small cards in a row sit side by side; on a phone every card is full width.', moveUp:'Move {name} up', moveDown:'Move {name} down', movedTo:'{name}: position {n} of {total}', resetCards:'Restore default layout',
     viewTitle:'Drives', groupDrives:'Show pools and arrays merged', arrayName:'Array', disk_one:'{n} drive', disk_other:'{n} drives', upOf:'({n} of {total})',
-    allPools:'All pools', allDisksPools:'All drives and pools', dragToMove:'Drag to move', hideTitle:'Hidden paths', hideHelp:'One path per line. * matches anything, ? one character. Example: /mnt/user/appdata/*', hideCount:'{n} of {total} file events hidden', actProcs:'Processes', actFiles:'Files', feedRepeat:'{n} times among the most recent events', feedNote:'Always the most recent events, whatever period is selected.', srcTitle:'Activity per source', srcNote:'Who wakes the drives and who keeps them busy.', srcUps:'spin-ups caused', srcLine:'{r} reads · {w} writes', restTitle:'Spin time and rest per drive', restNote:'How long drives keep spinning after a spin-up and how long they rest.', restMedian:'Median run', restLongest:'Longest rest', restQuick:'Woke quickly', restQuickNote:'Woke quickly: spun up within 30 minutes of going to standby. A longer spin-down delay may help.', srcLanesTitle:'Timeline per source', legAnyUp:'A drive is spinning', legRead:'Read', legWrite:'Write', awakeTitle:'Kept awake per source', awakeNote:'Every access while a drive spins postpones its spin-down. Per source, the spinning time it added that way.', awakeLine:'{n}× the last access before standby', awakeNone:'No activity while the drives were spinning.', rhythmTitle:'Rhythm per source', profRhythm:'Rhythm', rhythmNote:'Fixed intervals and times per source, and when in the day it is active.', rhythmDedup:'The same file is logged at most once every 10 minutes, so anything more frequent shows as “every 10 min”.', rhythmEvery:'every {d}', rhythmDaily:'daily around {time}', rhythmNone:'no fixed rhythm', rhythmStrip:'Activity per hour of day, busiest {from} to {to}', profOpen:'Show details of {name}', profUps:'Spin-ups caused', profKeep:'Kept awake', profReads:'Reads', profWrites:'Writes', profHeat:'Activity by day and hour', profDrives:'Drives', profFolders:'Folders', profFiles:'Files', profCell:'{day} {hour}: {n} events', legStart:'Container start', legStop:'Container stop or unhealthy', ctrBefore:'{what} of {name} {ago} before', ctr_start:'Start', ctr_die:'Stop', ctr_restart:'Restart', ctr_healthy:'Healthy', ctr_unhealthy:'Unhealthy', exitCode:'exit code {code}', profLife:'Start and stop', profLifeNone:'No start or stop in this period.', mountsFailed:'Could not read the containers.', mountsAllShares:'all shares', mountsUnknown:'unknown, check the share settings', mountsHdd:'can be on a hard drive', mountsLoading:'Loading containers…', mountsNoDocker:'No Docker socket: mount /var/run/docker.sock to see the paths per container.', mountsNone:'No containers with paths under /mnt.', ctrStopped:'stopped', sizeSmall:'Small', sizeLarge:'Large', sizeTip:'Small takes half the width, large the whole width', sizeToggle:'{name}: {size}, change size', sizeSet:'{name}: {size}', swapToRight:'{name}: move to the right', swapToLeft:'{name}: move to the left', swapped:'{name}: now on the {side}', sideLeft:'left', sideRight:'right', pos_full:'whole width', pos_left:'left half', pos_right:'right half', pos_alone:'half width, alone in its row', pos_hidden:'hidden', exportTip:'Export this period as CSV', groupCompose:'Merge the containers of one Compose project into one source', stackTag:'stack', stackOf:'Compose project {name}: {list}', quietTitle:'Quiet hours', quietNote:'A time window in which the drives should sleep. Spin-ups in it are marked, and can be sent to a webhook.', quietOn:'Use quiet hours', quietFrom:'From', quietTo:'to', quietDrives:'Applies to (nothing checked: all drives)', webhookLabel:'Webhook for notifications', webhookHelp:'Optional. Receives a JSON POST with text and content, so ntfy, Gotify, Slack and Discord work.', webhookTest:'Send a test', webhookOk:'Test sent.', webhookFail:'Test failed: {error}', quietSaveFailed:'Could not save: {error}', quietTag:'quiet hours', legQuiet:'Quiet hours', profPaths:'Paths', infoTitle:'Overview', back:'Back', ovStorage:'Pools and array', ovStorageNote:'The hard drives the dashboard watches, per pool or the array. Click a pool, the array or a drive for its details.', ovContainers:'Docker containers', ovStats:'{ups} spin-ups · {pct}% active', stateUp:'spinning', stateDown:'standby', ovThName:'Container', ovThState:'Status', ovThStore:'Stored on', ovThSeen:'This period', ctrRunning:'running', drvActive:'Active', drvDrives:'Drives', drvSources:'Who reads and writes', drvWakers:'What woke it', drvContainers:'Containers that map it', drvNoContainers:'No container maps it.', drvPoolNote:'Files on a pool are spread over its drives, so reads and writes show for the whole pool.', drvOpen:'Show details of {name}', drvNotWatched:'{name} has no hard drives, so the dashboard does not watch it: no spin-ups or file access here, only which containers map it.', kpiTitle:'Key figures', kpiUps:'Spin-ups', kpiHours:'Spinning hours', kpiRest:'All drives asleep', kpiLongest:'Longest full rest', kpiNoPrev:'Not enough history yet to compare with the previous period.', cmpSame:'unchanged', pp:'pp', cmpBetter:'better', cmpWorse:'worse', daysTitle:'Spin-ups per day', daysBar:'{day}: {n} spin-ups', daysNote:'Last {n} days, {avg} spin-ups per day on average. The selected period is highlighted.', hideSaveFailed:'Could not save on the server; kept in this browser only.', traceHint:'Use the left and right arrow keys to step through the periods.', noDataYet:'No data yet', noData:'No data', lanes:'Timeline per drive',
+    allPools:'All pools', allDisksPools:'All drives and pools', dragToMove:'Drag to move', hideTitle:'Hidden paths', hideHelp:'One path per line. * matches anything, ? one character. Example: /mnt/user/appdata/*', hideCount:'{n} of {total} file events hidden', actProcs:'Processes', actFiles:'Files', feedRepeat:'{n} times among the most recent events', feedNote:'Always the most recent events, whatever period is selected.', srcTitle:'Activity per source', srcNote:'Who wakes the drives and who keeps them busy.', srcUps:'spin-ups caused', srcLine:'{r} reads · {w} writes', restTitle:'Spin time and rest per drive', restNote:'How long drives keep spinning after a spin-up and how long they rest.', restMedian:'Median run', restLongest:'Longest rest', restQuick:'Woke quickly', restQuickNote:'Woke quickly: spun up within 30 minutes of going to standby. A longer spin-down delay may help.', srcLanesTitle:'Timeline per source', legAnyUp:'A drive is spinning', legRead:'Read', legWrite:'Write', awakeTitle:'Kept awake per source', awakeNote:'Every access while a drive spins postpones its spin-down. Per source, the spinning time it added that way.', awakeLine:'{n}× the last access before standby', awakeNone:'No activity while the drives were spinning.', rhythmTitle:'Rhythm per source', profRhythm:'Rhythm', rhythmNote:'Fixed intervals and times per source, and when in the day it is active.', rhythmDedup:'The same file is logged at most once every 10 minutes, so anything more frequent shows as “every 10 min”.', rhythmEvery:'every {d}', rhythmDaily:'daily around {time}', rhythmNone:'no fixed rhythm', rhythmStrip:'Activity per hour of day, busiest {from} to {to}', profOpen:'Show details of {name}', profUps:'Spin-ups caused', profKeep:'Kept awake', profReads:'Reads', profWrites:'Writes', profHeat:'Activity by day and hour', profDrives:'Drives', profFolders:'Folders', profFiles:'Files', profCell:'{day} {hour}: {n} events', legStart:'Container start', legStop:'Container stop or unhealthy', ctrBefore:'{what} of {name} {ago} before', ctr_start:'Start', ctr_die:'Stop', ctr_restart:'Restart', ctr_healthy:'Healthy', ctr_unhealthy:'Unhealthy', exitCode:'exit code {code}', profLife:'Start and stop', profLifeNone:'No start or stop in this period.', mountsFailed:'Could not read the containers.', mountsAllShares:'all shares', mountsUnknown:'unknown, check the share settings', mountsHdd:'can be on a hard drive', mountsLoading:'Loading containers…', mountsNoDocker:'No Docker socket: mount /var/run/docker.sock to see the paths per container.', mountsNone:'No containers with paths under /mnt.', ctrStopped:'stopped', sizeSmall:'Small', sizeLarge:'Large', sizeTip:'Small takes half the width, large the whole width', sizeToggle:'{name}: {size}, change size', sizeSet:'{name}: {size}', swapToRight:'{name}: move to the right', swapToLeft:'{name}: move to the left', swapped:'{name}: now on the {side}', sideLeft:'left', sideRight:'right', pos_full:'whole width', pos_left:'left half', pos_right:'right half', pos_alone:'half width, alone in its row', pos_hidden:'hidden', exportTip:'Export this period as CSV', groupCompose:'Merge the containers of one Compose project into one source', stackTag:'stack', stackOf:'Compose project {name}: {list}', quietTitle:'Quiet hours', quietNote:'A time window in which the drives should sleep. Spin-ups in it are marked, and can be sent to a webhook.', quietOn:'Use quiet hours', quietFrom:'From', quietTo:'to', quietDrives:'Applies to (nothing checked: all drives)', webhookLabel:'Webhook for notifications', webhookHelp:'Optional. Receives a JSON POST with text and content, so ntfy, Gotify, Slack and Discord work.', webhookTest:'Send a test', webhookOk:'Test sent.', webhookFail:'Test failed: {error}', quietSaveFailed:'Could not save: {error}', quietTag:'quiet hours', legQuiet:'Quiet hours', profPaths:'Paths', infoTitle:'Overview', back:'Back', ovStorage:'Pools and array', ovStorageNote:'The hard drives the dashboard watches, per pool or the array. Click a pool, the array or a drive for its details.', ovContainers:'Docker containers', ovStats:'{ups} spin-ups · {pct}% active', stateUp:'spinning', stateDown:'standby', ovThName:'Container', ovThState:'Status', ovThStore:'Stored on', ovThSeen:'This period', ctrRunning:'running', drvActive:'Active', drvDrives:'Drives', drvSources:'Who reads and writes', drvWakers:'What woke it', drvContainers:'Containers that map it', drvNoContainers:'No container maps it.', drvPoolNote:'Files on a pool are spread over its drives, so reads and writes show for the whole pool.', drvOpen:'Show details of {name}', drvNotWatched:'The dashboard knows no drives of {name}, so there are no spin-ups, reads or writes here: only which containers map it.', kpiTitle:'Key figures', kpiUps:'Spin-ups', kpiHours:'Spinning hours', kpiRest:'All drives asleep', kpiLongest:'Longest full rest', kpiNoPrev:'Not enough history yet to compare with the previous period.', cmpSame:'unchanged', pp:'pp', cmpBetter:'better', cmpWorse:'worse', daysTitle:'Spin-ups per day', daysBar:'{day}: {n} spin-ups', daysNote:'Last {n} days, {avg} spin-ups per day on average. The selected period is highlighted.', hideSaveFailed:'Could not save on the server; kept in this browser only.', traceHint:'Use the left and right arrow keys to step through the periods.', noDataYet:'No data yet', noData:'No data', lanes:'Timeline per drive', lanesOf:'Timeline per drive · {name}', legIoRead:'Data read', legIoWrite:'Data written', ssdTitle:'File access on SSD pools', ssdNote:'Reads and writes of every SSD are always shown. Also record which file is opened by whom on these pools? A pool with appdata or a cache gives many events.', ssdNone:'No SSDs found yet.', ioRead:'Read', ioWritten:'Written', ioPeak:'Busiest minute', ioPeakAt:'Busiest minute: {kib} on {time}', ioLine:'{r} read · {w} written', ioNone:'Nothing read or written in this period.', statRead:'read', statWritten:'written', drvIoTitle:'Reads and writes', drvSsdNoFiles:'Which files are opened here is not recorded. Switch it on in Settings under File access on SSD pools.', u_kB:'KB', u_MB:'MB', u_GB:'GB', u_TB:'TB',
     legSpin:'Spinning', legIdle:'Standby', legUp:'Spin-up',
     histTitle:'Spin-ups per hour of day', causesTitle:'Spin-up causes per folder', eventsTitle:'Events',
     onlyUp:'Spin-ups only', devFilter:'Filter by drive', allDisks:'All drives',
@@ -689,7 +704,7 @@ const I18N = {
     prev_30:'Vorige maand', next_30:'Volgende maand',
     settings:'Instellingen', done:'Klaar', cardsTitle:'Kaartjes', cardsNote:'Kies welke kaartjes je ziet, in welke volgorde, en of ze klein (halve breedte) of groot zijn. Twee kleine kaartjes na elkaar staan naast elkaar; op een telefoon is elk kaartje breed.', moveUp:'{name} omhoog', moveDown:'{name} omlaag', movedTo:'{name}: plaats {n} van {total}', resetCards:'Standaardindeling herstellen',
     viewTitle:'Schijven', groupDrives:'Pools en arrays samengevoegd tonen', arrayName:'Array', disk_one:'{n} schijf', disk_other:'{n} schijven', upOf:'({n} van {total})',
-    allPools:'Alle pools', allDisksPools:'Alle schijven en pools', dragToMove:'Sleep om te verplaatsen', hideTitle:'Verborgen paden', hideHelp:'Eén pad per regel. * staat voor alles, ? voor één teken. Bijvoorbeeld: /mnt/user/appdata/*', hideCount:'{n} van {total} bestandsgebeurtenissen verborgen', actProcs:'Processen', actFiles:'Bestanden', feedRepeat:'{n} keer in de recentste gebeurtenissen', feedNote:'Altijd de nieuwste gebeurtenissen, welke periode je ook kiest.', srcTitle:'Activiteit per bron', srcNote:'Wie wekt de schijven en wie houdt ze bezig.', srcUps:'veroorzaakte spin-ups', srcLine:'{r} gelezen · {w} geschreven', restTitle:'Draaitijd en rust per schijf', restNote:'Hoe lang de schijven na een spin-up blijven draaien en hoe lang ze rusten.', restMedian:'Mediane draaiduur', restLongest:'Langste rust', restQuick:'Snel weer wakker', restQuickNote:'Snel weer wakker: binnen 30 minuten na standby weer opgespind. Een langere spin-down-vertraging kan helpen.', srcLanesTitle:'Tijdlijn per bron', legAnyUp:'Een schijf draait', legRead:'Lezen', legWrite:'Schrijven', awakeTitle:'Wakker gehouden per bron', awakeNote:'Elke toegang terwijl een schijf draait schuift de spin-down op. Per bron de draaitijd die het zo toevoegde.', awakeLine:'{n}× de laatste toegang vóór standby', awakeNone:'Geen activiteit terwijl de schijven draaiden.', rhythmTitle:'Ritme per bron', profRhythm:'Ritme', rhythmNote:'Vaste intervallen en tijden per bron, en wanneer op de dag het actief is.', rhythmDedup:'Hetzelfde bestand wordt hooguit eens per 10 minuten gelogd; wat vaker gebeurt verschijnt als ‘elke 10 min’.', rhythmEvery:'elke {d}', rhythmDaily:'dagelijks rond {time}', rhythmNone:'geen vast ritme', rhythmStrip:'Activiteit per uur van de dag, het drukst van {from} tot {to}', profOpen:'Details van {name} tonen', profUps:'Veroorzaakte spin-ups', profKeep:'Wakker gehouden', profReads:'Gelezen', profWrites:'Geschreven', profHeat:'Activiteit per dag en uur', profDrives:'Schijven', profFolders:'Mappen', profFiles:'Bestanden', profCell:'{day} {hour}: {n} gebeurtenissen', legStart:'Container gestart', legStop:'Container gestopt of ongezond', ctrBefore:'{what} van {name} {ago} eerder', ctr_start:'Start', ctr_die:'Stop', ctr_restart:'Herstart', ctr_healthy:'Gezond', ctr_unhealthy:'Ongezond', exitCode:'exitcode {code}', profLife:'Start en stop', profLifeNone:'Geen start of stop in deze periode.', mountsFailed:'De containers konden niet gelezen worden.', mountsAllShares:'alle shares', mountsUnknown:'onbekend, controleer de share-instellingen', mountsHdd:'kan op een harde schijf staan', mountsLoading:'Containers laden…', mountsNoDocker:'Geen Docker-socket: mount /var/run/docker.sock om de paden per container te zien.', mountsNone:'Geen containers met paden onder /mnt.', ctrStopped:'gestopt', sizeSmall:'Klein', sizeLarge:'Groot', sizeTip:'Klein is de halve breedte, groot de hele breedte', sizeToggle:'{name}: {size}, maat wijzigen', sizeSet:'{name}: {size}', swapToRight:'{name}: naar rechts', swapToLeft:'{name}: naar links', swapped:'{name}: nu {side}', sideLeft:'links', sideRight:'rechts', pos_full:'hele breedte', pos_left:'linkerhelft', pos_right:'rechterhelft', pos_alone:'halve breedte, alleen op zijn rij', pos_hidden:'verborgen', exportTip:'Deze periode exporteren als CSV', groupCompose:'Containers van één Compose-project samenvoegen tot één bron', stackTag:'stack', stackOf:'Compose-project {name}: {list}', quietTitle:'Stille uren', quietNote:'Een tijdvak waarin de schijven horen te slapen. Spin-ups daarin worden gemarkeerd en kunnen naar een webhook gestuurd worden.', quietOn:'Stille uren gebruiken', quietFrom:'Van', quietTo:'tot', quietDrives:'Geldt voor (niets aangevinkt: alle schijven)', webhookLabel:'Webhook voor meldingen', webhookHelp:'Optioneel. Krijgt een JSON-POST met text en content, dus ntfy, Gotify, Slack en Discord werken.', webhookTest:'Test sturen', webhookOk:'Test verstuurd.', webhookFail:'Test mislukt: {error}', quietSaveFailed:'Opslaan lukte niet: {error}', quietTag:'stille uren', legQuiet:'Stille uren', profPaths:'Paden', infoTitle:'Overzicht', back:'Terug', ovStorage:'Pools en array', ovStorageNote:'De harde schijven die het dashboard volgt, per pool of de array. Klik op een pool, de array of een schijf voor de details.', ovContainers:'Docker-containers', ovStats:'{ups} spin-ups · {pct}% actief', stateUp:'draait', stateDown:'standby', ovThName:'Container', ovThState:'Status', ovThStore:'Staat op', ovThSeen:'Deze periode', ctrRunning:'draait', drvActive:'Actief', drvDrives:'Schijven', drvSources:'Wie leest en schrijft', drvWakers:'Wat hem wekte', drvContainers:'Containers die ernaar mappen', drvNoContainers:'Geen container mapt hiernaar.', drvPoolNote:'Bestanden op een pool liggen verspreid over zijn schijven; lezen en schrijven staan daarom voor de hele pool.', drvOpen:'Details van {name} tonen', drvNotWatched:'{name} heeft geen harde schijven, dus het dashboard volgt hem niet: hier geen spin-ups of bestandstoegang, alleen welke containers ernaar mappen.', kpiTitle:'Kerncijfers', kpiUps:'Spin-ups', kpiHours:'Draaiuren', kpiRest:'Alle schijven in rust', kpiLongest:'Langste volledige rust', kpiNoPrev:'Nog te weinig geschiedenis om met de vorige periode te vergelijken.', cmpSame:'gelijk', pp:'procentpunt', cmpBetter:'beter', cmpWorse:'slechter', daysTitle:'Spin-ups per dag', daysBar:'{day}: {n} spin-ups', daysNote:'Laatste {n} dagen, gemiddeld {avg} spin-ups per dag. De gekozen periode is gemarkeerd.', hideSaveFailed:'Opslaan op de server lukte niet; alleen in deze browser bewaard.', traceHint:'Gebruik de pijltjestoetsen links en rechts om door de periodes te stappen.', noDataYet:'Nog geen data', noData:'Geen data', lanes:'Tijdlijn per schijf',
+    allPools:'Alle pools', allDisksPools:'Alle schijven en pools', dragToMove:'Sleep om te verplaatsen', hideTitle:'Verborgen paden', hideHelp:'Eén pad per regel. * staat voor alles, ? voor één teken. Bijvoorbeeld: /mnt/user/appdata/*', hideCount:'{n} van {total} bestandsgebeurtenissen verborgen', actProcs:'Processen', actFiles:'Bestanden', feedRepeat:'{n} keer in de recentste gebeurtenissen', feedNote:'Altijd de nieuwste gebeurtenissen, welke periode je ook kiest.', srcTitle:'Activiteit per bron', srcNote:'Wie wekt de schijven en wie houdt ze bezig.', srcUps:'veroorzaakte spin-ups', srcLine:'{r} gelezen · {w} geschreven', restTitle:'Draaitijd en rust per schijf', restNote:'Hoe lang de schijven na een spin-up blijven draaien en hoe lang ze rusten.', restMedian:'Mediane draaiduur', restLongest:'Langste rust', restQuick:'Snel weer wakker', restQuickNote:'Snel weer wakker: binnen 30 minuten na standby weer opgespind. Een langere spin-down-vertraging kan helpen.', srcLanesTitle:'Tijdlijn per bron', legAnyUp:'Een schijf draait', legRead:'Lezen', legWrite:'Schrijven', awakeTitle:'Wakker gehouden per bron', awakeNote:'Elke toegang terwijl een schijf draait schuift de spin-down op. Per bron de draaitijd die het zo toevoegde.', awakeLine:'{n}× de laatste toegang vóór standby', awakeNone:'Geen activiteit terwijl de schijven draaiden.', rhythmTitle:'Ritme per bron', profRhythm:'Ritme', rhythmNote:'Vaste intervallen en tijden per bron, en wanneer op de dag het actief is.', rhythmDedup:'Hetzelfde bestand wordt hooguit eens per 10 minuten gelogd; wat vaker gebeurt verschijnt als ‘elke 10 min’.', rhythmEvery:'elke {d}', rhythmDaily:'dagelijks rond {time}', rhythmNone:'geen vast ritme', rhythmStrip:'Activiteit per uur van de dag, het drukst van {from} tot {to}', profOpen:'Details van {name} tonen', profUps:'Veroorzaakte spin-ups', profKeep:'Wakker gehouden', profReads:'Gelezen', profWrites:'Geschreven', profHeat:'Activiteit per dag en uur', profDrives:'Schijven', profFolders:'Mappen', profFiles:'Bestanden', profCell:'{day} {hour}: {n} gebeurtenissen', legStart:'Container gestart', legStop:'Container gestopt of ongezond', ctrBefore:'{what} van {name} {ago} eerder', ctr_start:'Start', ctr_die:'Stop', ctr_restart:'Herstart', ctr_healthy:'Gezond', ctr_unhealthy:'Ongezond', exitCode:'exitcode {code}', profLife:'Start en stop', profLifeNone:'Geen start of stop in deze periode.', mountsFailed:'De containers konden niet gelezen worden.', mountsAllShares:'alle shares', mountsUnknown:'onbekend, controleer de share-instellingen', mountsHdd:'kan op een harde schijf staan', mountsLoading:'Containers laden…', mountsNoDocker:'Geen Docker-socket: mount /var/run/docker.sock om de paden per container te zien.', mountsNone:'Geen containers met paden onder /mnt.', ctrStopped:'gestopt', sizeSmall:'Klein', sizeLarge:'Groot', sizeTip:'Klein is de halve breedte, groot de hele breedte', sizeToggle:'{name}: {size}, maat wijzigen', sizeSet:'{name}: {size}', swapToRight:'{name}: naar rechts', swapToLeft:'{name}: naar links', swapped:'{name}: nu {side}', sideLeft:'links', sideRight:'rechts', pos_full:'hele breedte', pos_left:'linkerhelft', pos_right:'rechterhelft', pos_alone:'halve breedte, alleen op zijn rij', pos_hidden:'verborgen', exportTip:'Deze periode exporteren als CSV', groupCompose:'Containers van één Compose-project samenvoegen tot één bron', stackTag:'stack', stackOf:'Compose-project {name}: {list}', quietTitle:'Stille uren', quietNote:'Een tijdvak waarin de schijven horen te slapen. Spin-ups daarin worden gemarkeerd en kunnen naar een webhook gestuurd worden.', quietOn:'Stille uren gebruiken', quietFrom:'Van', quietTo:'tot', quietDrives:'Geldt voor (niets aangevinkt: alle schijven)', webhookLabel:'Webhook voor meldingen', webhookHelp:'Optioneel. Krijgt een JSON-POST met text en content, dus ntfy, Gotify, Slack en Discord werken.', webhookTest:'Test sturen', webhookOk:'Test verstuurd.', webhookFail:'Test mislukt: {error}', quietSaveFailed:'Opslaan lukte niet: {error}', quietTag:'stille uren', legQuiet:'Stille uren', profPaths:'Paden', infoTitle:'Overzicht', back:'Terug', ovStorage:'Pools en array', ovStorageNote:'De harde schijven die het dashboard volgt, per pool of de array. Klik op een pool, de array of een schijf voor de details.', ovContainers:'Docker-containers', ovStats:'{ups} spin-ups · {pct}% actief', stateUp:'draait', stateDown:'standby', ovThName:'Container', ovThState:'Status', ovThStore:'Staat op', ovThSeen:'Deze periode', ctrRunning:'draait', drvActive:'Actief', drvDrives:'Schijven', drvSources:'Wie leest en schrijft', drvWakers:'Wat hem wekte', drvContainers:'Containers die ernaar mappen', drvNoContainers:'Geen container mapt hiernaar.', drvPoolNote:'Bestanden op een pool liggen verspreid over zijn schijven; lezen en schrijven staan daarom voor de hele pool.', drvOpen:'Details van {name} tonen', drvNotWatched:'Het dashboard kent geen schijven van {name}, dus hier geen spin-ups, lezen of schrijven: alleen welke containers ernaar mappen.', kpiTitle:'Kerncijfers', kpiUps:'Spin-ups', kpiHours:'Draaiuren', kpiRest:'Alle schijven in rust', kpiLongest:'Langste volledige rust', kpiNoPrev:'Nog te weinig geschiedenis om met de vorige periode te vergelijken.', cmpSame:'gelijk', pp:'procentpunt', cmpBetter:'beter', cmpWorse:'slechter', daysTitle:'Spin-ups per dag', daysBar:'{day}: {n} spin-ups', daysNote:'Laatste {n} dagen, gemiddeld {avg} spin-ups per dag. De gekozen periode is gemarkeerd.', hideSaveFailed:'Opslaan op de server lukte niet; alleen in deze browser bewaard.', traceHint:'Gebruik de pijltjestoetsen links en rechts om door de periodes te stappen.', noDataYet:'Nog geen data', noData:'Geen data', lanes:'Tijdlijn per schijf', lanesOf:'Tijdlijn per schijf · {name}', legIoRead:'Gelezen data', legIoWrite:'Geschreven data', ssdTitle:'Bestandstoegang op SSD-pools', ssdNote:'Lezen en schrijven van elke SSD wordt altijd getoond. Ook bijhouden welk bestand door wie geopend wordt op deze pools? Een pool met appdata of een cache geeft veel gebeurtenissen.', ssdNone:'Nog geen SSD’s gevonden.', ioRead:'Gelezen', ioWritten:'Geschreven', ioPeak:'Drukste minuut', ioPeakAt:'Drukste minuut: {kib} op {time}', ioLine:'{r} gelezen · {w} geschreven', ioNone:'Niets gelezen of geschreven in deze periode.', statRead:'gelezen', statWritten:'geschreven', drvIoTitle:'Lezen en schrijven', drvSsdNoFiles:'Welke bestanden hier geopend worden, wordt niet bijgehouden. Zet het aan in Instellingen bij Bestandstoegang op SSD-pools.', u_kB:'KB', u_MB:'MB', u_GB:'GB', u_TB:'TB',
     legSpin:'Draait', legIdle:'Standby', legUp:'Spin-up',
     histTitle:'Spin-ups per uur van de dag', causesTitle:'Oorzaken van spin-ups per map', eventsTitle:'Gebeurtenissen',
     onlyUp:'Alleen spin-ups', devFilter:'Filter op schijf', allDisks:'Alle schijven',
@@ -736,7 +751,7 @@ const I18N = {
     prev_30:'Mois précédent', next_30:'Mois suivant',
     settings:'Réglages', done:'Terminé', cardsTitle:'Cartes', cardsNote:'Choisissez les cartes à afficher, leur ordre, et si elles sont petites (demi-largeur) ou grandes. Deux petites cartes qui se suivent sont côte à côte ; sur un téléphone, chaque carte prend toute la largeur.', moveUp:'Monter {name}', moveDown:'Descendre {name}', movedTo:'{name} : position {n} sur {total}', resetCards:'Rétablir la disposition par défaut',
     viewTitle:'Disques', groupDrives:'Afficher les pools et arrays regroupés', arrayName:'Array', disk_one:'{n} disque', disk_other:'{n} disques', upOf:'({n} sur {total})',
-    allPools:'Tous les pools', allDisksPools:'Tous les disques et pools', dragToMove:'Faites glisser pour déplacer', hideTitle:'Chemins masqués', hideHelp:'Un chemin par ligne. * remplace n’importe quoi, ? un seul caractère. Exemple : /mnt/user/appdata/*', hideCount:'{n} sur {total} événements de fichiers masqués', actProcs:'Processus', actFiles:'Fichiers', feedRepeat:'{n} fois parmi les événements les plus récents', feedNote:'Toujours les événements les plus récents, quelle que soit la période choisie.', srcTitle:'Activité par source', srcNote:'Qui réveille les disques et qui les sollicite.', srcUps:'démarrages provoqués', srcLine:'{r} lectures · {w} écritures', restTitle:'Rotation et repos par disque', restNote:'Combien de temps les disques tournent après un démarrage et combien de temps ils se reposent.', restMedian:'Rotation médiane', restLongest:'Plus long repos', restQuick:'Réveil rapide', restQuickNote:'Réveil rapide : redémarré moins de 30 minutes après la mise en veille. Un délai de mise en veille plus long peut aider.', srcLanesTitle:'Chronologie par source', legAnyUp:'Un disque tourne', legRead:'Lecture', legWrite:'Écriture', awakeTitle:'Maintien en éveil par source', awakeNote:'Chaque accès pendant qu’un disque tourne repousse sa mise en veille. Par source, le temps de rotation ajouté ainsi.', awakeLine:'{n}× le dernier accès avant la veille', awakeNone:'Aucune activité pendant que les disques tournaient.', rhythmTitle:'Rythme par source', profRhythm:'Rythme', rhythmNote:'Intervalles et heures fixes par source, et à quel moment de la journée elle est active.', rhythmDedup:'Un même fichier est enregistré au plus une fois toutes les 10 minutes ; ce qui est plus fréquent apparaît comme « toutes les 10 min ».', rhythmEvery:'toutes les {d}', rhythmDaily:'chaque jour vers {time}', rhythmNone:'pas de rythme fixe', rhythmStrip:'Activité par heure de la journée, pic de {from} à {to}', profOpen:'Afficher le détail de {name}', profUps:'Démarrages provoqués', profKeep:'Maintenu éveillé', profReads:'Lectures', profWrites:'Écritures', profHeat:'Activité par jour et par heure', profDrives:'Disques', profFolders:'Dossiers', profFiles:'Fichiers', profCell:'{day} {hour} : {n} événements', legStart:'Démarrage du conteneur', legStop:'Arrêt ou conteneur non sain', ctrBefore:'{what} de {name} {ago} avant', ctr_start:'Démarrage', ctr_die:'Arrêt', ctr_restart:'Redémarrage', ctr_healthy:'Sain', ctr_unhealthy:'Non sain', exitCode:'code de sortie {code}', profLife:'Démarrage et arrêt', profLifeNone:'Aucun démarrage ni arrêt sur cette période.', mountsFailed:'Impossible de lire les conteneurs.', mountsAllShares:'tous les partages', mountsUnknown:'inconnu, vérifiez les réglages du partage', mountsHdd:'peut se trouver sur un disque dur', mountsLoading:'Chargement des conteneurs…', mountsNoDocker:'Pas de socket Docker : montez /var/run/docker.sock pour voir les chemins par conteneur.', mountsNone:'Aucun conteneur avec des chemins sous /mnt.', ctrStopped:'arrêté', sizeSmall:'Petit', sizeLarge:'Grand', sizeTip:'Petit prend la moitié de la largeur, grand toute la largeur', sizeToggle:'{name} : {size}, changer la taille', sizeSet:'{name} : {size}', swapToRight:'{name} : déplacer à droite', swapToLeft:'{name} : déplacer à gauche', swapped:'{name} : maintenant à {side}', sideLeft:'gauche', sideRight:'droite', pos_full:'toute la largeur', pos_left:'moitié gauche', pos_right:'moitié droite', pos_alone:'demi-largeur, seul sur sa ligne', pos_hidden:'masqué', exportTip:'Exporter cette période en CSV', groupCompose:'Regrouper les conteneurs d’un même projet Compose en une seule source', stackTag:'stack', stackOf:'Projet Compose {name} : {list}', quietTitle:'Heures calmes', quietNote:'Une plage horaire où les disques devraient dormir. Les démarrages pendant celle-ci sont signalés et peuvent être envoyés à un webhook.', quietOn:'Utiliser les heures calmes', quietFrom:'De', quietTo:'à', quietDrives:'S’applique à (rien de coché : tous les disques)', webhookLabel:'Webhook pour les notifications', webhookHelp:'Facultatif. Reçoit un POST JSON avec text et content, compatible ntfy, Gotify, Slack et Discord.', webhookTest:'Envoyer un test', webhookOk:'Test envoyé.', webhookFail:'Échec du test : {error}', quietSaveFailed:'Échec de l’enregistrement : {error}', quietTag:'heures calmes', legQuiet:'Heures calmes', profPaths:'Chemins', infoTitle:'Vue d’ensemble', back:'Retour', ovStorage:'Pools et array', ovStorageNote:'Les disques durs suivis par le tableau de bord, par pool ou array. Cliquez sur un pool, l’array ou un disque pour le détail.', ovContainers:'Conteneurs Docker', ovStats:'{ups} démarrages · {pct} % actif', stateUp:'en rotation', stateDown:'en veille', ovThName:'Conteneur', ovThState:'État', ovThStore:'Stocké sur', ovThSeen:'Cette période', ctrRunning:'en marche', drvActive:'Actif', drvDrives:'Disques', drvSources:'Qui lit et écrit', drvWakers:'Ce qui l’a réveillé', drvContainers:'Conteneurs qui le montent', drvNoContainers:'Aucun conteneur ne le monte.', drvPoolNote:'Les fichiers d’un pool sont répartis sur ses disques ; lectures et écritures sont donc indiquées pour tout le pool.', drvOpen:'Afficher le détail de {name}', drvNotWatched:'{name} n’a pas de disque dur, le tableau de bord ne le suit donc pas : ni démarrages ni accès aux fichiers ici, seulement les conteneurs qui le montent.', kpiTitle:'Chiffres clés', kpiUps:'Démarrages', kpiHours:'Heures de rotation', kpiRest:'Tous les disques au repos', kpiLongest:'Plus long repos complet', kpiNoPrev:'Pas encore assez d’historique pour comparer avec la période précédente.', cmpSame:'inchangé', pp:'pt', cmpBetter:'mieux', cmpWorse:'moins bien', daysTitle:'Démarrages par jour', daysBar:'{day} : {n} démarrages', daysNote:'{n} derniers jours, {avg} démarrages par jour en moyenne. La période choisie est mise en évidence.', hideSaveFailed:'Impossible d’enregistrer sur le serveur ; conservé uniquement dans ce navigateur.', traceHint:'Utilisez les flèches gauche et droite pour parcourir les périodes.', noDataYet:'Pas encore de données', noData:'Aucune donnée', lanes:'Chronologie par disque',
+    allPools:'Tous les pools', allDisksPools:'Tous les disques et pools', dragToMove:'Faites glisser pour déplacer', hideTitle:'Chemins masqués', hideHelp:'Un chemin par ligne. * remplace n’importe quoi, ? un seul caractère. Exemple : /mnt/user/appdata/*', hideCount:'{n} sur {total} événements de fichiers masqués', actProcs:'Processus', actFiles:'Fichiers', feedRepeat:'{n} fois parmi les événements les plus récents', feedNote:'Toujours les événements les plus récents, quelle que soit la période choisie.', srcTitle:'Activité par source', srcNote:'Qui réveille les disques et qui les sollicite.', srcUps:'démarrages provoqués', srcLine:'{r} lectures · {w} écritures', restTitle:'Rotation et repos par disque', restNote:'Combien de temps les disques tournent après un démarrage et combien de temps ils se reposent.', restMedian:'Rotation médiane', restLongest:'Plus long repos', restQuick:'Réveil rapide', restQuickNote:'Réveil rapide : redémarré moins de 30 minutes après la mise en veille. Un délai de mise en veille plus long peut aider.', srcLanesTitle:'Chronologie par source', legAnyUp:'Un disque tourne', legRead:'Lecture', legWrite:'Écriture', awakeTitle:'Maintien en éveil par source', awakeNote:'Chaque accès pendant qu’un disque tourne repousse sa mise en veille. Par source, le temps de rotation ajouté ainsi.', awakeLine:'{n}× le dernier accès avant la veille', awakeNone:'Aucune activité pendant que les disques tournaient.', rhythmTitle:'Rythme par source', profRhythm:'Rythme', rhythmNote:'Intervalles et heures fixes par source, et à quel moment de la journée elle est active.', rhythmDedup:'Un même fichier est enregistré au plus une fois toutes les 10 minutes ; ce qui est plus fréquent apparaît comme « toutes les 10 min ».', rhythmEvery:'toutes les {d}', rhythmDaily:'chaque jour vers {time}', rhythmNone:'pas de rythme fixe', rhythmStrip:'Activité par heure de la journée, pic de {from} à {to}', profOpen:'Afficher le détail de {name}', profUps:'Démarrages provoqués', profKeep:'Maintenu éveillé', profReads:'Lectures', profWrites:'Écritures', profHeat:'Activité par jour et par heure', profDrives:'Disques', profFolders:'Dossiers', profFiles:'Fichiers', profCell:'{day} {hour} : {n} événements', legStart:'Démarrage du conteneur', legStop:'Arrêt ou conteneur non sain', ctrBefore:'{what} de {name} {ago} avant', ctr_start:'Démarrage', ctr_die:'Arrêt', ctr_restart:'Redémarrage', ctr_healthy:'Sain', ctr_unhealthy:'Non sain', exitCode:'code de sortie {code}', profLife:'Démarrage et arrêt', profLifeNone:'Aucun démarrage ni arrêt sur cette période.', mountsFailed:'Impossible de lire les conteneurs.', mountsAllShares:'tous les partages', mountsUnknown:'inconnu, vérifiez les réglages du partage', mountsHdd:'peut se trouver sur un disque dur', mountsLoading:'Chargement des conteneurs…', mountsNoDocker:'Pas de socket Docker : montez /var/run/docker.sock pour voir les chemins par conteneur.', mountsNone:'Aucun conteneur avec des chemins sous /mnt.', ctrStopped:'arrêté', sizeSmall:'Petit', sizeLarge:'Grand', sizeTip:'Petit prend la moitié de la largeur, grand toute la largeur', sizeToggle:'{name} : {size}, changer la taille', sizeSet:'{name} : {size}', swapToRight:'{name} : déplacer à droite', swapToLeft:'{name} : déplacer à gauche', swapped:'{name} : maintenant à {side}', sideLeft:'gauche', sideRight:'droite', pos_full:'toute la largeur', pos_left:'moitié gauche', pos_right:'moitié droite', pos_alone:'demi-largeur, seul sur sa ligne', pos_hidden:'masqué', exportTip:'Exporter cette période en CSV', groupCompose:'Regrouper les conteneurs d’un même projet Compose en une seule source', stackTag:'stack', stackOf:'Projet Compose {name} : {list}', quietTitle:'Heures calmes', quietNote:'Une plage horaire où les disques devraient dormir. Les démarrages pendant celle-ci sont signalés et peuvent être envoyés à un webhook.', quietOn:'Utiliser les heures calmes', quietFrom:'De', quietTo:'à', quietDrives:'S’applique à (rien de coché : tous les disques)', webhookLabel:'Webhook pour les notifications', webhookHelp:'Facultatif. Reçoit un POST JSON avec text et content, compatible ntfy, Gotify, Slack et Discord.', webhookTest:'Envoyer un test', webhookOk:'Test envoyé.', webhookFail:'Échec du test : {error}', quietSaveFailed:'Échec de l’enregistrement : {error}', quietTag:'heures calmes', legQuiet:'Heures calmes', profPaths:'Chemins', infoTitle:'Vue d’ensemble', back:'Retour', ovStorage:'Pools et array', ovStorageNote:'Les disques durs suivis par le tableau de bord, par pool ou array. Cliquez sur un pool, l’array ou un disque pour le détail.', ovContainers:'Conteneurs Docker', ovStats:'{ups} démarrages · {pct} % actif', stateUp:'en rotation', stateDown:'en veille', ovThName:'Conteneur', ovThState:'État', ovThStore:'Stocké sur', ovThSeen:'Cette période', ctrRunning:'en marche', drvActive:'Actif', drvDrives:'Disques', drvSources:'Qui lit et écrit', drvWakers:'Ce qui l’a réveillé', drvContainers:'Conteneurs qui le montent', drvNoContainers:'Aucun conteneur ne le monte.', drvPoolNote:'Les fichiers d’un pool sont répartis sur ses disques ; lectures et écritures sont donc indiquées pour tout le pool.', drvOpen:'Afficher le détail de {name}', drvNotWatched:'Le tableau de bord ne connaît aucun disque de {name} : ni démarrages, ni lectures, ni écritures ici, seulement les conteneurs qui le montent.', kpiTitle:'Chiffres clés', kpiUps:'Démarrages', kpiHours:'Heures de rotation', kpiRest:'Tous les disques au repos', kpiLongest:'Plus long repos complet', kpiNoPrev:'Pas encore assez d’historique pour comparer avec la période précédente.', cmpSame:'inchangé', pp:'pt', cmpBetter:'mieux', cmpWorse:'moins bien', daysTitle:'Démarrages par jour', daysBar:'{day} : {n} démarrages', daysNote:'{n} derniers jours, {avg} démarrages par jour en moyenne. La période choisie est mise en évidence.', hideSaveFailed:'Impossible d’enregistrer sur le serveur ; conservé uniquement dans ce navigateur.', traceHint:'Utilisez les flèches gauche et droite pour parcourir les périodes.', noDataYet:'Pas encore de données', noData:'Aucune donnée', lanes:'Chronologie par disque', lanesOf:'Chronologie par disque · {name}', legIoRead:'Données lues', legIoWrite:'Données écrites', ssdTitle:'Accès aux fichiers sur les pools SSD', ssdNote:'Les lectures et écritures de chaque SSD sont toujours affichées. Enregistrer aussi quel fichier est ouvert et par qui sur ces pools ? Un pool avec appdata ou un cache génère beaucoup d’événements.', ssdNone:'Aucun SSD trouvé pour l’instant.', ioRead:'Lu', ioWritten:'Écrit', ioPeak:'Minute la plus chargée', ioPeakAt:'Minute la plus chargée : {kib} le {time}', ioLine:'{r} lus · {w} écrits', ioNone:'Rien lu ni écrit pendant cette période.', statRead:'lus', statWritten:'écrits', drvIoTitle:'Lectures et écritures', drvSsdNoFiles:'Les fichiers ouverts ici ne sont pas enregistrés. Activez-le dans Réglages, sous Accès aux fichiers sur les pools SSD.', u_kB:'Ko', u_MB:'Mo', u_GB:'Go', u_TB:'To',
     legSpin:'En rotation', legIdle:'Veille', legUp:'Démarrage',
     histTitle:'Démarrages par heure de la journée', causesTitle:'Causes des démarrages par dossier', eventsTitle:'Événements',
     onlyUp:'Démarrages uniquement', devFilter:'Filtrer par disque', allDisks:'Tous les disques',
@@ -783,7 +798,7 @@ const I18N = {
     prev_30:'Vorheriger Monat', next_30:'Nächster Monat',
     settings:'Einstellungen', done:'Fertig', cardsTitle:'Karten', cardsNote:'Wähle, welche Karten angezeigt werden, in welcher Reihenfolge und ob sie klein (halbe Breite) oder groß sind. Zwei kleine Karten hintereinander stehen nebeneinander; auf einem Telefon ist jede Karte breit.', moveUp:'{name} nach oben', moveDown:'{name} nach unten', movedTo:'{name}: Position {n} von {total}', resetCards:'Standardanordnung wiederherstellen',
     viewTitle:'Festplatten', groupDrives:'Pools und Arrays zusammengefasst anzeigen', arrayName:'Array', disk_one:'{n} Festplatte', disk_other:'{n} Festplatten', upOf:'({n} von {total})',
-    allPools:'Alle Pools', allDisksPools:'Alle Festplatten und Pools', dragToMove:'Zum Verschieben ziehen', hideTitle:'Ausgeblendete Pfade', hideHelp:'Ein Pfad pro Zeile. * steht für alles, ? für ein Zeichen. Beispiel: /mnt/user/appdata/*', hideCount:'{n} von {total} Dateiereignissen ausgeblendet', actProcs:'Prozesse', actFiles:'Dateien', feedRepeat:'{n}-mal unter den neuesten Ereignissen', feedNote:'Immer die neuesten Ereignisse, unabhängig vom gewählten Zeitraum.', srcTitle:'Aktivität pro Quelle', srcNote:'Wer die Festplatten weckt und wer sie beschäftigt.', srcUps:'verursachte Spin-ups', srcLine:'{r} Lesezugriffe · {w} Schreibzugriffe', restTitle:'Laufzeit und Ruhe pro Festplatte', restNote:'Wie lange die Festplatten nach einem Spin-up laufen und wie lange sie ruhen.', restMedian:'Mittlere Laufzeit', restLongest:'Längste Ruhe', restQuick:'Schnell wieder wach', restQuickNote:'Schnell wieder wach: innerhalb von 30 Minuten nach dem Standby wieder angelaufen. Eine längere Spin-down-Verzögerung kann helfen.', srcLanesTitle:'Zeitleiste pro Quelle', legAnyUp:'Eine Festplatte läuft', legRead:'Lesen', legWrite:'Schreiben', awakeTitle:'Wachgehalten pro Quelle', awakeNote:'Jeder Zugriff, während eine Festplatte läuft, verschiebt ihren Spin-down. Pro Quelle die so hinzugefügte Laufzeit.', awakeLine:'{n}× der letzte Zugriff vor dem Standby', awakeNone:'Keine Aktivität, während die Festplatten liefen.', rhythmTitle:'Rhythmus pro Quelle', profRhythm:'Rhythmus', rhythmNote:'Feste Intervalle und Uhrzeiten pro Quelle und wann am Tag sie aktiv ist.', rhythmDedup:'Dieselbe Datei wird höchstens alle 10 Minuten protokolliert; Häufigeres erscheint als „alle 10 min“.', rhythmEvery:'alle {d}', rhythmDaily:'täglich gegen {time}', rhythmNone:'kein fester Rhythmus', rhythmStrip:'Aktivität pro Tagesstunde, am meisten von {from} bis {to}', profOpen:'Details zu {name} anzeigen', profUps:'Verursachte Spin-ups', profKeep:'Wach gehalten', profReads:'Lesezugriffe', profWrites:'Schreibzugriffe', profHeat:'Aktivität nach Tag und Stunde', profDrives:'Festplatten', profFolders:'Ordner', profFiles:'Dateien', profCell:'{day} {hour}: {n} Ereignisse', legStart:'Container gestartet', legStop:'Container gestoppt oder ungesund', ctrBefore:'{what} von {name} {ago} vorher', ctr_start:'Start', ctr_die:'Stopp', ctr_restart:'Neustart', ctr_healthy:'Gesund', ctr_unhealthy:'Ungesund', exitCode:'Exitcode {code}', profLife:'Start und Stopp', profLifeNone:'Kein Start oder Stopp in diesem Zeitraum.', mountsFailed:'Die Container konnten nicht gelesen werden.', mountsAllShares:'alle Shares', mountsUnknown:'unbekannt, Share-Einstellungen prüfen', mountsHdd:'kann auf einer Festplatte liegen', mountsLoading:'Container werden geladen…', mountsNoDocker:'Kein Docker-Socket: /var/run/docker.sock einbinden, um die Pfade pro Container zu sehen.', mountsNone:'Keine Container mit Pfaden unter /mnt.', ctrStopped:'gestoppt', sizeSmall:'Klein', sizeLarge:'Groß', sizeTip:'Klein ist die halbe Breite, groß die ganze Breite', sizeToggle:'{name}: {size}, Größe ändern', sizeSet:'{name}: {size}', swapToRight:'{name}: nach rechts', swapToLeft:'{name}: nach links', swapped:'{name}: jetzt {side}', sideLeft:'links', sideRight:'rechts', pos_full:'ganze Breite', pos_left:'linke Hälfte', pos_right:'rechte Hälfte', pos_alone:'halbe Breite, allein in seiner Reihe', pos_hidden:'ausgeblendet', exportTip:'Diesen Zeitraum als CSV exportieren', groupCompose:'Container eines Compose-Projekts zu einer Quelle zusammenfassen', stackTag:'Stack', stackOf:'Compose-Projekt {name}: {list}', quietTitle:'Ruhezeiten', quietNote:'Ein Zeitfenster, in dem die Festplatten schlafen sollten. Spin-ups darin werden markiert und können an einen Webhook gesendet werden.', quietOn:'Ruhezeiten verwenden', quietFrom:'Von', quietTo:'bis', quietDrives:'Gilt für (nichts ausgewählt: alle Festplatten)', webhookLabel:'Webhook für Benachrichtigungen', webhookHelp:'Optional. Erhält einen JSON-POST mit text und content, daher funktionieren ntfy, Gotify, Slack und Discord.', webhookTest:'Test senden', webhookOk:'Test gesendet.', webhookFail:'Test fehlgeschlagen: {error}', quietSaveFailed:'Speichern fehlgeschlagen: {error}', quietTag:'Ruhezeit', legQuiet:'Ruhezeiten', profPaths:'Pfade', infoTitle:'Übersicht', back:'Zurück', ovStorage:'Pools und Array', ovStorageNote:'Die Festplatten, die das Dashboard überwacht, pro Pool oder Array. Pool, Array oder Festplatte anklicken für Details.', ovContainers:'Docker-Container', ovStats:'{ups} Spin-ups · {pct} % aktiv', stateUp:'läuft', stateDown:'Standby', ovThName:'Container', ovThState:'Status', ovThStore:'Liegt auf', ovThSeen:'Dieser Zeitraum', ctrRunning:'läuft', drvActive:'Aktiv', drvDrives:'Festplatten', drvSources:'Wer liest und schreibt', drvWakers:'Was sie geweckt hat', drvContainers:'Container, die sie einbinden', drvNoContainers:'Kein Container bindet sie ein.', drvPoolNote:'Dateien auf einem Pool sind über seine Festplatten verteilt; Lese- und Schreibzugriffe gelten daher für den ganzen Pool.', drvOpen:'Details zu {name} anzeigen', drvNotWatched:'{name} hat keine Festplatten, daher überwacht das Dashboard ihn nicht: keine Spin-ups oder Dateizugriffe, nur welche Container ihn einbinden.', kpiTitle:'Kennzahlen', kpiUps:'Spin-ups', kpiHours:'Laufstunden', kpiRest:'Alle Festplatten im Ruhezustand', kpiLongest:'Längste vollständige Ruhe', kpiNoPrev:'Noch nicht genug Verlauf für einen Vergleich mit dem vorherigen Zeitraum.', cmpSame:'unverändert', pp:'Pp.', cmpBetter:'besser', cmpWorse:'schlechter', daysTitle:'Spin-ups pro Tag', daysBar:'{day}: {n} Spin-ups', daysNote:'Letzte {n} Tage, durchschnittlich {avg} Spin-ups pro Tag. Der gewählte Zeitraum ist hervorgehoben.', hideSaveFailed:'Speichern auf dem Server fehlgeschlagen; nur in diesem Browser gespeichert.', traceHint:'Mit den Pfeiltasten links und rechts gehst du die Zeitabschnitte durch.', noDataYet:'Noch keine Daten', noData:'Keine Daten', lanes:'Zeitleiste pro Festplatte',
+    allPools:'Alle Pools', allDisksPools:'Alle Festplatten und Pools', dragToMove:'Zum Verschieben ziehen', hideTitle:'Ausgeblendete Pfade', hideHelp:'Ein Pfad pro Zeile. * steht für alles, ? für ein Zeichen. Beispiel: /mnt/user/appdata/*', hideCount:'{n} von {total} Dateiereignissen ausgeblendet', actProcs:'Prozesse', actFiles:'Dateien', feedRepeat:'{n}-mal unter den neuesten Ereignissen', feedNote:'Immer die neuesten Ereignisse, unabhängig vom gewählten Zeitraum.', srcTitle:'Aktivität pro Quelle', srcNote:'Wer die Festplatten weckt und wer sie beschäftigt.', srcUps:'verursachte Spin-ups', srcLine:'{r} Lesezugriffe · {w} Schreibzugriffe', restTitle:'Laufzeit und Ruhe pro Festplatte', restNote:'Wie lange die Festplatten nach einem Spin-up laufen und wie lange sie ruhen.', restMedian:'Mittlere Laufzeit', restLongest:'Längste Ruhe', restQuick:'Schnell wieder wach', restQuickNote:'Schnell wieder wach: innerhalb von 30 Minuten nach dem Standby wieder angelaufen. Eine längere Spin-down-Verzögerung kann helfen.', srcLanesTitle:'Zeitleiste pro Quelle', legAnyUp:'Eine Festplatte läuft', legRead:'Lesen', legWrite:'Schreiben', awakeTitle:'Wachgehalten pro Quelle', awakeNote:'Jeder Zugriff, während eine Festplatte läuft, verschiebt ihren Spin-down. Pro Quelle die so hinzugefügte Laufzeit.', awakeLine:'{n}× der letzte Zugriff vor dem Standby', awakeNone:'Keine Aktivität, während die Festplatten liefen.', rhythmTitle:'Rhythmus pro Quelle', profRhythm:'Rhythmus', rhythmNote:'Feste Intervalle und Uhrzeiten pro Quelle und wann am Tag sie aktiv ist.', rhythmDedup:'Dieselbe Datei wird höchstens alle 10 Minuten protokolliert; Häufigeres erscheint als „alle 10 min“.', rhythmEvery:'alle {d}', rhythmDaily:'täglich gegen {time}', rhythmNone:'kein fester Rhythmus', rhythmStrip:'Aktivität pro Tagesstunde, am meisten von {from} bis {to}', profOpen:'Details zu {name} anzeigen', profUps:'Verursachte Spin-ups', profKeep:'Wach gehalten', profReads:'Lesezugriffe', profWrites:'Schreibzugriffe', profHeat:'Aktivität nach Tag und Stunde', profDrives:'Festplatten', profFolders:'Ordner', profFiles:'Dateien', profCell:'{day} {hour}: {n} Ereignisse', legStart:'Container gestartet', legStop:'Container gestoppt oder ungesund', ctrBefore:'{what} von {name} {ago} vorher', ctr_start:'Start', ctr_die:'Stopp', ctr_restart:'Neustart', ctr_healthy:'Gesund', ctr_unhealthy:'Ungesund', exitCode:'Exitcode {code}', profLife:'Start und Stopp', profLifeNone:'Kein Start oder Stopp in diesem Zeitraum.', mountsFailed:'Die Container konnten nicht gelesen werden.', mountsAllShares:'alle Shares', mountsUnknown:'unbekannt, Share-Einstellungen prüfen', mountsHdd:'kann auf einer Festplatte liegen', mountsLoading:'Container werden geladen…', mountsNoDocker:'Kein Docker-Socket: /var/run/docker.sock einbinden, um die Pfade pro Container zu sehen.', mountsNone:'Keine Container mit Pfaden unter /mnt.', ctrStopped:'gestoppt', sizeSmall:'Klein', sizeLarge:'Groß', sizeTip:'Klein ist die halbe Breite, groß die ganze Breite', sizeToggle:'{name}: {size}, Größe ändern', sizeSet:'{name}: {size}', swapToRight:'{name}: nach rechts', swapToLeft:'{name}: nach links', swapped:'{name}: jetzt {side}', sideLeft:'links', sideRight:'rechts', pos_full:'ganze Breite', pos_left:'linke Hälfte', pos_right:'rechte Hälfte', pos_alone:'halbe Breite, allein in seiner Reihe', pos_hidden:'ausgeblendet', exportTip:'Diesen Zeitraum als CSV exportieren', groupCompose:'Container eines Compose-Projekts zu einer Quelle zusammenfassen', stackTag:'Stack', stackOf:'Compose-Projekt {name}: {list}', quietTitle:'Ruhezeiten', quietNote:'Ein Zeitfenster, in dem die Festplatten schlafen sollten. Spin-ups darin werden markiert und können an einen Webhook gesendet werden.', quietOn:'Ruhezeiten verwenden', quietFrom:'Von', quietTo:'bis', quietDrives:'Gilt für (nichts ausgewählt: alle Festplatten)', webhookLabel:'Webhook für Benachrichtigungen', webhookHelp:'Optional. Erhält einen JSON-POST mit text und content, daher funktionieren ntfy, Gotify, Slack und Discord.', webhookTest:'Test senden', webhookOk:'Test gesendet.', webhookFail:'Test fehlgeschlagen: {error}', quietSaveFailed:'Speichern fehlgeschlagen: {error}', quietTag:'Ruhezeit', legQuiet:'Ruhezeiten', profPaths:'Pfade', infoTitle:'Übersicht', back:'Zurück', ovStorage:'Pools und Array', ovStorageNote:'Die Festplatten, die das Dashboard überwacht, pro Pool oder Array. Pool, Array oder Festplatte anklicken für Details.', ovContainers:'Docker-Container', ovStats:'{ups} Spin-ups · {pct} % aktiv', stateUp:'läuft', stateDown:'Standby', ovThName:'Container', ovThState:'Status', ovThStore:'Liegt auf', ovThSeen:'Dieser Zeitraum', ctrRunning:'läuft', drvActive:'Aktiv', drvDrives:'Festplatten', drvSources:'Wer liest und schreibt', drvWakers:'Was sie geweckt hat', drvContainers:'Container, die sie einbinden', drvNoContainers:'Kein Container bindet sie ein.', drvPoolNote:'Dateien auf einem Pool sind über seine Festplatten verteilt; Lese- und Schreibzugriffe gelten daher für den ganzen Pool.', drvOpen:'Details zu {name} anzeigen', drvNotWatched:'Das Dashboard kennt keine Festplatten von {name}, daher hier keine Spin-ups, kein Lesen oder Schreiben: nur welche Container ihn einbinden.', kpiTitle:'Kennzahlen', kpiUps:'Spin-ups', kpiHours:'Laufstunden', kpiRest:'Alle Festplatten im Ruhezustand', kpiLongest:'Längste vollständige Ruhe', kpiNoPrev:'Noch nicht genug Verlauf für einen Vergleich mit dem vorherigen Zeitraum.', cmpSame:'unverändert', pp:'Pp.', cmpBetter:'besser', cmpWorse:'schlechter', daysTitle:'Spin-ups pro Tag', daysBar:'{day}: {n} Spin-ups', daysNote:'Letzte {n} Tage, durchschnittlich {avg} Spin-ups pro Tag. Der gewählte Zeitraum ist hervorgehoben.', hideSaveFailed:'Speichern auf dem Server fehlgeschlagen; nur in diesem Browser gespeichert.', traceHint:'Mit den Pfeiltasten links und rechts gehst du die Zeitabschnitte durch.', noDataYet:'Noch keine Daten', noData:'Keine Daten', lanes:'Zeitleiste pro Festplatte', lanesOf:'Zeitleiste pro Festplatte · {name}', legIoRead:'Gelesene Daten', legIoWrite:'Geschriebene Daten', ssdTitle:'Dateizugriffe auf SSD-Pools', ssdNote:'Lesen und Schreiben jeder SSD wird immer angezeigt. Auch erfassen, welche Datei von wem auf diesen Pools geöffnet wird? Ein Pool mit appdata oder ein Cache erzeugt viele Ereignisse.', ssdNone:'Noch keine SSDs gefunden.', ioRead:'Gelesen', ioWritten:'Geschrieben', ioPeak:'Stärkste Minute', ioPeakAt:'Stärkste Minute: {kib} am {time}', ioLine:'{r} gelesen · {w} geschrieben', ioNone:'In diesem Zeitraum nichts gelesen oder geschrieben.', statRead:'gelesen', statWritten:'geschrieben', drvIoTitle:'Lesen und Schreiben', drvSsdNoFiles:'Welche Dateien hier geöffnet werden, wird nicht erfasst. Aktiviere es in den Einstellungen unter Dateizugriffe auf SSD-Pools.', u_kB:'KB', u_MB:'MB', u_GB:'GB', u_TB:'TB',
     legSpin:'Läuft', legIdle:'Standby', legUp:'Spin-up',
     histTitle:'Spin-ups pro Tagesstunde', causesTitle:'Spin-up-Ursachen pro Ordner', eventsTitle:'Ereignisse',
     onlyUp:'Nur Spin-ups', devFilter:'Nach Festplatte filtern', allDisks:'Alle Festplatten',
@@ -830,7 +845,7 @@ const I18N = {
     prev_30:'Mes anterior', next_30:'Mes siguiente',
     settings:'Ajustes', done:'Listo', cardsTitle:'Tarjetas', cardsNote:'Elige qué tarjetas ver, en qué orden y si son pequeñas (medio ancho) o grandes. Dos tarjetas pequeñas seguidas quedan una al lado de la otra; en un teléfono cada tarjeta ocupa todo el ancho.', moveUp:'Subir {name}', moveDown:'Bajar {name}', movedTo:'{name}: posición {n} de {total}', resetCards:'Restaurar la disposición predeterminada',
     viewTitle:'Discos', groupDrives:'Mostrar pools y arrays agrupados', arrayName:'Array', disk_one:'{n} disco', disk_other:'{n} discos', upOf:'({n} de {total})',
-    allPools:'Todos los pools', allDisksPools:'Todos los discos y pools', dragToMove:'Arrastra para mover', hideTitle:'Rutas ocultas', hideHelp:'Una ruta por línea. * sustituye cualquier cosa, ? un solo carácter. Ejemplo: /mnt/user/appdata/*', hideCount:'{n} de {total} eventos de archivos ocultos', actProcs:'Procesos', actFiles:'Archivos', feedRepeat:'{n} veces entre los eventos más recientes', feedNote:'Siempre los eventos más recientes, sea cual sea el periodo elegido.', srcTitle:'Actividad por origen', srcNote:'Quién despierta los discos y quién los mantiene ocupados.', srcUps:'arranques provocados', srcLine:'{r} lecturas · {w} escrituras', restTitle:'Rotación y reposo por disco', restNote:'Cuánto tiempo siguen girando los discos tras un arranque y cuánto descansan.', restMedian:'Giro mediano', restLongest:'Reposo más largo', restQuick:'Despierta pronto', restQuickNote:'Despierta pronto: arrancado menos de 30 minutos después de entrar en reposo. Un retardo de reposo más largo puede ayudar.', srcLanesTitle:'Cronología por origen', legAnyUp:'Un disco está girando', legRead:'Lectura', legWrite:'Escritura', awakeTitle:'Mantenido despierto por origen', awakeNote:'Cada acceso mientras un disco gira aplaza su reposo. Por origen, el tiempo de giro que añadió así.', awakeLine:'{n}× el último acceso antes del reposo', awakeNone:'Sin actividad mientras los discos giraban.', rhythmTitle:'Ritmo por origen', profRhythm:'Ritmo', rhythmNote:'Intervalos y horas fijas por origen, y en qué momento del día está activo.', rhythmDedup:'Un mismo archivo se registra como mucho una vez cada 10 minutos; lo más frecuente aparece como «cada 10 min».', rhythmEvery:'cada {d}', rhythmDaily:'a diario hacia las {time}', rhythmNone:'sin ritmo fijo', rhythmStrip:'Actividad por hora del día, máxima de {from} a {to}', profOpen:'Ver detalles de {name}', profUps:'Arranques provocados', profKeep:'Mantenido despierto', profReads:'Lecturas', profWrites:'Escrituras', profHeat:'Actividad por día y hora', profDrives:'Discos', profFolders:'Carpetas', profFiles:'Archivos', profCell:'{day} {hour}: {n} eventos', legStart:'Inicio del contenedor', legStop:'Parada o contenedor no saludable', ctrBefore:'{what} de {name} {ago} antes', ctr_start:'Inicio', ctr_die:'Parada', ctr_restart:'Reinicio', ctr_healthy:'Saludable', ctr_unhealthy:'No saludable', exitCode:'código de salida {code}', profLife:'Inicio y parada', profLifeNone:'Sin inicio ni parada en este periodo.', mountsFailed:'No se pudieron leer los contenedores.', mountsAllShares:'todos los shares', mountsUnknown:'desconocido, revisa la configuración del share', mountsHdd:'puede estar en un disco duro', mountsLoading:'Cargando contenedores…', mountsNoDocker:'Sin socket de Docker: monta /var/run/docker.sock para ver las rutas por contenedor.', mountsNone:'Ningún contenedor con rutas bajo /mnt.', ctrStopped:'detenido', sizeSmall:'Pequeño', sizeLarge:'Grande', sizeTip:'Pequeño ocupa la mitad del ancho, grande todo el ancho', sizeToggle:'{name}: {size}, cambiar tamaño', sizeSet:'{name}: {size}', swapToRight:'{name}: mover a la derecha', swapToLeft:'{name}: mover a la izquierda', swapped:'{name}: ahora a la {side}', sideLeft:'izquierda', sideRight:'derecha', pos_full:'todo el ancho', pos_left:'mitad izquierda', pos_right:'mitad derecha', pos_alone:'medio ancho, solo en su fila', pos_hidden:'oculto', exportTip:'Exportar este periodo como CSV', groupCompose:'Agrupar los contenedores de un proyecto Compose en un solo origen', stackTag:'stack', stackOf:'Proyecto Compose {name}: {list}', quietTitle:'Horas de silencio', quietNote:'Una franja en la que los discos deberían dormir. Los arranques en ella se marcan y pueden enviarse a un webhook.', quietOn:'Usar horas de silencio', quietFrom:'De', quietTo:'a', quietDrives:'Se aplica a (nada marcado: todos los discos)', webhookLabel:'Webhook para notificaciones', webhookHelp:'Opcional. Recibe un POST JSON con text y content, así que funcionan ntfy, Gotify, Slack y Discord.', webhookTest:'Enviar prueba', webhookOk:'Prueba enviada.', webhookFail:'La prueba falló: {error}', quietSaveFailed:'No se pudo guardar: {error}', quietTag:'horas de silencio', legQuiet:'Horas de silencio', profPaths:'Rutas', infoTitle:'Resumen', back:'Atrás', ovStorage:'Pools y array', ovStorageNote:'Los discos duros que sigue el panel, por pool o array. Haz clic en un pool, el array o un disco para ver el detalle.', ovContainers:'Contenedores Docker', ovStats:'{ups} arranques · {pct} % activo', stateUp:'girando', stateDown:'en reposo', ovThName:'Contenedor', ovThState:'Estado', ovThStore:'Guardado en', ovThSeen:'Este periodo', ctrRunning:'en marcha', drvActive:'Activo', drvDrives:'Discos', drvSources:'Quién lee y escribe', drvWakers:'Qué lo despertó', drvContainers:'Contenedores que lo montan', drvNoContainers:'Ningún contenedor lo monta.', drvPoolNote:'Los archivos de un pool se reparten entre sus discos; por eso lecturas y escrituras se muestran para todo el pool.', drvOpen:'Ver detalles de {name}', drvNotWatched:'{name} no tiene discos duros, así que el panel no lo sigue: aquí no hay arranques ni accesos a archivos, solo qué contenedores lo montan.', kpiTitle:'Cifras clave', kpiUps:'Arranques', kpiHours:'Horas girando', kpiRest:'Todos los discos en reposo', kpiLongest:'Reposo completo más largo', kpiNoPrev:'Todavía no hay historial suficiente para comparar con el periodo anterior.', cmpSame:'sin cambios', pp:'pp', cmpBetter:'mejor', cmpWorse:'peor', daysTitle:'Arranques por día', daysBar:'{day}: {n} arranques', daysNote:'Últimos {n} días, {avg} arranques al día de media. El periodo elegido está resaltado.', hideSaveFailed:'No se pudo guardar en el servidor; solo se guarda en este navegador.', traceHint:'Usa las flechas izquierda y derecha para recorrer los periodos.', noDataYet:'Todavía no hay datos', noData:'Sin datos', lanes:'Cronología por disco',
+    allPools:'Todos los pools', allDisksPools:'Todos los discos y pools', dragToMove:'Arrastra para mover', hideTitle:'Rutas ocultas', hideHelp:'Una ruta por línea. * sustituye cualquier cosa, ? un solo carácter. Ejemplo: /mnt/user/appdata/*', hideCount:'{n} de {total} eventos de archivos ocultos', actProcs:'Procesos', actFiles:'Archivos', feedRepeat:'{n} veces entre los eventos más recientes', feedNote:'Siempre los eventos más recientes, sea cual sea el periodo elegido.', srcTitle:'Actividad por origen', srcNote:'Quién despierta los discos y quién los mantiene ocupados.', srcUps:'arranques provocados', srcLine:'{r} lecturas · {w} escrituras', restTitle:'Rotación y reposo por disco', restNote:'Cuánto tiempo siguen girando los discos tras un arranque y cuánto descansan.', restMedian:'Giro mediano', restLongest:'Reposo más largo', restQuick:'Despierta pronto', restQuickNote:'Despierta pronto: arrancado menos de 30 minutos después de entrar en reposo. Un retardo de reposo más largo puede ayudar.', srcLanesTitle:'Cronología por origen', legAnyUp:'Un disco está girando', legRead:'Lectura', legWrite:'Escritura', awakeTitle:'Mantenido despierto por origen', awakeNote:'Cada acceso mientras un disco gira aplaza su reposo. Por origen, el tiempo de giro que añadió así.', awakeLine:'{n}× el último acceso antes del reposo', awakeNone:'Sin actividad mientras los discos giraban.', rhythmTitle:'Ritmo por origen', profRhythm:'Ritmo', rhythmNote:'Intervalos y horas fijas por origen, y en qué momento del día está activo.', rhythmDedup:'Un mismo archivo se registra como mucho una vez cada 10 minutos; lo más frecuente aparece como «cada 10 min».', rhythmEvery:'cada {d}', rhythmDaily:'a diario hacia las {time}', rhythmNone:'sin ritmo fijo', rhythmStrip:'Actividad por hora del día, máxima de {from} a {to}', profOpen:'Ver detalles de {name}', profUps:'Arranques provocados', profKeep:'Mantenido despierto', profReads:'Lecturas', profWrites:'Escrituras', profHeat:'Actividad por día y hora', profDrives:'Discos', profFolders:'Carpetas', profFiles:'Archivos', profCell:'{day} {hour}: {n} eventos', legStart:'Inicio del contenedor', legStop:'Parada o contenedor no saludable', ctrBefore:'{what} de {name} {ago} antes', ctr_start:'Inicio', ctr_die:'Parada', ctr_restart:'Reinicio', ctr_healthy:'Saludable', ctr_unhealthy:'No saludable', exitCode:'código de salida {code}', profLife:'Inicio y parada', profLifeNone:'Sin inicio ni parada en este periodo.', mountsFailed:'No se pudieron leer los contenedores.', mountsAllShares:'todos los shares', mountsUnknown:'desconocido, revisa la configuración del share', mountsHdd:'puede estar en un disco duro', mountsLoading:'Cargando contenedores…', mountsNoDocker:'Sin socket de Docker: monta /var/run/docker.sock para ver las rutas por contenedor.', mountsNone:'Ningún contenedor con rutas bajo /mnt.', ctrStopped:'detenido', sizeSmall:'Pequeño', sizeLarge:'Grande', sizeTip:'Pequeño ocupa la mitad del ancho, grande todo el ancho', sizeToggle:'{name}: {size}, cambiar tamaño', sizeSet:'{name}: {size}', swapToRight:'{name}: mover a la derecha', swapToLeft:'{name}: mover a la izquierda', swapped:'{name}: ahora a la {side}', sideLeft:'izquierda', sideRight:'derecha', pos_full:'todo el ancho', pos_left:'mitad izquierda', pos_right:'mitad derecha', pos_alone:'medio ancho, solo en su fila', pos_hidden:'oculto', exportTip:'Exportar este periodo como CSV', groupCompose:'Agrupar los contenedores de un proyecto Compose en un solo origen', stackTag:'stack', stackOf:'Proyecto Compose {name}: {list}', quietTitle:'Horas de silencio', quietNote:'Una franja en la que los discos deberían dormir. Los arranques en ella se marcan y pueden enviarse a un webhook.', quietOn:'Usar horas de silencio', quietFrom:'De', quietTo:'a', quietDrives:'Se aplica a (nada marcado: todos los discos)', webhookLabel:'Webhook para notificaciones', webhookHelp:'Opcional. Recibe un POST JSON con text y content, así que funcionan ntfy, Gotify, Slack y Discord.', webhookTest:'Enviar prueba', webhookOk:'Prueba enviada.', webhookFail:'La prueba falló: {error}', quietSaveFailed:'No se pudo guardar: {error}', quietTag:'horas de silencio', legQuiet:'Horas de silencio', profPaths:'Rutas', infoTitle:'Resumen', back:'Atrás', ovStorage:'Pools y array', ovStorageNote:'Los discos duros que sigue el panel, por pool o array. Haz clic en un pool, el array o un disco para ver el detalle.', ovContainers:'Contenedores Docker', ovStats:'{ups} arranques · {pct} % activo', stateUp:'girando', stateDown:'en reposo', ovThName:'Contenedor', ovThState:'Estado', ovThStore:'Guardado en', ovThSeen:'Este periodo', ctrRunning:'en marcha', drvActive:'Activo', drvDrives:'Discos', drvSources:'Quién lee y escribe', drvWakers:'Qué lo despertó', drvContainers:'Contenedores que lo montan', drvNoContainers:'Ningún contenedor lo monta.', drvPoolNote:'Los archivos de un pool se reparten entre sus discos; por eso lecturas y escrituras se muestran para todo el pool.', drvOpen:'Ver detalles de {name}', drvNotWatched:'El panel no conoce ningún disco de {name}, así que aquí no hay arranques, lecturas ni escrituras: solo qué contenedores lo montan.', kpiTitle:'Cifras clave', kpiUps:'Arranques', kpiHours:'Horas girando', kpiRest:'Todos los discos en reposo', kpiLongest:'Reposo completo más largo', kpiNoPrev:'Todavía no hay historial suficiente para comparar con el periodo anterior.', cmpSame:'sin cambios', pp:'pp', cmpBetter:'mejor', cmpWorse:'peor', daysTitle:'Arranques por día', daysBar:'{day}: {n} arranques', daysNote:'Últimos {n} días, {avg} arranques al día de media. El periodo elegido está resaltado.', hideSaveFailed:'No se pudo guardar en el servidor; solo se guarda en este navegador.', traceHint:'Usa las flechas izquierda y derecha para recorrer los periodos.', noDataYet:'Todavía no hay datos', noData:'Sin datos', lanes:'Cronología por disco', lanesOf:'Cronología por disco · {name}', legIoRead:'Datos leídos', legIoWrite:'Datos escritos', ssdTitle:'Acceso a archivos en pools SSD', ssdNote:'Las lecturas y escrituras de cada SSD se muestran siempre. ¿Registrar también qué archivo abre quién en estos pools? Un pool con appdata o una caché genera muchos eventos.', ssdNone:'Aún no se han encontrado SSD.', ioRead:'Leído', ioWritten:'Escrito', ioPeak:'Minuto más activo', ioPeakAt:'Minuto más activo: {kib} el {time}', ioLine:'{r} leídos · {w} escritos', ioNone:'Nada leído ni escrito en este periodo.', statRead:'leídos', statWritten:'escritos', drvIoTitle:'Lecturas y escrituras', drvSsdNoFiles:'No se registra qué archivos se abren aquí. Actívalo en Ajustes, en Acceso a archivos en pools SSD.', u_kB:'KB', u_MB:'MB', u_GB:'GB', u_TB:'TB',
     legSpin:'Girando', legIdle:'Reposo', legUp:'Arranque',
     histTitle:'Arranques por hora del día', causesTitle:'Causas de arranque por carpeta', eventsTitle:'Eventos',
     onlyUp:'Solo arranques', devFilter:'Filtrar por disco', allDisks:'Todos los discos',
@@ -918,14 +933,19 @@ setFormatters();
 
 /* ---------- parsing: day files, lines `epoch,type,...` (see docs/data-formats.md) ---------- */
 function parseText(text){
-  const ev = [], act = [], names = {}, who = [], procs = [], ctrs = [];
+  const ev = [], act = [], names = {}, kinds = {}, who = [], procs = [], ctrs = [], io = [];
   for (const raw of text.split(/\r?\n/)){
-    const m = raw.trim().match(/^(\d{9,11}),(disk|state|spin|who|activity|proc|ctr),(.*)$/);
+    const m = raw.trim().match(/^(\d{9,11}),(disk|state|spin|who|activity|proc|ctr|io),(.*)$/);
     if (!m) continue;
     const t = +m[1]*1000, rest = m[3];
     if (m[2] === 'disk'){
-      const [dev, name] = rest.split(',');
-      if (dev && name) names[dev] = name;
+      // the third field (hdd/ssd) is newer: older lines only knew HDDs
+      const [dev, name, kind] = rest.split(',');
+      if (dev && name){ names[dev] = name; if (kind) kinds[dev] = kind === 'ssd' ? 'ssd' : 'hdd'; }
+    } else if (m[2] === 'io'){
+      // io: KiB read and written (and the number of requests) since the previous poll
+      const [dev, r, w] = rest.split(',');
+      if (dev && (+r || +w)) io.push({t, dev, r: +r || 0, w: +w || 0});
     } else if (m[2] === 'state' || m[2] === 'spin'){
       // state: the state at that moment (start of day, after a restart), not a change and so not a spin-up
       const [dev, s] = rest.split(',');
@@ -947,7 +967,14 @@ function parseText(text){
       if (a) act.push({t, disk:a[1], ev:a[2], path:a[3]});
     }
   }
-  return {ev, act, names, who, procs, ctrs};
+  return {ev, act, names, kinds, who, procs, ctrs, io};
+}
+// io lines per drive, in time order
+function ioIndex(io){
+  const out = {};
+  for (const x of io) (out[x.dev] ||= []).push(x);
+  for (const l of Object.values(out)) l.sort((p, q) => p.t - q.t);
+  return out;
 }
 // Process name of a who line: the last proc line of that PID at or before that moment
 function procIndex(procs){
@@ -1076,9 +1103,9 @@ function getTrendView(){
 async function fetchSpins(){
   const txt = await fetch('data/spins.csv', {cache:'no-cache'}).then(r => r.ok ? r.text() : null).catch(() => null);
   if (txt == null || txt === spinsText) return false;
-  const {ev, names} = parseText(txt);
+  const {ev, names, kinds} = parseText(txt);
   if (!ev.length) return false;
-  spinsText = txt; spins = {disks: toTransitions(ev), names};
+  spinsText = txt; spins = {disks: toTransitions(ev), names, kinds};
   return true;
 }
 const viewDevs = () => Object.keys(getView().disks).sort(devOrder);
@@ -1089,6 +1116,116 @@ function upMembers(dev, from, to){
   const upAt = at => ms.filter(d => { let st = null; for (const x of data.disks[d]){ if (x.t > at) break; st = x.st; } return st === 'up'; }).length;
   const times = [from, ...ms.flatMap(d => data.disks[d].map(x => x.t)).filter(x => x > from && x < to)];
   return Math.max(...times.map(upAt));
+}
+/* ---------- SSDs, and reads and writes per drive (io lines) ---------- */
+// SSDs never spin down: they have no state or spin lines, only io lines. The disk lines say which
+// drives are SSDs; older ones (without that field) only named HDDs.
+const isSsd = (dev, src = data) => ((src && src.kinds) || {})[dev] === 'ssd';
+const ssdDevs = (src = data) => Object.keys((src && src.names) || {}).filter(d => isSsd(d, src));
+let axisHtml = '';                // the time axis of the dashboard, shared by every timeline card
+// KiB read and written by these drives between a and b
+function ioSum(devs, a, b){
+  let r = 0, w = 0;
+  for (const d of devs){
+    const l = (data.io || {})[d];
+    if (l) for (let i = lowerBound(l, a); i < l.length && l[i].t <= b; i++){ r += l[i].r; w += l[i].w; }
+  }
+  return {r, w};
+}
+// File access on SSDs (when it is switched on for their pool) counts per pool: one drive stands for it,
+// as all files of a pool share one mount. Merged into the lists of the HDD lanes.
+function ssdActDevs(){
+  const first = {};
+  for (const d of ssdDevs().sort(devOrder)) first[laneKeyOfName(nameOf(d))] ||= d;
+  return Object.values(first);
+}
+// The busiest poll (one io line per drive per minute) of these drives together: {kib, t}
+function ioPeak(devs, a, b){
+  const per = new Map();
+  for (const d of devs){
+    const l = (data.io || {})[d];
+    if (l) for (let i = lowerBound(l, a); i < l.length && l[i].t <= b; i++) per.set(l[i].t, (per.get(l[i].t) || 0) + l[i].r + l[i].w);
+  }
+  let best = {kib: 0, t: null};
+  for (const [at, k] of per) if (k > best.kib) best = {kib: k, t: at};
+  return best;
+}
+// Bars no narrower than a poll, at most 200 over the width
+const ioBucketCount = (a, b) => Math.max(1, Math.min(200, Math.ceil((b - a) / 60e3)));
+function ioBuckets(devs, a, b, n){
+  const out = Array.from({length: n}, () => ({r: 0, w: 0})), span = Math.max(1, b - a);
+  for (const d of devs){
+    const l = (data.io || {})[d];
+    if (l) for (let i = lowerBound(l, a); i < l.length && l[i].t <= b; i++){
+      const k = Math.min(n - 1, Math.floor((l[i].t - a) / span * n));
+      out[k].r += l[i].r; out[k].w += l[i].w;
+    }
+  }
+  return out;
+}
+// Stacked bars in a 1000-wide viewBox: writes at the bottom, reads on top, `h` high at the most
+function ioPaths(bk, h, base){
+  const mx = Math.max(1, ...bk.map(x => x.r + x.w)), bw = 1000 / bk.length, ww = Math.max(bw - .5, .6).toFixed(2);
+  let r = '', w = '';
+  bk.forEach((x, i) => {
+    if (!x.r && !x.w) return;
+    const x0 = (i * bw).toFixed(2), hw = x.w ? Math.max(.8, x.w / mx * h) : 0, hr = x.r ? Math.max(.8, x.r / mx * h) : 0;
+    if (hw) w += `M${x0} ${(base - hw).toFixed(2)}h${ww}V${base}h-${ww}Z`;
+    if (hr) r += `M${x0} ${(base - hw - hr).toFixed(2)}h${ww}V${(base - hw).toFixed(2)}h-${ww}Z`;
+  });
+  return {r, w};
+}
+const IO_UNITS = ['u_kB', 'u_MB', 'u_GB', 'u_TB'];
+function fmtKib(k){
+  let v = k, i = 0;
+  while (v >= 1024 && i < IO_UNITS.length - 1){ v /= 1024; i++; }
+  return v.toLocaleString(locale(), {maximumFractionDigits: v < 10 && i ? 1 : 0}) + ' ' + t(IO_UNITS[i]);
+}
+// The cards of "Timeline per drive": one per pool and one for the array. HDD lanes come from the view
+// (merged or per drive, as set); SSDs get a lane of reads and writes, one per pool when merged.
+function laneGroups(){
+  const g = {}, grp = k => g[k] || (g[k] = {key: k, lanes: [], hdd: false});
+  for (const dev of viewDevs()){ const x = grp(laneKeyOf(dev)); x.lanes.push({dev}); x.hdd = true; }
+  const ssd = {};
+  for (const d of ssdDevs()) (ssd[laneKeyOfName(nameOf(d))] ||= []).push(d);
+  for (const [k, devs] of Object.entries(ssd)){
+    devs.sort(devOrder);
+    if ((k === ARRAY ? groupOpt.array : groupOpt.pools) && devs.length > 1)
+      grp(k).lanes.push({io: true, devs, name: groupLabel(k), sub: devs.join(', '), key: 'g:' + k});
+    else for (const d of devs) grp(k).lanes.push({io: true, devs: [d], name: nameOf(d), sub: nameOf(d) !== d ? d : '', key: 'd:' + d});
+  }
+  return Object.values(g).sort((p, q) => (q.key === ARRAY) - (p.key === ARRAY) || p.key.localeCompare(q.key));
+}
+// An SSD lane: only how much it read and wrote, there is no spinning
+function ioLane(l, a, b, n, gridPath){
+  const p = ioPaths(ioBuckets(l.devs, a, b, n), 36, 40), sum = ioSum(l.devs, a, b);
+  const line = t('ioLine', {r: fmtKib(sum.r), w: fmtKib(sum.w)});
+  return `<div class="row lane io">
+      <div class="lane-name"><button type="button" class="drvbtn" data-drive="${esc(l.key)}" title="${esc(t('drvOpen', {name: l.name}))}">${esc(l.name)}</button>${l.sub ? `<small>${esc(l.sub)}</small>` : ''}</div>
+      <div class="trace iotrace" data-io="${esc(l.devs.join(' '))}" data-name="${esc(l.name)}" tabindex="0" role="img" aria-label="${esc(l.name + ': ' + line)}">
+        <svg viewBox="0 0 1000 40" preserveAspectRatio="none" aria-hidden="true">
+          <path class="grid" d="${gridPath}" vector-effect="non-scaling-stroke"/>
+          <path class="iow" d="${p.w}"/><path class="ior" d="${p.r}"/>
+        </svg>
+      </div>
+      <div class="lane-stats">
+        <span><b>${esc(fmtKib(sum.r))}</b> ${esc(t('statRead'))}</span>
+        <span><b>${esc(fmtKib(sum.w))}</b> ${esc(t('statWritten'))}</span>
+      </div>
+    </div>`;
+}
+// Tooltip of an SSD lane: what was read and written in the bar under the pointer
+function bindIoTips(a, b){
+  const n = ioBucketCount(a, b), step = (b - a) / n;
+  document.querySelectorAll('.iotrace').forEach(el => {
+    const devs = el.dataset.io.split(' ');
+    el.onpointermove = e => {
+      const r = el.getBoundingClientRect(), k = Math.max(0, Math.min(n - 1, Math.floor((e.clientX - r.left) / r.width * n)));
+      const from = a + k * step, to = from + step, io = ioSum(devs, from, to);
+      showSegTip([el.dataset.name, '', `${fmtFull.format(from)} – ${fmtTime.format(to)}`, t('ioLine', {r: fmtKib(io.r), w: fmtKib(io.w)})], e.clientX, e.clientY);
+    };
+    el.onpointerleave = () => $('tip').hidden = true;
+  });
 }
 function evLabel(ev){
   if (/SMB/.test(ev)) return t('viaShare');
@@ -1422,10 +1559,14 @@ function render(){
   }
   // narrow screens: skip labels so they do not overlap (about 64px per label)
   const inner = ticks.filter(t => (t-a)/span > .03 && (t-a)/span < .97);
-  const room = Math.max(2, Math.floor(($('axis').clientWidth || 1000) / 64));
+  // one card per pool and the array; their elements have to exist before the axis can be measured
+  const groups = laneGroups();
+  syncLaneCards(groups.map(g => g.key));
+  const shownAxis = [...document.querySelectorAll('#dash > .lanes:not([hidden]) .axis')].find(x => x.clientWidth);
+  const room = Math.max(2, Math.floor(((shownAxis && shownAxis.clientWidth) || $('srcAxis').clientWidth || 1000) / 64));
   const stride = Math.ceil(inner.length / room);
   const edge = inner.filter((_, i) => i % stride === 0);
-  $('axis').innerHTML = edge.map(t => `<span style="left:${(t-a)/span*100}%">${lab(t)}</span>`).join('');
+  axisHtml = edge.map(t => `<span style="left:${(t-a)/span*100}%">${lab(t)}</span>`).join('');
   const gridPath = ticks.map(t => `M${X(t)} 0V40`).join('');
 
   // lanes
@@ -1433,7 +1574,8 @@ function render(){
   // a live update redraws the lanes: keep the keyboard focus on the same lane and the same segment
   const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('.trace');
   const keep = focused ? {dev: focused.dataset.dev, i: traceFocus && traceFocus.dev === focused.dataset.dev ? traceFocus.i : null} : null;
-  $('laneList').innerHTML = devs.map(dev => {
+  const ioN = ioBucketCount(a, b);
+  const spinLane = dev => {
     const segs = segments(view.disks[dev], a, b);
     const y = st => st === 'up' ? 6 : 34;
     let wave = `M0 ${y(segs[0].st)}`, fill = '', marks = '', guess = '';
@@ -1450,6 +1592,7 @@ function render(){
     });
     const pct = Math.round(activeMs/span*100), name = nameOf(dev);
     const quiet = quietApplies(dev) ? quietSpans(a, b).map(([p, q]) => `M${X(p)} 0H${X(q)}V40H${X(p)}Z`).join('') : '';
+    const io = ioPaths(ioBuckets(membersOf(dev), a, b, ioN), 12, 40);     // reads and writes as a thin layer below
     return `<div class="row lane">
       <div class="lane-name">${drvButton(dev, name)}${laneSub(dev, name)}</div>
       <div class="trace" data-dev="${esc(dev)}" tabindex="0" role="group" aria-label="${esc(t('laneAria', {name, ups, pct}))}" aria-describedby="traceHint">
@@ -1457,6 +1600,7 @@ function render(){
           <path class="quiet" d="${quiet}"/>
           <path class="grid" d="${gridPath}" vector-effect="non-scaling-stroke"/>
           <path class="fill" d="${fill}"/>
+          <path class="iow" d="${io.w}"/><path class="ior" d="${io.r}"/>
           <path class="wave" d="${wave}" vector-effect="non-scaling-stroke"/>
           <path class="marks" d="${marks}" vector-effect="non-scaling-stroke"/>
           <path class="guess" d="${guess}"/>
@@ -1467,12 +1611,19 @@ function render(){
         <span><b>${pct}%</b> ${esc(t('active'))}</span>
       </div>
     </div>`;
-  }).join('');
+  };
+  for (const g of groups){
+    const el = cardEl('lanes:' + g.key);
+    el.querySelector('h2').textContent = t('lanesOf', {name: groupLabel(g.key)});
+    el.querySelector('.axis').innerHTML = axisHtml;
+    el.querySelector('.laneList').innerHTML = g.lanes.map(l => l.io ? ioLane(l, a, b, ioN, gridPath) : spinLane(l.dev)).join('');
+    el.querySelectorAll('.leg-spin').forEach(x => x.hidden = !g.hdd);
+    el.querySelector('.leg-quiet').hidden = !quietOpt || !g.hdd;
+  }
 
   renderKpis(a, b);
   renderDays(a, b);
 
-  $('legQuiet').hidden = !quietOpt;
 
   // histogram: at least the last 7 days up to the end of the window, otherwise one day says little
   const tv = getTrendView(), hFrom = Math.max(Math.min(a, b - 7*DAY), srcStart(tv.data));
@@ -1511,14 +1662,14 @@ function render(){
       </div>`).join('')
       : `<p class="muted">${esc(t('noUps'))}</p>`;
   }
-  const srcList = sourceIndex(a, b, devs, groupUps(allUps));
+  const srcList = sourceIndex(a, b, devs.concat(ssdActDevs()), groupUps(allUps));
   srcIdx = {a, b, list: srcList, keys: new Set(srcList.map(x => x.k))};
   renderSources(srcIdx.list);
   renderAwake(srcIdx.list);
   renderRhythm(srcIdx.list);
   renderSrcLanes(srcIdx.list, a, b, X, gridPath);
 
-  renderActDrives(a, b, devs);
+  renderActDrives(a, b, devs.concat(ssdActDevs()));
   renderRest(a, b);
   renderFeed();
 
@@ -1765,7 +1916,7 @@ function renderRhythm(list){
 /* ---------- timeline per source: every access as a tick, under the band "a drive spins" ---------- */
 function renderSrcLanes(list, a, b, X, gridPath){
   const el = $('srcLaneList');
-  $('srcAxis').innerHTML = $('axis').innerHTML;
+  $('srcAxis').innerHTML = axisHtml;
   if (!hasAct()){ el.innerHTML = `<p class="muted">${esc(t('noActivity'))}</p>`; return; }
   const rows = list.filter(r => r.ev.length).sort((p, q) => q.ev.length - p.ev.length).slice(0, 8);
   if (!rows.length){ el.innerHTML = `<p class="muted">${esc(t('actNone'))}</p>`; return; }
@@ -1972,7 +2123,7 @@ function upsIn(a, b, devs){
 }
 function detailIndex(){
   const [a, b] = boundsFor(det.range, det.offset), devs = viewDevs();
-  const list = sourceIndex(a, b, devs, groupUps(upsIn(a, b, devs)));
+  const list = sourceIndex(a, b, devs.concat(ssdActDevs()), groupUps(upsIn(a, b, devs)));
   return {a, b, list, keys: new Set(list.map(x => x.k))};
 }
 function renderDetail(){
@@ -2075,7 +2226,7 @@ const byDriveName = src => (p, q) => {
 };
 function driveGroups(src){
   const g = {};
-  for (const dev of Object.keys(src.disks)) (g[laneKeyOfName(driveName(src, dev))] ||= []).push(dev);
+  for (const dev of new Set([...Object.keys(src.disks), ...ssdDevs(src)])) (g[laneKeyOfName(driveName(src, dev))] ||= []).push(dev);
   return Object.entries(g).map(([key, devs]) => ({key, devs: devs.sort(byDriveName(src))}))
     .sort((p, q) => (q.key === 'array') - (p.key === 'array') || p.key.localeCompare(q.key));
 }
@@ -2096,15 +2247,20 @@ function renderOverview(){
   const {a, b} = srcIdx, src = getTrendView().data;
   $('profileTitle').textContent = t('infoTitle');
   const groups = driveGroups(src);
+  // an SSD has no spin state: it shows what it read and wrote instead
+  const ioText = devs => { const io = ioSum(devs, a, b); return t('ioLine', {r: fmtKib(io.r), w: fmtKib(io.w)}); };
   const storage = groups.length ? groups.map(g => {
-    const n = laneNumbers(driveTransitions(src, g.devs), a, b);
+    const hdds = g.devs.filter(d => !isSsd(d, src)), n = laneNumbers(driveTransitions(src, hdds), a, b);
+    const head = hdds.length ? `${stateTag(n.up)} <span class="muted">${esc(t('ovStats', {ups: n.ups, pct: n.pct}))}</span>`
+                             : `<span class="ov-state ssd">SSD</span> <span class="muted">${esc(ioText(g.devs))}</span>`;
     return `<div class="ov-group" data-group="${esc(g.key)}">
       <div class="ov-row"><button type="button" class="drvbtn ov-name" data-drive="g:${esc(g.key)}">${esc(groupLabel(g.key))}</button>
-        ${stateTag(n.up)} <span class="muted">${esc(t('ovStats', {ups: n.ups, pct: n.pct}))}</span></div>
+        ${head}</div>
       <ul class="ov-members">${g.devs.map(d => {
         const m = laneNumbers(src.disks[d], a, b);
+        const stats = isSsd(d, src) ? `<span class="muted">${esc(ioText([d]))}</span>` : `${stateTag(m.up)} <span class="muted">${esc(t('ovStats', {ups: m.ups, pct: m.pct}))}</span>`;
         return `<li data-dev="${esc(d)}"><button type="button" class="drvbtn" data-drive="d:${esc(d)}">${esc(driveName(src, d))}</button>
-          <span class="muted">${esc(d)}</span> ${stateTag(m.up)} <span class="muted">${esc(t('ovStats', {ups: m.ups, pct: m.pct}))}</span></li>`;
+          <span class="muted">${esc(d)}</span> ${stats}</li>`;
       }).join('')}</ul></div>`;
   }).join('') : `<p class="muted">${esc(t('noData'))}</p>`;
   $('profileBody').innerHTML = `<p class="muted prof-sub">${esc(fmtFull.format(a))} – ${esc(fmtFull.format(b))}</p>
@@ -2149,16 +2305,29 @@ function renderDriveView(key){
   const lane = group ? x : laneKeyOfName(driveName(src, x));
   const inGroup = !group && groups.some(g => g.key === lane && g.devs.length > 1);
   if (!devs.length) return renderUnwatched(x);
-  const n = laneNumbers(driveTransitions(src, devs), a, b);
+  // SSDs never spin: for them only what they read and wrote
+  const hdds = devs.filter(d => !isSsd(d, src)), hasHdd = hdds.length > 0;
+  const n = laneNumbers(driveTransitions(src, hdds), a, b);
   let hours = 0;
-  for (const d of devs) if (src.disks[d] && src.disks[d].length) for (const sg of segments(src.disks[d], a, b)) if (sg.st === 'up') hours += (sg.to - sg.from) / HOUR;
-  $('profileTitle').innerHTML = group ? `${esc(groupLabel(x))} ${stateTag(n.up)}` : `${esc(driveName(src, x))} <span class="muted">${esc(x)}</span> ${stateTag(n.up)}`;
-  const tiles = [['kpiUps', String(n.ups)], ['drvActive', n.pct + '%'],
-    ['kpiHours', hours.toLocaleString(locale(), {maximumFractionDigits: hours < 10 ? 1 : 0}) + ' ' + t('u_h')], ['restLongest', dur(n.longest)]];
+  for (const d of hdds) if (src.disks[d] && src.disks[d].length) for (const sg of segments(src.disks[d], a, b)) if (sg.st === 'up') hours += (sg.to - sg.from) / HOUR;
+  const tag = hasHdd ? stateTag(n.up) : '<span class="ov-state ssd">SSD</span>';
+  $('profileTitle').innerHTML = group ? `${esc(groupLabel(x))} ${tag}` : `${esc(driveName(src, x))} <span class="muted">${esc(x)}</span> ${tag}`;
+  const io = ioSum(devs, a, b), peak = ioPeak(devs, a, b);
+  const tiles = (hasHdd ? [['kpiUps', String(n.ups)], ['drvActive', n.pct + '%'],
+    ['kpiHours', hours.toLocaleString(locale(), {maximumFractionDigits: hours < 10 ? 1 : 0}) + ' ' + t('u_h')], ['restLongest', dur(n.longest)]] : [])
+    .concat([['ioRead', fmtKib(io.r)], ['ioWritten', fmtKib(io.w)]], hasHdd ? [] : [['ioPeak', fmtKib(peak.kib)]]);
+  // reads and writes over the period, as on the timeline
+  const bars = ioPaths(ioBuckets(devs, a, b, ioBucketCount(a, b)), 52, 56);
+  const ioGraph = `<h3 class="sub">${esc(t('drvIoTitle'))}</h3>` + (io.r || io.w
+    ? `<div class="io-graph" role="img" aria-label="${esc(t('ioLine', {r: fmtKib(io.r), w: fmtKib(io.w)}))}"><svg viewBox="0 0 1000 56" preserveAspectRatio="none" aria-hidden="true"><path class="iow" d="${bars.w}"/><path class="ior" d="${bars.r}"/></svg></div>
+       <div class="legend"><span><i class="lg-ior"></i>${esc(t('legIoRead'))}</span><span><i class="lg-iow"></i>${esc(t('legIoWrite'))}</span>${peak.t ? `<span>${esc(t('ioPeakAt', {kib: fmtKib(peak.kib), time: fmtFull.format(peak.t)}))}</span>` : ''}</div>`
+    : `<p class="muted">${esc(t('ioNone'))}</p>`);
   // the drives of a group, each one clickable
   const members = group && devs.length > 1 ? `<h3 class="sub">${esc(t('drvDrives'))}</h3><table class="ov-ctr"><tbody>${devs.map(d => {
-    const m = laneNumbers(src.disks[d], a, b);
-    return `<tr data-dev="${esc(d)}"><td><button type="button" class="drvbtn" data-drive="d:${esc(d)}">${esc(driveName(src, d))}</button> <span class="muted">${esc(d)}</span></td><td>${stateTag(m.up)}</td><td class="muted">${esc(t('ovStats', {ups: m.ups, pct: m.pct}))}</td></tr>`;
+    const m = laneNumbers(src.disks[d], a, b), mio = ioSum([d], a, b);
+    const cells = isSsd(d, src) ? `<td><span class="ov-state ssd">SSD</span></td><td class="muted">${esc(t('ioLine', {r: fmtKib(mio.r), w: fmtKib(mio.w)}))}</td>`
+                                : `<td>${stateTag(m.up)}</td><td class="muted">${esc(t('ovStats', {ups: m.ups, pct: m.pct}))}</td>`;
+    return `<tr data-dev="${esc(d)}"><td><button type="button" class="drvbtn" data-drive="d:${esc(d)}">${esc(driveName(src, d))}</button> <span class="muted">${esc(d)}</span></td>${cells}</tr>`;
   }).join('')}</tbody></table>` : '';
   // activity on these drives in the window: who, which folders, which files, and what woke it
   const m = devsMatcher(devs), pm = projectMap(), who = {}, folders = {}, files = {}, wakers = {};
@@ -2184,13 +2353,17 @@ function renderDriveView(key){
   const whoHtml = whoRows.map(([k, o]) => `<div class="cause-row"><span class="cause-name">${srcLink(o.w, esc(k.split('|')[1]), 'cn') || `<span class="cn">${esc(k.split('|')[1])}</span>`}</span>
       <span class="cause-bar"><i style="width:${(o.r + o.wr) / whoMx * 100}%"></i></span><b title="${esc(t('srcLine', {r: o.r, w: o.wr}))}">${o.r + o.wr}</b></div>`).join('') || `<p class="muted">${esc(t('actNone'))}</p>`;
   const ctrHtml = mappedBy(lane, pm);
+  // on an SSD pool the file access is only recorded when it is switched on in Settings
+  const noFiles = !hasHdd && !whoRows.length && !ssdWatch.includes(lane);
   $('profileBody').innerHTML = `<p class="muted prof-sub">${esc(fmtFull.format(a))} – ${esc(fmtFull.format(b))}${inGroup ? ` · <button type="button" class="drvbtn" data-drive="g:${esc(lane)}">${esc(groupLabel(lane))}</button>` : ''}</p>
     <div class="kpis">${tiles.map(([k, v]) => `<div class="kpi"><div class="k-label">${esc(t(k))}</div><div class="k-val">${esc(v)}</div></div>`).join('')}</div>
+    ${ioGraph}
     ${members}
     ${inGroup && lane !== 'array' ? `<p class="muted ov-note">${esc(t('drvPoolNote'))}</p>` : ''}
+    ${noFiles ? `<p class="muted ov-note">${esc(t('drvSsdNoFiles'))}</p>` : ''}
     <div class="prof-cols">
       <div class="actlist"><h4>${esc(t('drvSources'))}</h4>${whoHtml}</div>
-      <div class="actlist"><h4>${esc(t('drvWakers'))}</h4>${rows(wakers, 6)}</div>
+      ${hasHdd ? `<div class="actlist"><h4>${esc(t('drvWakers'))}</h4>${rows(wakers, 6)}</div>` : ''}
       <div class="actlist"><h4>${esc(t('profFolders'))}</h4>${rows(folders, 6)}</div>
       <div class="actlist"><h4>${esc(t('profFiles'))}</h4>${rows(files, 8, 'muted')}</div>
       <div class="actlist prof-paths"><h4>${esc(t('drvContainers'))}</h4>${ctrHtml}</div>
@@ -2513,6 +2686,8 @@ function segLines(dev, s, a){
   const many = ms.length > 1 && s.st === 'up' && !s.guessed ? ' ' + t('upOf', {n: upMembers(dev, Math.max(s.from, a), s.to), total: ms.length}) : '';
   const lines = [nameOf(dev), t(s.st === 'up' ? 'tipUp' : 'tipDown') + many + (s.guessed ? ' ' + t('assumed') : ''),
     t('tipSpan', {from: fmtFull.format(s.from), to: fmtTime.format(s.to), dur: dur(s.to - s.from)})];
+  const io = ioSum(ms, Math.max(s.from, a), s.to);
+  if (io.r || io.w) lines.push(t('ioLine', {r: fmtKib(io.r), w: fmtKib(io.w)}));
   if (s.st === 'up' && !s.guessed && !s.snap && s.from > a){
     const c = causeOf(dev, s.from);
     const w = c && c.first ? whoFor(c.first) : null;
@@ -2534,7 +2709,8 @@ const SEG_KEYS = {ArrowLeft: -1, ArrowRight: 1, Home: -Infinity, End: Infinity};
 let traceFocus = null;   // {dev, i}: lane with keyboard focus, so a new render puts it back
 function bindTips(a, b){
   const tip = $('tip');
-  document.querySelectorAll('.trace').forEach(el => {
+  bindIoTips(a, b);
+  document.querySelectorAll('.trace:not(.iotrace)').forEach(el => {
     const dev = el.dataset.dev, segs = segments(getView().disks[dev], a, b);
     el.onpointermove = e => {
       const r = el.getBoundingClientRect();
@@ -2564,14 +2740,14 @@ function bindTips(a, b){
 // a moment to draw it, because the processing itself blocks the page.
 async function load(text, source, demo=false, keepRange=false, step=null){
   if (step) await step(.82, 'loadingProcess');
-  const {ev, act, names, who, procs, ctrs} = parseText(text);
+  const {ev, act, names, kinds, who, procs, ctrs, io} = parseText(text);
   if (!ev.length) return false;
   const pidx = procIndex(procs);
   setComms(pidx, who);
   if (step) await step(.88, 'loadingProcess');
   const merged = mergeActivity(act, who);
   if (step) await step(.96, 'loadingRender');
-  data = {disks: toTransitions(ev), names, allAct: merged, act: merged.filter(e => !isHidden(e)), who: indexWho(who), procs: pidx, ctr: ctrEvents(ctrs), source, demo};
+  data = {disks: toTransitions(ev), names, kinds, io: ioIndex(io), allAct: merged, act: merged.filter(e => !isHidden(e)), who: indexWho(who), procs: pidx, ctr: ctrEvents(ctrs), source, demo};
   const ts = ev.map(e => e.t), span = Math.max(...ts) - Math.min(...ts);
   if (!keepRange){ range = '1'; offset = 0; }
   show();
@@ -2605,9 +2781,27 @@ const CARD_TITLES = {kpi:'kpiTitle', lanes:'lanes', srcLanes:'srcLanesTitle', da
   rest:'restTitle', feed:'feedTitle', events:'eventsTitle'};
 // "Active drives" (act) was split into reads and writes; an old layout gets both in its place
 const CARD_RENAMED = {act: ['actR', 'actW']};
-const cardEl = id => $('dash').querySelector(`:scope > [data-card="${id}"]`);
+// "Timeline per drive" is one card per pool and the array: lanes:<key>, made from #laneTpl when that pool
+// appears in the data. 'lanes' itself is only the place where they go in the default order (and in older
+// layouts, where the single timeline card stood). A card of a pool that is gone stays in the layout, unshown.
+const LANE_CARD = /^lanes:[\w.-]{1,64}$/;
+const isLaneCard = id => LANE_CARD.test(id);
+let laneKeys = new Set();          // the pools and the array that have a timeline card now
+const present = id => id === 'lanes' ? false : isLaneCard(id) ? laneKeys.has(id.slice(6)) : true;
+const shownCards = () => cards.filter(c => present(c.id));
+const cardTitle = id => isLaneCard(id) ? t('lanesOf', {name: groupLabel(id.slice(6))}) : t(CARD_TITLES[id]);
+const findCard = id => $('dash').querySelector(`:scope > [data-card="${id}"]`);
+const cardEl = id => findCard(id) || (isLaneCard(id) ? newLaneCard(id) : null);
+function newLaneCard(id){
+  const el = $('laneTpl').content.firstElementChild.cloneNode(true), h = el.querySelector('h2');
+  el.dataset.card = id; h.id = 'lanesTitle-' + id.slice(6); el.setAttribute('aria-labelledby', h.id);
+  el.querySelectorAll('[data-i18n]').forEach(x => x.textContent = t(x.dataset.i18n));
+  el.hidden = true;
+  $('dash').appendChild(el);
+  return el;
+}
 // default size from the HTML (data-half), recorded before a layout changes it
-const DEFAULT_SIZE = Object.fromEntries(Object.keys(CARD_TITLES).map(id => [id, cardEl(id).hasAttribute('data-half') ? 'half' : 'full']));
+const DEFAULT_SIZE = Object.fromEntries(Object.keys(CARD_TITLES).map(id => [id, id !== 'lanes' && cardEl(id).hasAttribute('data-half') ? 'half' : 'full']));
 const SIZES = ['half', 'full'];
 const defaultCards = () => Object.keys(CARD_TITLES).map(id => ({id, hidden: false, size: DEFAULT_SIZE[id]}));
 function loadCards(){
@@ -2617,9 +2811,9 @@ function loadCards(){
   const list = (Array.isArray(saved) ? saved : [])
     .flatMap(c => c && CARD_RENAMED[c.id] ? CARD_RENAMED[c.id].map(id => ({...c, id})) : [c]);
   for (const c of list){
-    if (c && c.id in CARD_TITLES && !seen.has(c.id)){
+    if (c && (c.id in CARD_TITLES || isLaneCard(c.id)) && !seen.has(c.id)){
       seen.add(c.id);
-      out.push({id: c.id, hidden: !!c.hidden, size: SIZES.includes(c.size) ? c.size : DEFAULT_SIZE[c.id]});
+      out.push({id: c.id, hidden: !!c.hidden, size: SIZES.includes(c.size) ? c.size : DEFAULT_SIZE[c.id] || 'full'});
     }
   }
   return out.concat(defaultCards().filter(c => !seen.has(c.id)));
@@ -2628,11 +2822,31 @@ let cards = loadCards();
 const saveCards = () => { try { localStorage.setItem(CARDS_KEY, JSON.stringify(cards)); } catch (e) {} };
 function applyCards(){
   for (const c of cards){
+    if (!present(c.id)){ const old = findCard(c.id); if (old) old.hidden = true; continue; }
     const el = cardEl(c.id);
     $('dash').appendChild(el);
     el.hidden = c.hidden;
     el.toggleAttribute('data-half', c.size === 'half');
   }
+}
+// A timeline card for every pool in `keys` that has none yet: after the last timeline card, or where the
+// old single card stood (with its visibility and size). Returns true when the cards on the page changed.
+function syncLaneCards(keys){
+  const before = [...laneKeys].join();
+  laneKeys = new Set(keys);
+  let changed = false;
+  for (const k of keys){
+    const id = 'lanes:' + k;
+    if (cards.some(c => c.id === id)) continue;
+    const old = cards.find(c => c.id === 'lanes'), last = cards.map(c => isLaneCard(c.id)).lastIndexOf(true);
+    const at = last >= 0 ? last + 1 : old ? cards.indexOf(old) : cards.length;
+    cards.splice(at, 0, {id, hidden: old ? old.hidden : false, size: old ? old.size : DEFAULT_SIZE.lanes});
+    changed = true;
+  }
+  if (keys.length && cards.some(c => c.id === 'lanes')){ cards = cards.filter(c => c.id !== 'lanes'); changed = true; }
+  if (changed){ try { if (localStorage.getItem(CARDS_KEY)) saveCards(); } catch (e) {} }
+  if (changed || before !== [...laneKeys].join() || keys.some(k => !findCard('lanes:' + k))){ applyCards(); return true; }
+  return false;
 }
 // Where every visible card lands on a wide screen, as the grid places it: large = a
 // row of its own; small = left, and a following small card next to it on the right. A small card without
@@ -2656,9 +2870,9 @@ function layIcon(p){
   return `<svg viewBox="0 0 24 14" aria-hidden="true">${box(1, 10.5, p === 'left' || p === 'alone')}${box(12.5, 10.5, p === 'right')}</svg>`;
 }
 function renderCardList(focusSel){
-  const {pos} = cardLayout(cards);
-  $('cardList').innerHTML = cards.map((c, i) => {
-    const name = t(CARD_TITLES[c.id]), up = t('moveUp', {name}), down = t('moveDown', {name}), p = pos[c.id];
+  const list = shownCards(), {pos} = cardLayout(list);
+  $('cardList').innerHTML = list.map((c, i) => {
+    const name = cardTitle(c.id), up = t('moveUp', {name}), down = t('moveDown', {name}), p = pos[c.id];
     const swap = p === 'left' || p === 'right';
     const swapLabel = swap ? t(p === 'left' ? 'swapToRight' : 'swapToLeft', {name}) : t('pos_' + p);
     const sizeLabel = t('sizeToggle', {name, size: t(c.size === 'half' ? 'sizeSmall' : 'sizeLarge')});
@@ -2669,7 +2883,7 @@ function renderCardList(focusSel){
       <button type="button" class="btn size" data-size aria-label="${esc(sizeLabel)}" title="${esc(t('sizeTip'))}">${esc(t(c.size === 'half' ? 'sizeSmall' : 'sizeLarge'))}</button>
       <span class="set-move">
         <button type="button" class="btn" data-move="-1" aria-label="${esc(up)}" title="${esc(up)}"${i === 0 ? ' disabled' : ''}>↑</button>
-        <button type="button" class="btn" data-move="1" aria-label="${esc(down)}" title="${esc(down)}"${i === cards.length - 1 ? ' disabled' : ''}>↓</button>
+        <button type="button" class="btn" data-move="1" aria-label="${esc(down)}" title="${esc(down)}"${i === list.length - 1 ? ' disabled' : ''}>↓</button>
       </span></li>`;
   }).join('');
   const el = focusSel && $('cardList').querySelector(focusSel);
@@ -2683,30 +2897,32 @@ $('cardList').addEventListener('change', e => {
 $('cardList').addEventListener('click', e => {
   const sz = e.target.closest('[data-size]'), sw = e.target.closest('[data-swap]');
   if (sz || (sw && !sw.disabled)){
-    const id = (sz || sw).closest('li').dataset.card, c = cards.find(x => x.id === id), name = t(CARD_TITLES[id]);
+    const id = (sz || sw).closest('li').dataset.card, c = cards.find(x => x.id === id), name = cardTitle(id);
     if (sz){
       c.size = c.size === 'half' ? 'full' : 'half';
       $('cardLive').textContent = t('sizeSet', {name, size: t(c.size === 'half' ? 'sizeSmall' : 'sizeLarge')});
     } else {
       // swap with the neighbour in the same pair (hidden cards can be in between)
-      const pair = cardLayout(cards).pairs.find(pr => pr.includes(id)), other = pair[0] === id ? pair[1] : pair[0];
+      const pair = cardLayout(shownCards()).pairs.find(pr => pr.includes(id)), other = pair[0] === id ? pair[1] : pair[0];
       const i = cards.findIndex(x => x.id === id), j = cards.findIndex(x => x.id === other);
       [cards[i], cards[j]] = [cards[j], cards[i]];
-      $('cardLive').textContent = t('swapped', {name, side: t(cardLayout(cards).pos[id] === 'left' ? 'sideLeft' : 'sideRight')});
+      $('cardLive').textContent = t('swapped', {name, side: t(cardLayout(shownCards()).pos[id] === 'left' ? 'sideLeft' : 'sideRight')});
     }
     saveCards(); applyCards();
     renderCardList(`li[data-card="${id}"] [data-${sz ? 'size' : 'swap'}]`);
     return;
   }
   const btn = e.target.closest('[data-move]'); if (!btn || btn.disabled) return;
-  const id = btn.closest('li').dataset.card, i = cards.findIndex(c => c.id === id), j = i + +btn.dataset.move;
-  if (j < 0 || j >= cards.length) return;
-  [cards[i], cards[j]] = [cards[j], cards[i]];
+  // move among the shown cards; cards of pools that are gone keep their place in between
+  const id = btn.closest('li').dataset.card, list = shownCards(), k = list.findIndex(c => c.id === id), j = k + +btn.dataset.move;
+  if (j < 0 || j >= list.length) return;
+  const p = cards.indexOf(list[k]), q = cards.indexOf(list[j]);
+  [cards[p], cards[q]] = [cards[q], cards[p]];
   saveCards(); applyCards();
   // focus stays on the same card; at the edge it moves to the button that still works
-  const edge = j === 0 || j === cards.length - 1;
+  const edge = j === 0 || j === list.length - 1;
   renderCardList(`li[data-card="${id}"] [data-move="${edge ? -btn.dataset.move : btn.dataset.move}"]`);
-  $('cardLive').textContent = t('movedTo', {name: t(CARD_TITLES[id]), n: j + 1, total: cards.length});
+  $('cardLive').textContent = t('movedTo', {name: cardTitle(id), n: j + 1, total: list.length});
 });
 // Drag by the handle with mouse or finger: the row moves to the place where the pointer
 // passes the middle of another row. On release the new order is saved.
@@ -2730,22 +2946,24 @@ function endDrag(){
   const id = drag.li.dataset.card, order = [...$('cardList').children].map(li => li.dataset.card);
   drag.li.classList.remove('dragging'); $('cardList').classList.remove('is-dragging');
   drag = null;
-  if (order.join() === cards.map(c => c.id).join()) return;
-  cards = order.map(k => cards.find(c => c.id === k));
+  if (order.join() === shownCards().map(c => c.id).join()) return;
+  cards = order.map(k => cards.find(c => c.id === k)).concat(cards.filter(c => !present(c.id)));
   saveCards(); applyCards(); renderCardList();
-  $('cardLive').textContent = t('movedTo', {name: t(CARD_TITLES[id]), n: order.indexOf(id) + 1, total: cards.length});
+  $('cardLive').textContent = t('movedTo', {name: cardTitle(id), n: order.indexOf(id) + 1, total: order.length});
 }
 document.addEventListener('pointerup', endDrag);
 document.addEventListener('pointercancel', endDrag);
 $('resetCards').onclick = () => {
   cards = defaultCards();
   try { localStorage.removeItem(CARDS_KEY); } catch (e) {}
-  applyCards(); renderCardList();
+  if (!syncLaneCards([...laneKeys])) applyCards();
+  renderCardList();
 };
 // <dialog> with showModal where possible; otherwise (old browsers, jsdom) just the open attribute
 function openSettings(){
   renderCardList();
   renderQuietForm();
+  renderSsdForm();
   $('hideCount').textContent = hideCountText();
   const d = $('settings');
   if (d.showModal) d.showModal(); else d.setAttribute('open', '');
@@ -2797,7 +3015,7 @@ function applyHide(){
   refilter();
 }
 /* ---------- quiet hours (settings on the server, so the backend can notify) ---------- */
-let quietOpt = null, webhookUrl = '';
+let quietOpt = null, webhookUrl = '', ssdWatch = [];
 const hm = x => +x.slice(0, 2) * 60 + +x.slice(3, 5);
 // same rule as lane_key() in the backend: parity and diskN belong to the array, pool members to their pool
 const laneKeyOfName = n => /^(parity\d*|disk\d+)$/.test(n) ? 'array' : n.replace(/\d+$/, '');
@@ -2844,6 +3062,23 @@ async function saveQuiet(){
 }
 for (const id of ['quietOn', 'quietFrom', 'quietTo', 'webhookUrl']) $(id).addEventListener('change', saveQuiet);
 $('quietLanes').addEventListener('change', saveQuiet);
+// File access on SSD pools (ssd_watch): which pools the watcher also follows with fatrace
+function renderSsdForm(){
+  const lanes = data ? [...new Set(ssdDevs().map(d => laneKeyOfName(data.names[d] || d)))].sort() : [];
+  $('ssdLanes').innerHTML = lanes.length
+    ? lanes.map(k => `<label><input type="checkbox" value="${esc(k)}"${ssdWatch.includes(k) ? ' checked' : ''}> ${esc(groupLabel(k))}</label>`).join('')
+    : `<span class="muted">${esc(t('ssdNone'))}</span>`;
+}
+$('ssdLanes').addEventListener('change', async () => {
+  const prev = ssdWatch;
+  ssdWatch = [...$('ssdLanes').querySelectorAll('input:checked')].map(i => i.value);
+  if (!hideOnServer){ $('ssdStatus').textContent = ''; return; }
+  const r = await fetch('data/settings.json', {method: 'POST', headers: {'Content-Type': 'application/json'},
+                                               body: JSON.stringify({ssd_watch: ssdWatch})})
+    .then(x => x.ok ? x.json() : x.json().then(j => ({error: j.error || x.status}))).catch(e => ({error: String(e)}));
+  if (r.error){ ssdWatch = prev; renderSsdForm(); }
+  $('ssdStatus').textContent = r.error ? t('quietSaveFailed', {error: r.error}) : '';
+});
 $('webhookTest').onclick = async () => {
   if (!hideOnServer){ $('quietStatus').textContent = t('webhookFail', {error: 'demo'}); return; }
   const r = await fetch('data/notify-test', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'})
@@ -2859,6 +3094,7 @@ async function loadHideServer(){
   hideOnServer = true;
   quietOpt = s.quiet && s.quiet.from ? {from: s.quiet.from, to: s.quiet.to, drives: s.quiet.drives || []} : null;
   webhookUrl = typeof s.webhook === 'string' ? s.webhook : '';
+  ssdWatch = Array.isArray(s.ssd_watch) ? s.ssd_watch.filter(x => typeof x === 'string') : [];
   if (Array.isArray(s.hide)){
     hidePatterns = s.hide.filter(x => typeof x === 'string' && x.trim());
     storeHideLocal();
@@ -2924,6 +3160,9 @@ function demoLog(){
       const down = u + (mins + 15)*60000;
       add(u, `spin,${dev},active`);
       if (down < end) add(down, `spin,${dev},standby`);
+      // while it spins it reads (and sometimes writes) something every few minutes
+      for (let x = u + 60e3; x < down && x < end; x += (2 + rnd()*6) * 60e3)
+        add(x, `io,${dev},${Math.round(rnd()*rnd()*400000)},${name === 'parity' || rnd() < .3 ? Math.round(rnd()*30000) : 0},40,4`);
       freeAt = down + 60000;
       const at = u - (10 + rnd()*50)*1000, disk = name === 'parity' ? 'disk1' : name;
       const r = rnd();
@@ -2954,6 +3193,18 @@ function demoLog(){
         rr += (6 + rnd()*8) * HOUR;
       }
     }
+  }
+  // A cache pool of two NVMe SSDs: never spins down, but reads and writes all day (busier in the evening)
+  add(start, 'disk,nvme0n1,cache,ssd'); add(start, 'disk,nvme1n1,cache2,ssd');
+  for (let x = start + 60e3; x < end; x += 5 * 60e3){
+    const h = new Date(x).getHours(), busy = h >= 18 && h <= 23 ? 3 : h >= 8 ? 1.5 : .4;
+    for (const dev of ['nvme0n1', 'nvme1n1']) if (rnd() < .8)
+      add(x, `io,${dev},${Math.round(rnd()*busy*60000)},${Math.round((800 + rnd()*busy*20000) * (rnd() < .03 ? 40 : 1))},20,30`);
+  }
+  const cacheDbs = [['plex', 'plex/Library/Plug-in Support/Databases/com.plexapp.plugins.library.db'], ['sonarr', 'sonarr/sonarr.db'], ['homeassistant', 'homeassistant/home-assistant_v2.db']];
+  for (let x = start + 20*60e3; x < end; x += (20 + rnd()*40) * 60e3){
+    const [ctr, db] = pick(cacheDbs);
+    who(x, 'container', ctr, 50, 'geschreven', `/mnt/cache/appdata/${db}`);
   }
   // Fixed rhythms, so the Rhythm card recognises something in the sample: radarr every 2 hours, the mover daily at 03:30
   for (let r = start + 40*60e3; r < end; r += 2*HOUR) who(r, 'container', 'radarr', 45, 'geschreven', '/mnt/disk1/appdata/radarr/radarr.db');

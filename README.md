@@ -4,11 +4,11 @@ See when your hard drives spin up and down, and **why**.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-dark.png">
-  <img alt="Spin Dashboard: key figures compared with the previous week, a timeline per lane with every spin-up, a timeline per source with every access, spin-ups per day and per hour of day, what wakes the drives and what keeps them awake, spin-ups and activity by source, the rhythm of each source, active drives for reading and writing, spin duration and rest, live activity and a table of events with the cause of each spin-up" src="docs/images/screenshot-light.png">
+  <img alt="Spin Dashboard: key figures compared with the previous week, a timeline per pool and the array with every spin-up and the data read and written (an NVMe cache pool as a read/write graph), a timeline per source with every access, spin-ups per day and per hour of day, what wakes the drives and what keeps them awake, spin-ups and activity by source, the rhythm of each source, active drives for reading and writing, spin duration and rest, live activity and a table of events with the cause of each spin-up" src="docs/images/screenshot-light.png">
 </picture>
 
 - **Key figures** at the top: spin-ups, spinning hours, how much of the time all drives slept and the longest full rest, each compared with the previous period, so you see right away whether a change helped.
-- **Timeline per drive**: every spin-up, how long it ran, how much of the time the drive was active.
+- **Timeline per drive**, one card per pool and the array: every spin-up, how long it ran, how much of the time the drive was active, and how much data it read and wrote. SSD and NVMe pools, which never spin down, show a read/write graph instead. Each card can be hidden, moved and resized on its own.
 - **Spin-ups per day**: the trend over all stored days, with the selected period highlighted. Spin-ups per hour of day cover at least the last week.
 - **Activity per source**: every container or process ranked by the spin-ups it caused, with how often it read and wrote and on which drives. Click a name for its profile: figures, an activity heatmap by day and hour, its folders and files.
 - **Kept awake per source**: which sources keep postponing the spin-down, and by how much spinning time.
@@ -29,7 +29,8 @@ See when your hard drives spin up and down, and **why**.
 - Settings also let you hide cards and change their order; the layout is remembered per browser.
 - Pools and the array show as one lane each by default (a lane spins when any of its drives spins); one switch in Settings shows every drive separately.
 - Hide noisy paths with wildcards under Settings › Hidden paths (for example `/mnt/user/appdata/*`); they no longer count anywhere in the dashboard. The list is stored on the server, so it is the same in every browser. The data on disk stays complete.
-- Works with the array and with HDD pools (XFS, Btrfs, ZFS). SSD/NVMe pools are ignored.
+- Works with the array and with HDD pools (XFS, Btrfs, ZFS). SSD/NVMe pools show how much they read and write (from the kernel's counters, which never wake a drive); which file is opened by whom can be switched on per SSD pool under Settings › File access on SSD pools.
+- **Reads per drive** and **Writes per drive** also cover an SSD pool once its file access is switched on.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/active-drives-live-activity.png">
@@ -109,7 +110,8 @@ Open the WebUI on port 8089. The first drive check runs within a minute; file so
 |---|---|
 | Drive state | `hdparm -C` every 60 s (falls back to `smartctl -n standby`). Neither wakes a sleeping drive. Only changes are stored. |
 | Drive names | Read from Unraid's `/var/local/emhttp/disks.ini` (parity, disk1, pool members). |
-| File access | `fatrace` (fanotify) on every HDD-backed mount, including ZFS datasets. Opens, writes to open files, creates, deletes and moves, each labelled read or write. |
+| Data read and written | `/sys/block/<dev>/stat` for every drive, SSDs included, every poll: kernel counters, they never touch the drive. |
+| File access | `fatrace` (fanotify) on every HDD-backed mount, including ZFS datasets, and on the SSD pools chosen in Settings. Opens, writes to open files, creates, deletes and moves, each labelled read or write. |
 | Source | The process behind each access is looked up in the host process table. Containers are recognised by cgroup and named via the Docker socket. Access through `/mnt/user` passes through shfs; the dashboard then looks up which process has the file open via `/mnt/user`. |
 | Storage | One plain CSV file per day in `days/` in the appdata folder, with drive states and file access together. History is kept for 30 days by default. Files from older versions (`spin.csv`, `who.csv`, …) are converted automatically on start and moved to `legacy/`. |
 | Live feed | A Server-Sent Events stream (`/data/stream`) pushes every file event the moment it is logged, so the dashboard updates live. |

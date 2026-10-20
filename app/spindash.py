@@ -4,16 +4,17 @@
 One process with these parts:
 
   poller   polls the state of every HDD every POLL_INTERVAL seconds (hdparm -C, with
-           smartctl as fallback) and writes only changes to the day file.
+           smartctl as fallback) and writes only changes to the day file, plus what every
+           drive (SSDs included) read and wrote, from the kernel counters in /sys/block/<dev>/stat.
            The names (parity, disk1, pool, pool2) come from Unraid's disks.ini.
-  watcher  runs one `fatrace -c` (fanotify) per HDD mount and records which process
-           opens which file: a container, Unraid itself or a user (SMB/shell).
+  watcher  runs one `fatrace -c` (fanotify) per HDD mount (and per SSD pool chosen in Settings)
+           and records which process opens which file: a container, Unraid itself or a user (SMB/shell).
   docker   follows start/stop/health of containers (ctr lines) and provides per container the mounts
            with where the share lives (shares.ini) for /data/containers.json.
   web      serves the dashboard and the CSV files, and stores the settings (hidden paths, quiet hours).
 
 Everything lives in DATA_DIR/days: one CSV per day (YYYY-MM-DD.csv, local date) with lines
-`epoch,type,...` (disk, state, spin, proc, who, activity, ctr). Older separate files (spin.csv, disks.csv,
+`epoch,type,...` (disk, state, spin, io, proc, who, activity, ctr). Older separate files (spin.csv, disks.csv,
 who.csv, activity.csv) are migrated to day files once at start.
 """
 import gzip
@@ -25,6 +26,7 @@ import os
 import queue
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -70,7 +72,7 @@ SETTINGS = os.path.join(DATA, "spindash-settings.json")
 OWN_FILES = {"spin.csv", "disks.csv", "who.csv", "activity.csv",
              "spindash-settings.json", "spindash-settings.json.tmp"}
 DAY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}\.csv(?:\.tmp)?$")
-TYPES = ("disk", "state", "spin", "proc", "who", "activity", "ctr")   # order within the same second
+TYPES = ("disk", "state", "spin", "io", "proc", "who", "activity", "ctr")   # order within the same second
 
 write_lock = threading.Lock()
 # health for /health: when the poller last succeeded, what the watcher watches, whether
@@ -218,11 +220,16 @@ def read_disks_ini():
     return out
 
 
-def is_rotational(dev):
+def rotational(dev):
+    """True for a spinning drive, False for an SSD/NVMe, None when the kernel does not know the device."""
     try:
         return open(f"{SYS_BLOCK}/{dev}/queue/rotational").read().strip() == "1"
     except OSError:
-        return False
+        return None
+
+
+def is_rotational(dev):
+    return rotational(dev) is True
 
 
 def mount_base(name):
@@ -232,15 +239,35 @@ def mount_base(name):
     return name if re.fullmatch(r"disk\d+", name) else re.sub(r"\d+$", "", name)
 
 
-def hdd_devices():
-    """{device: name} for all spinning drives. Without disks.ini: every sdX with rotational=1."""
-    mapped = {d: n for d, n in read_disks_ini() if is_rotational(d)}
-    if mapped:
-        return mapped
+BLOCK_NAME = re.compile(r"^(sd[a-z]+|nvme\d+n\d+)$")     # whole drives, no partitions, loop or md
+
+
+def all_devices():
+    """{device: (name, hdd)} for every drive Unraid knows (disks.ini), SSDs and NVMe included.
+    Without disks.ini: every sdX and nvmeXnY in /sys/block, named after the device.
+    Devices the kernel does not know (no /sys/block entry) are left out."""
+    out = {}
+    for d, n in read_disks_ini():
+        r = rotational(d)
+        if r is not None:
+            out[d] = (n, r)
+    if out:
+        return out
     try:
-        return {d: d for d in os.listdir(SYS_BLOCK) if d.startswith("sd") and is_rotational(d)}
+        names = sorted(os.listdir(SYS_BLOCK))
     except OSError:
         return {}
+    for d in names:
+        r = rotational(d) if BLOCK_NAME.match(d) else None
+        if r is not None:
+            out[d] = (d, r)
+    return out
+
+
+def hdd_devices(devs=None):
+    """{device: name} for the spinning drives only."""
+    devs = all_devices() if devs is None else devs
+    return {d: n for d, (n, hdd) in devs.items() if hdd}
 
 
 def mounted():
@@ -251,11 +278,14 @@ def mounted():
 
 
 def target_mounts():
-    """Mounts of HDDs under /mnt, including ZFS datasets below them."""
+    """Mounts of HDDs (and of the SSD pools chosen in `ssd_watch`) under /mnt, including ZFS datasets below them."""
     if WATCH_OVERRIDE:
         roots = [r.rstrip("/") for r in WATCH_OVERRIDE]
     else:
-        roots = sorted({f"/mnt/{b}" for b in map(mount_base, hdd_devices().values()) if b})
+        # HDDs always; SSD pools (and SSDs in the array) only when chosen in Settings
+        ssd = set(read_settings().get("ssd_watch", []))
+        roots = sorted({f"/mnt/{b}" for n, hdd in all_devices().values()
+                        if (hdd or lane_key(n) in ssd) and (b := mount_base(n))})
     mps = mounted()
     return sorted({mp for mp in mps for r in roots if mp == r or mp.startswith(r + "/")})
 
@@ -297,20 +327,55 @@ def drive_state(dev):
     return None
 
 
+def io_counters(dev):
+    """(read KiB, written KiB, reads, writes) since boot from /sys/block/<dev>/stat, or None.
+    Kernel counters: reading them never touches the drive, so it does not wake a sleeping HDD."""
+    try:
+        f = open(f"{SYS_BLOCK}/{dev}/stat").read().split()
+        return (int(f[2]) // 2, int(f[6]) // 2, int(f[0]), int(f[4]))      # sectors are 512 bytes
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+# io lines wait here while every HDD sleeps: writing them each minute would keep a drive awake
+# that holds DATA_DIR (rule 3). The web server sends them along with the day file, so the
+# dashboard is live anyway; they are written as soon as something else is written or an HDD spins.
+IO_PENDING_MAX = 200_000
+io_pending = []
+io_lock = threading.Lock()
+
+
+def flush_io():
+    with io_lock:
+        lines = io_pending[:]
+        io_pending.clear()
+    if lines:
+        append_lines(lines)
+
+
+def pending_io(day):
+    """The io lines of `day` that are not in the day file yet."""
+    with io_lock:
+        return [ln for ln in io_pending if day_of(ln.split(",", 1)[0]) == day]
+
+
 def poll_once(last, now=None):
     """One poll. Writes to the day file:
-    - `disk` lines on the first poll of a day or when the drive names change;
-    - `spin` on a state change;
-    - `state` with the current state on the first poll of a day or after a start,
-      so every day file can be read on its own. A `state` is not a spin-up.
+    - `disk` lines (device, name, hdd/ssd) on the first poll of a day or when the drives change;
+    - `spin` on a state change of an HDD;
+    - `state` with the current state of every HDD on the first poll of a day or after a start,
+      so every day file can be read on its own. A `state` is not a spin-up. SSDs get neither;
+    - `io` with what every drive read and wrote since the previous poll (only when not zero).
+      These wait in `io_pending` while every HDD sleeps and nothing else is written.
     `last` keeps the previous state. Returns the number of spin and state lines."""
     now = int(time.time() if now is None else now)
-    day, devs = day_of(now), hdd_devices()
+    day, alld = day_of(now), all_devices()
+    devs = hdd_devices(alld)
     known = last.setdefault("st", {})
     new_day = last.get("day") != day
     lines = []
-    if new_day or devs != last.get("disks"):
-        lines += [f"{now},disk,{d},{n}" for d, n in sorted(devs.items())]
+    if new_day or alld != last.get("all"):
+        lines += [f"{now},disk,{d},{n},{'hdd' if hdd else 'ssd'}" for d, (n, hdd) in sorted(alld.items())]
     n, ups = 0, []
     for dev in sorted(devs):
         st = drive_state(dev)
@@ -325,7 +390,27 @@ def poll_once(last, now=None):
             lines.append(f"{now},state,{dev},{st}")
             n += 1
         known[dev] = st
-    last["day"], last["disks"] = day, dict(devs)
+    prev, io = last.setdefault("io", {}), []
+    for dev in sorted(alld):
+        c = io_counters(dev)
+        if c is None:
+            continue
+        p, prev[dev] = prev.get(dev), c
+        if p is None:
+            continue
+        delta = [x - y for x, y in zip(c, p)]
+        if any(x < 0 for x in delta):        # counters reset (device replaced): start over
+            continue
+        if any(delta):
+            io.append(f"{now},io,{dev}," + ",".join(map(str, delta)))
+    for dev in [d for d in prev if d not in alld]:
+        del prev[dev]
+    last["day"], last["disks"], last["all"] = day, dict(devs), dict(alld)
+    with io_lock:
+        io_pending.extend(io)
+        del io_pending[:-IO_PENDING_MAX]
+    if lines or not devs or any(known.get(d) == "active" for d in devs):
+        flush_io()
     if lines:
         append_lines(lines)
     if ups:
@@ -1217,7 +1302,16 @@ def clean_webhook(value):
     return v
 
 
-SETTINGS_KEYS = {"hide": clean_hide, "quiet": clean_quiet, "webhook": clean_webhook}
+def clean_ssd_watch(value):
+    """SSD pools (lane keys: cache, array, ...) whose file access the watcher follows; empty = none."""
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > 64 or not all(isinstance(d, str) and LANE_NAME.match(d) for d in value):
+        raise ValueError("ssd_watch is a list of at most 64 pool names")
+    return list(dict.fromkeys(value))
+
+
+SETTINGS_KEYS = {"hide": clean_hide, "quiet": clean_quiet, "webhook": clean_webhook, "ssd_watch": clean_ssd_watch}
 
 
 def save_settings(new):
@@ -1357,7 +1451,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404)
             return
         gz = "gzip" in self.headers.get("Accept-Encoding", "")
-        etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}{"-gz" if gz else ""}"'
+        extra = pending_io(os.path.basename(path)[:-4])         # io lines not written yet (see io_pending)
+        tail = f"-{hashlib.sha1(extra[-1].encode()).hexdigest()[:8]}{len(extra):x}" if extra else ""
+        etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}{tail}{"-gz" if gz else ""}"'
         if etag in self.headers.get("If-None-Match", ""):
             self.send_response(304)
             self.send_header("ETag", etag)
@@ -1365,7 +1461,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         try:
-            body = day_body(path, st, gz)
+            if extra:
+                with open(path, "rb") as f:
+                    body = f.read()
+                if body and not body.endswith(b"\n"):
+                    body += b"\n"
+                body += "".join(ln + "\n" for ln in extra).encode()
+                if gz:
+                    body = gzip.compress(body, compresslevel=6, mtime=0)
+            else:
+                body = day_body(path, st, gz)
         except OSError:
             self.send_error(404)
             return
@@ -1475,6 +1580,14 @@ def fatrace_version():
     return "found" if shutil.which("fatrace") else "not found"
 
 
+def stop(signum=None, frame=None):
+    """docker stop: write the io lines that are still waiting, then exit."""
+    try:
+        flush_io()
+    finally:
+        sys.exit(0)
+
+
 def main():
     os.makedirs(DAYS, exist_ok=True)
     try:
@@ -1485,6 +1598,7 @@ def main():
         f"keeping {RETENTION_DAYS} days, fatrace: {fatrace_version()})")
     relabel_existing()
     threading.excepthook = lambda a: log("thread error:", repr(a.exc_value))
+    signal.signal(signal.SIGTERM, stop)
     for target in (poller, watcher, housekeeping, docker_events):
         threads[target.__name__] = threading.Thread(target=target, daemon=True)
         threads[target.__name__].start()

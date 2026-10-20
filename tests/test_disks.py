@@ -86,3 +86,49 @@ def test_mounts_with_spaces(sd, monkeypatch):
     monkeypatch.setattr(sd, "WATCH_OVERRIDE", ["/mnt/my pool"])
     (sd._tmp / "mounts").write_text("p /mnt/my\\040pool zfs rw 0 0\n")
     assert sd.target_mounts() == ["/mnt/my pool"]
+
+
+def test_all_devices_includes_ssds_and_skips_unknown(sd):
+    write_ini(sd)
+    for dev in ("sdb", "sdc", "sdd"):
+        make_disk(sd._tmp, dev)
+    make_disk(sd._tmp, "nvme0n1", rotational=False)        # sde is not in /sys/block
+    assert sd.all_devices() == {"sdb": ("parity", True), "sdc": ("disk1", True),
+                                "sdd": ("trunk", True), "nvme0n1": ("frunk", False)}
+
+
+def test_all_devices_fallback_without_disks_ini(sd):
+    make_disk(sd._tmp, "sdx")
+    make_disk(sd._tmp, "nvme1n1", rotational=False)
+    make_disk(sd._tmp, "loop0", rotational=False)
+    assert sd.all_devices() == {"nvme1n1": ("nvme1n1", False), "sdx": ("sdx", True)}
+
+
+def test_target_mounts_adds_only_the_chosen_ssd_pools(sd):
+    (sd._tmp / "emhttp" / "disks.ini").write_text(
+        '["trunk"]\ndevice="sdd"\n["cache"]\ndevice="nvme0n1"\n["cache2"]\ndevice="nvme1n1"\n["fast"]\ndevice="sdf"\n')
+    make_disk(sd._tmp, "sdd")
+    for dev in ("nvme0n1", "nvme1n1", "sdf"):
+        make_disk(sd._tmp, dev, rotational=False)
+    (sd._tmp / "mounts").write_text(
+        "trunk /mnt/trunk zfs rw 0 0\ncache /mnt/cache btrfs rw 0 0\nfast /mnt/fast xfs rw 0 0\n")
+    assert sd.target_mounts() == ["/mnt/trunk"]
+    sd.save_settings({"ssd_watch": ["cache"]})
+    assert sd.target_mounts() == ["/mnt/cache", "/mnt/trunk"]
+
+
+def test_ssd_watch_setting_is_checked(sd):
+    import pytest
+    assert sd.clean_ssd_watch(["cache", "cache", "array"]) == ["cache", "array"]
+    assert sd.clean_ssd_watch(None) == []
+    for bad in ("cache", ["a/b"], [1], ["x"] * 65):
+        with pytest.raises(ValueError):
+            sd.clean_ssd_watch(bad)
+
+
+def test_old_disk_lines_without_kind_still_load(sd):
+    """The kind field is only added: old disk lines (HDDs only) need no conversion."""
+    import os
+    os.makedirs(sd.DAYS)
+    open(sd.day_path("2026-10-08"), "w").write("1791410400,disk,sdd,trunk\n1791410400,state,sdd,standby\n")
+    assert sd.spins_body()[0].decode().splitlines() == ["1791410400,disk,sdd,trunk", "1791410400,state,sdd,standby"]

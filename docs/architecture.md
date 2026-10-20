@@ -4,9 +4,11 @@
 ┌──────────────────────── container (privileged, --pid=host) ────────────────────────┐
 │                                                                                    │
 │  poller ── hdparm -C / smartctl -n standby ──► days/<day>.csv  (spin, state)       │
-│     └── /emhttp/disks.ini + /sys/block/*/rotational ──► days/<day>.csv  (disk)     │
+│     ├── /emhttp/disks.ini + /sys/block/*/rotational ──► days/<day>.csv  (disk)     │
+│     └── /sys/block/*/stat (every drive, SSDs too) ──► io_pending ──► (io)          │
 │                                                                                    │
-│  watcher ── fatrace -c per HDD mount ──► queue ──► handle() ──► days/<day>.csv     │
+│  watcher ── fatrace -c per HDD mount   ──► queue ──► handle() ──► days/<day>.csv   │
+│             (+ SSD pools in ssd_watch)                                             │
 │                                         classify(pid): /proc/<pid>/cgroup, stat     │
 │                                         container_name(): docker.sock              │
 │                                         shfs → via_user_share(): /proc/*/fd       │
@@ -31,14 +33,19 @@
 ## Components
 
 **Poller.** Every `POLL_INTERVAL` seconds. A spin-up inside the quiet hours (Settings) of a drive that
-takes part is sent to the webhook, in a separate thread so a slow receiver never delays the poll. Determines the HDDs from `disks.ini` (only
-`rotational=1`), polls their state and writes changes as `spin` lines. On the first poll after
-start and on the first poll of each day it writes the current state of every disk as `state`
-lines, plus the disk names as `disk` lines.
+takes part is sent to the webhook, in a separate thread so a slow receiver never delays the poll. Determines every drive from `disks.ini` and whether it
+spins (`rotational`); only HDDs are asked their state, and changes become `spin` lines. On the first
+poll after start and on the first poll of each day it writes the current state of every HDD as `state`
+lines, plus the name and kind (`hdd`/`ssd`) of every drive as `disk` lines. It also reads the kernel's
+I/O counters of every drive (`/sys/block/<dev>/stat`, which never wakes a drive) and turns the
+difference with the previous poll into an `io` line. Those wait in memory (`io_pending`) while every
+HDD sleeps, so a busy SSD does not make the dashboard write every minute; the web server adds the
+waiting lines to the day file it sends. See `io` in `data-formats.md`.
 
 **Watcher.** Determines the mounts to watch: `/mnt/<name>` for array disks (`disk1`) and
 pools (pool member `trunk2` belongs to `/mnt/trunk`), plus every mount below them (ZFS datasets).
-Each mount gets a `fatrace -c` with filter `O+WD<` (open, write, create, delete, move). `fatrace` uses
+SSD pools are only watched when they are chosen in Settings (`ssd_watch`): an appdata or cache pool
+gives a lot of events. Each mount gets a `fatrace -c` with filter `O+WD<` (open, write, create, delete, move). `fatrace` uses
 `FAN_MARK_FILESYSTEM`, so access from other mount namespaces (the host, other containers) is
 seen as well. Every minute it checks whether the mounts changed or a `fatrace` stopped.
 
@@ -72,6 +79,12 @@ is done.
 Texts come from `I18N` (en, nl, fr, de, es) via `t()`; dates via `Intl` in the locale of the chosen
 language. The `(al gestopt)` suffix in who lines is translated when shown; the data format itself
 stays unchanged.
+
+*Timeline per drive* is one card per pool and one for the array (`lanes:<key>` in the card layout,
+made from `#laneTpl` when the pool shows up in the data). An HDD lane draws spinning and standby with the
+data read and written as a thin layer below it; an SSD lane (from the `ssd` kind in the `disk` lines) only
+draws reads and writes, and SSDs never count in the spin figures, quiet hours or causes. The drive pages
+of the overview show the same reads and writes for every pool and drive.
 
 At the top, *Key figures* show spin-ups, spinning hours, the share of time all drives slept and the
 longest full rest, each compared with the previous period of the same length. *Spin-ups per day* shows
