@@ -299,3 +299,28 @@ def test_via_user_share_reuses_one_fd_scan_within_a_second(sd, monkeypatch):
     clock[0] = 1002.0                                        # older than a second: again
     sd.via_user_share("/mnt/trunk/Media/a.mkv", since=990.0)
     assert len(scans) == 3
+
+
+def test_docker_storage_opens_are_skipped_and_layer_writes_collapse(sd, monkeypatch):
+    """Docker's data-root on a watched pool: no line per binary a container opens, one per layer written."""
+    calls = []
+    monkeypatch.setattr(sd, "write_who", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(sd, "classify", lambda pid, comm: ("unraid", comm) if comm == "dockerd" else ("container", comm))
+    root = "/mnt/frunk/appdata/docker"
+    layer = "0ef8c76348c7a2f73ab2408ed320154a9701770293fec224c45771c839231cfe"
+    sd.handle(f"1.0 smartctl(7): O   {root}/overlay2/{layer}/diff/usr/lib/libc.so.6\n")       # a binary: skipped
+    sd.handle(f"1.0 wget(8): O   {root}/containers/{layer}/hosts\n")                           # skipped
+    sd.handle(f"1.0 swag(9): W   {root}/overlay2/{layer}/diff/tmp/nginx-proxy/0000000001\n")
+    sd.handle(f"1.0 dockerd(3): +   {root}/overlay2/{layer}-init/diff/etc/hosts\n")
+    sd.handle(f"1.0 dockerd(3): W   {root}/image/overlay2/repositories.json\n")
+    sd.handle(f"1.0 dockerd(3): W   {root}/containers/{layer}/{layer}-json.log\n")              # a log: as it is
+    sd.handle("1.0 sonarr(10): W   /mnt/frunk/appdata/sonarr/sonarr.db-wal\n")                  # not Docker's: as it is
+    sd.handle("1.0 plex(11): O   /mnt/frunk/appdata/docker-compose/plex.yml\n")                 # only a similar name
+    assert calls == [
+        ("1", "container", "swag", "9", "geschreven", f"{root}/overlay2/{layer}/"),
+        ("1", "unraid", "dockerd", "3", "aangemaakt", f"{root}/overlay2/{layer}-init/"),
+        ("1", "unraid", "dockerd", "3", "geschreven", f"{root}/image/"),
+        ("1", "unraid", "dockerd", "3", "geschreven", f"{root}/containers/{layer}/{layer}-json.log"),
+        ("1", "container", "sonarr", "10", "geschreven", "/mnt/frunk/appdata/sonarr/sonarr.db-wal"),
+        ("1", "container", "plex", "11", "geopend", "/mnt/frunk/appdata/docker-compose/plex.yml"),
+    ]

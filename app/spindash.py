@@ -910,6 +910,27 @@ def resolve_shfs_later(ts, pid, op, path):
     threading.Thread(target=run, daemon=True).start()
 
 
+# Docker's own storage (its data-root on a pool): image layers, the writable layer of every container,
+# and per container its config and logs. Every program a container starts opens its binaries and
+# libraries here, thousands of opens a minute, so opens are not logged; writes to a layer are logged as
+# that layer's folder (an image pull writes thousands of files), writes in containers/<id>/ (the logs) as they are.
+DOCKER_STORE = re.compile(r"^(.*?/docker/(overlay2|btrfs|zfs|vfs|image|buildkit|containerd|containers|network|plugins|runtimes|tmp)/)(.*)$")
+LAYER_ID = re.compile(r"^(?:subvolumes/|graph/)?[0-9a-f]{25,64}(?:-init)?(?=/|$)")
+
+
+def docker_store_path(path, op):
+    """None to skip the event, otherwise the path to log (see DOCKER_STORE)."""
+    m = DOCKER_STORE.match(path)
+    if not m:
+        return path
+    if op == "geopend":
+        return None
+    if m.group(2) == "containers":
+        return path
+    layer = LAYER_ID.match(m.group(3))
+    return m.group(1) + (layer.group(0) + "/" if layer else "")
+
+
 def classify_early(line):
     """Determine the source of a new PID right away (in the reading thread), while the process
     is still running. The consumer can lag behind; classify() then returns the remembered result."""
@@ -925,11 +946,16 @@ def handle(line):
     ts, comm, pid, types, path = m.groups()
     if pid == MY_PID or is_own_file(path):
         return                               # do not log our own writes
-    if not path.endswith("/") and "D" not in types and os.path.isdir(path):
-        path += "/"
     op = next((label for c, label in OPS if c in types), None)
     if not op:
         return
+    store = docker_store_path(path, op)
+    if store is None:
+        return
+    if store != path:
+        path = store                         # a layer of Docker's storage, as one folder
+    elif not path.endswith("/") and "D" not in types and os.path.isdir(path):
+        path += "/"
     if comm == "shfs" and op == "geopend" and not path.endswith("/"):
         resolve_shfs_later(ts, pid, op, path)
         return

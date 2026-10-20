@@ -50,7 +50,12 @@ SSD pools are only watched when they are chosen in Settings (`ssd_watch`): an ap
 gives a lot of events. One `fatrace` per filesystem: a bind mount of a filesystem that is already watched
 (a Docker volume that binds a folder of the pool) would report every event a second time under another
 path, so of the mounts of one source only the shortest under `/mnt` is used. Overlay (container root
-filesystems, when Docker's data-root is on a pool), tmpfs and other non-drive filesystems are skipped. Each mount gets a `fatrace -c` with filter `O+WD<` (open, write, create, delete, move). `fatrace` uses
+filesystems, when Docker's data-root is on a pool), tmpfs and other non-drive filesystems are skipped.
+Because fatrace marks the whole filesystem, Docker's own storage on a watched pool still shows up through
+its real paths: every program a container starts opens its binaries in `docker/overlay2/<layer>/`. Opens
+in Docker's storage are therefore not logged, a write to a layer is logged as that layer's folder (one
+line instead of thousands on an image pull), and writes in `docker/containers/<id>/` (the container
+logs) as they are. Each mount gets a `fatrace -c` with filter `O+WD<` (open, write, create, delete, move). `fatrace` uses
 `FAN_MARK_FILESYSTEM`, so access from other mount namespaces (the host, other containers) is
 seen as well. Every minute it checks whether the mounts changed or a `fatrace` stopped.
 
