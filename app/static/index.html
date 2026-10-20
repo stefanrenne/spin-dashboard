@@ -662,7 +662,7 @@ const I18N = {
     histTitle:'Spin-ups per hour of day', causesTitle:'Spin-up causes per folder', eventsTitle:'Events',
     onlyUp:'Spin-ups only', devFilter:'Filter by drive', allDisks:'All drives',
     thTime:'Time', thDisk:'Drive', thEvent:'Event', thCause:'Cause', thDur:'Lasted',
-    summary:'{n} drives, {from} to {to}', demo:'Sample data', live:'Live, updated {time}',
+    summary:'{drives}, {from} to {to}', demo:'Sample data', live:'Live, updated {time}',
     laneAria:'{name}: {ups} spin-ups, {pct}% active', spinUps:'spin-ups', active:'active',
     histBar:'{from} to {to}: {n} spin-ups',
     histSpan:'Spin-ups {range}. Busiest hour: {from} to {to}.',
@@ -709,7 +709,7 @@ const I18N = {
     histTitle:'Spin-ups per uur van de dag', causesTitle:'Oorzaken van spin-ups per map', eventsTitle:'Gebeurtenissen',
     onlyUp:'Alleen spin-ups', devFilter:'Filter op schijf', allDisks:'Alle schijven',
     thTime:'Tijdstip', thDisk:'Schijf', thEvent:'Gebeurtenis', thCause:'Oorzaak', thDur:'Duurde',
-    summary:'{n} schijven, {from} tot {to}', demo:'Voorbeelddata', live:'Live, bijgewerkt {time}',
+    summary:'{drives}, {from} tot {to}', demo:'Voorbeelddata', live:'Live, bijgewerkt {time}',
     laneAria:'{name}: {ups} spin-ups, {pct}% actief', spinUps:'spin-ups', active:'actief',
     histBar:'{from} tot {to}: {n} spin-ups',
     histSpan:'Spin-ups {range}. Drukste uur: {from} tot {to}.',
@@ -756,7 +756,7 @@ const I18N = {
     histTitle:'Démarrages par heure de la journée', causesTitle:'Causes des démarrages par dossier', eventsTitle:'Événements',
     onlyUp:'Démarrages uniquement', devFilter:'Filtrer par disque', allDisks:'Tous les disques',
     thTime:'Heure', thDisk:'Disque', thEvent:'Événement', thCause:'Cause', thDur:'Durée',
-    summary:'{n} disques, du {from} au {to}', demo:'Données d’exemple', live:'En direct, mis à jour à {time}',
+    summary:'{drives}, du {from} au {to}', demo:'Données d’exemple', live:'En direct, mis à jour à {time}',
     laneAria:'{name} : {ups} démarrages, {pct} % actif', spinUps:'démarrages', active:'actif',
     histBar:'{from} à {to} : {n} démarrages',
     histSpan:'Démarrages {range}. Heure la plus chargée : {from} à {to}.',
@@ -803,7 +803,7 @@ const I18N = {
     histTitle:'Spin-ups pro Tagesstunde', causesTitle:'Spin-up-Ursachen pro Ordner', eventsTitle:'Ereignisse',
     onlyUp:'Nur Spin-ups', devFilter:'Nach Festplatte filtern', allDisks:'Alle Festplatten',
     thTime:'Zeitpunkt', thDisk:'Festplatte', thEvent:'Ereignis', thCause:'Ursache', thDur:'Dauer',
-    summary:'{n} Festplatten, {from} bis {to}', demo:'Beispieldaten', live:'Live, aktualisiert {time}',
+    summary:'{drives}, {from} bis {to}', demo:'Beispieldaten', live:'Live, aktualisiert {time}',
     laneAria:'{name}: {ups} Spin-ups, {pct} % aktiv', spinUps:'Spin-ups', active:'aktiv',
     histBar:'{from} bis {to}: {n} Spin-ups',
     histSpan:'Spin-ups {range}. Aktivste Stunde: {from} bis {to}.',
@@ -850,7 +850,7 @@ const I18N = {
     histTitle:'Arranques por hora del día', causesTitle:'Causas de arranque por carpeta', eventsTitle:'Eventos',
     onlyUp:'Solo arranques', devFilter:'Filtrar por disco', allDisks:'Todos los discos',
     thTime:'Hora', thDisk:'Disco', thEvent:'Evento', thCause:'Causa', thDur:'Duró',
-    summary:'{n} discos, del {from} al {to}', demo:'Datos de ejemplo', live:'En directo, actualizado {time}',
+    summary:'{drives}, del {from} al {to}', demo:'Datos de ejemplo', live:'En directo, actualizado {time}',
     laneAria:'{name}: {ups} arranques, {pct} % activo', spinUps:'arranques', active:'activo',
     histBar:'{from} a {to}: {n} arranques',
     histSpan:'Arranques {range}. Hora con más actividad: {from} a {to}.',
@@ -1538,7 +1538,7 @@ function render(){
       $(id).title = t(k + range); $(id).setAttribute('aria-label', t(k + range));
     }
   }
-  $('sourceLine').innerHTML = esc(t('summary', {n: Object.keys(data.disks).length, from: fmtFull.format(a), to: fmtFull.format(b)})) +
+  $('sourceLine').innerHTML = esc(t('summary', {drives: tn('disk', Object.keys(data.disks).length), from: fmtFull.format(a), to: fmtFull.format(b)})) +
     (data.demo ? `<span class="demo-note">${esc(t('demo'))}</span>` : '') +
     (data.source === LIVE && offset === 0 ? `<span class="demo-note">${esc(t('live', {time: fmtTime.format(Date.now())}))}</span>` : '');
 

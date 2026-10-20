@@ -1780,7 +1780,7 @@ test('every pool gets its own timeline card, and an SSD lane shows reads and wri
   assert.match(trunk.querySelector('.trace').getAttribute('aria-label'), /^trunk: 1 spin-ups/);
   assert.ok(trunk.querySelector('.ior').getAttribute('d').length > 0);
   // SSDs do not count as drives that spin: summary, key figures and quiet hours are about the HDD
-  assert.match(d.getElementById('sourceLine').textContent, /^1 schijv/);
+  assert.match(d.getElementById('sourceLine').textContent, /^1 schijf,/);       // singular
   assert.equal(text(d.querySelector('#kpis .kpi .k-val')), '1');
   d.getElementById('openSettings').click();
   assert.deepEqual([...d.querySelectorAll('#quietLanes input')].map((i) => i.value), ['trunk']);
