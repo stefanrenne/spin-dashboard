@@ -142,3 +142,30 @@ def test_wear_warn_setting_is_checked(sd):
         with pytest.raises(ValueError):
             sd.clean_wear_warn(bad)
     assert sd.save_settings({"wear_warn": None}) == {"wear_warn": None}
+
+
+def test_target_mounts_skip_bind_mounts_and_container_filesystems(sd):
+    """Docker on an SSD pool: overlay root filesystems and volumes that bind a folder of a pool are not
+    watched again; fatrace already sees the whole filesystem through its real mount."""
+    (sd._tmp / "emhttp" / "disks.ini").write_text('["trunk"]\ndevice="sdd"\n["frunk"]\ndevice="nvme0n1"\n')
+    make_disk(sd._tmp, "sdd")
+    make_disk(sd._tmp, "nvme0n1", rotational=False)
+    (sd._tmp / "mounts").write_text(
+        "frunk /mnt/frunk zfs rw 0 0\n"
+        "frunk/appdata /mnt/frunk/appdata zfs rw 0 0\n"
+        "trunk /mnt/trunk zfs rw 0 0\n"
+        "trunk/Media /mnt/trunk/Media zfs rw 0 0\n"
+        "frunk/appdata /data zfs rw 0 0\n"                                     # our own /data: not under /mnt
+        "overlay /mnt/frunk/appdata/docker/overlay2/abc/merged overlay rw 0 0\n"
+        "frunk/appdata /mnt/frunk/appdata/docker/volumes/appdata/_data zfs rw 0 0\n"   # bind of appdata
+        "trunk/Media /mnt/frunk/appdata/docker/volumes/media/_data zfs rw 0 0\n"     # bind of an HDD dataset
+        "tmpfs /mnt/frunk/appdata/docker/containers/x/shm tmpfs rw 0 0\n"
+        "shfs /mnt/user fuse.shfs rw 0 0\n")
+    assert sd.target_mounts() == ["/mnt/trunk", "/mnt/trunk/Media"]
+    sd.save_settings({"ssd_watch": ["frunk"]})
+    assert sd.target_mounts() == ["/mnt/frunk", "/mnt/frunk/appdata", "/mnt/trunk", "/mnt/trunk/Media"]
+
+
+def test_mount_points_with_spaces(sd):
+    (sd._tmp / "mounts").write_text("tank/My\\040Files /mnt/tank/My\\040Files zfs rw 0 0\n")
+    assert sd.mounted() == [("tank/My Files", "/mnt/tank/My Files", "zfs")]

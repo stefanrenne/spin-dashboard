@@ -2,6 +2,9 @@
 
 Newest first.
 
+## 2026-10-20: one fatrace per filesystem
+- With file access on for an SSD pool that holds Docker's data-root, the watcher also followed the container overlay mounts (health checks and binaries as noise) and Docker volumes that bind a folder of the pool (every event twice, under two paths). `target_mounts()` now skips overlay, tmpfs and other non-drive filesystems and keeps one mount per source: the shortest under `/mnt`
+
 ## 2026-10-20: SSD wear
 - What the SSDs write per day: a fifth key figure (compared with the previous period, from hourly `io` totals that `spins.csv` now carries), on each SSD lane, in the overview and on the drive pages
 - SMART wear per SSD (`wear` lines: percentage used and written since new, NVMe and common SATA attributes), asked hourly and only of SSDs, shown on the drive pages and in the overview

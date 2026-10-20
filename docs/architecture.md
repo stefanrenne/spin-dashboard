@@ -47,7 +47,10 @@ of a day) it asks every SSD, never an HDD, for its SMART wear (`wear` lines), wh
 **Watcher.** Determines the mounts to watch: `/mnt/<name>` for array disks (`disk1`) and
 pools (pool member `trunk2` belongs to `/mnt/trunk`), plus every mount below them (ZFS datasets).
 SSD pools are only watched when they are chosen in Settings (`ssd_watch`): an appdata or cache pool
-gives a lot of events. Each mount gets a `fatrace -c` with filter `O+WD<` (open, write, create, delete, move). `fatrace` uses
+gives a lot of events. One `fatrace` per filesystem: a bind mount of a filesystem that is already watched
+(a Docker volume that binds a folder of the pool) would report every event a second time under another
+path, so of the mounts of one source only the shortest under `/mnt` is used. Overlay (container root
+filesystems, when Docker's data-root is on a pool), tmpfs and other non-drive filesystems are skipped. Each mount gets a `fatrace -c` with filter `O+WD<` (open, write, create, delete, move). `fatrace` uses
 `FAN_MARK_FILESYSTEM`, so access from other mount namespaces (the host, other containers) is
 seen as well. Every minute it checks whether the mounts changed or a `fatrace` stopped.
 

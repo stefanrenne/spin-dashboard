@@ -293,15 +293,28 @@ def hdd_devices(devs=None):
     return {d: n for d, (n, hdd) in devs.items() if hdd}
 
 
+# Not a filesystem on a drive: container root filesystems (Docker's data-root can live on a pool), memory
+# and kernel filesystems, and the user shares
+SKIP_FSTYPES = {"overlay", "tmpfs", "ramfs", "proc", "sysfs", "nsfs", "devtmpfs", "devpts", "mqueue", "cgroup",
+                "cgroup2", "autofs", "squashfs", "fuse.shfs", "fuse.lxcfs", "binfmt_misc", "debugfs", "tracefs"}
+
+
 def mounted():
+    """[(source, mount point, filesystem type)] from MOUNTS_FILE."""
     out = []
     for line in open(MOUNTS_FILE):
-        out.append(line.split()[1].replace("\\040", " "))
+        p = line.split()
+        if len(p) >= 3:
+            out.append((p[0].replace("\\040", " "), p[1].replace("\\040", " "), p[2]))
     return out
 
 
 def target_mounts():
-    """Mounts of HDDs (and of the SSD pools chosen in `ssd_watch`) under /mnt, including ZFS datasets below them."""
+    """Mounts of HDDs (and of the SSD pools chosen in `ssd_watch`) under /mnt, including ZFS datasets below them.
+    One per filesystem: fatrace marks the whole filesystem, so a bind mount of one that is already watched
+    (a Docker volume that binds a folder of the pool) would report every event twice, under another path.
+    Of the mounts of one source the shortest under /mnt is the real one; overlay and other non-drive
+    filesystems are skipped."""
     if WATCH_OVERRIDE:
         roots = [r.rstrip("/") for r in WATCH_OVERRIDE]
     else:
@@ -309,8 +322,12 @@ def target_mounts():
         ssd = set(read_settings().get("ssd_watch", []))
         roots = sorted({f"/mnt/{b}" for n, hdd in all_devices().values()
                         if (hdd or lane_key(n) in ssd) and (b := mount_base(n))})
-    mps = mounted()
-    return sorted({mp for mp in mps for r in roots if mp == r or mp.startswith(r + "/")})
+    mps = [(src, mp) for src, mp, fs in mounted() if fs not in SKIP_FSTYPES and mp.startswith("/mnt/")]
+    real = {}
+    for src, mp in sorted(mps, key=lambda x: (len(x[1]), x[1])):
+        real.setdefault(src, mp)
+    return sorted({mp for src, mp in mps if real[src] == mp
+                   for r in roots if mp == r or mp.startswith(r + "/")})
 
 
 # =====================================================================================
