@@ -4,7 +4,7 @@ See when your hard drives spin up and down, and **why**.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-dark.png">
-  <img alt="Spin Dashboard: key figures compared with the previous week, a timeline per pool and the array with every spin-up and the data read and written (an NVMe cache pool as a read/write graph), a timeline per source with every access, spin-ups per day and per hour of day, what wakes the drives and what keeps them awake, spin-ups and activity by source, the rhythm of each source, active drives for reading and writing, spin duration and rest, live activity and a table of events with the cause of each spin-up" src="docs/images/screenshot-light.png">
+  <img alt="Spin Dashboard: key figures compared with the previous week, a timeline per pool and the array with every spin-up and the data read and written (an NVMe cache pool as a read/write graph with what it writes per day), what the SSDs write per day in the key figures, a timeline per source with every access, spin-ups per day and per hour of day, what wakes the drives and what keeps them awake, spin-ups and activity by source, the rhythm of each source, active drives for reading and writing, spin duration and rest, live activity and a table of events with the cause of each spin-up" src="docs/images/screenshot-light.png">
 </picture>
 
 - **Key figures** at the top: spin-ups, spinning hours, how much of the time all drives slept and the longest full rest, each compared with the previous period, so you see right away whether a change helped.
@@ -31,6 +31,7 @@ See when your hard drives spin up and down, and **why**.
 - Hide noisy paths with wildcards under Settings › Hidden paths (for example `/mnt/user/appdata/*`); they no longer count anywhere in the dashboard. The list is stored on the server, so it is the same in every browser. The data on disk stays complete.
 - Works with the array and with HDD pools (XFS, Btrfs, ZFS). SSD/NVMe pools show how much they read and write (from the kernel's counters, which never wake a drive); which file is opened by whom can be switched on per SSD pool under Settings › File access on SSD pools.
 - **Reads per drive** and **Writes per drive** also cover an SSD pool once its file access is switched on.
+- **SSD wear**: what the SSDs write per day (a key figure, compared with the previous period), and per SSD the wear and total written from SMART. An SSD that writes more than a limit you set (100 GB per day by default) is marked.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/active-drives-live-activity.png">

@@ -1771,7 +1771,7 @@ test('every pool gets its own timeline card, and an SSD lane shows reads and wri
   // merged (default): one lane for both SSDs of the pool, with what they read and wrote together
   assert.deepEqual(laneNames(cache), ['cache nvme0n1, nvme1n1']);
   assert.ok(cache.querySelector('.lane.io'));
-  assert.equal(text(cache.querySelector('.lane-stats')), '1,5 MB gelezen 1 GB geschreven');
+  assert.equal(text(cache.querySelector('.lane-stats')), '1,5 MB gelezen 1 GB geschreven 1 GB per dag');
   assert.equal(cache.querySelector('.iotrace').getAttribute('aria-label'), 'cache: 1,5 MB gelezen · 1 GB geschreven');
   assert.ok(cache.querySelector('.iow').getAttribute('d').length > 0);
   assert.ok(cache.querySelectorAll('.leg-spin').length && [...cache.querySelectorAll('.leg-spin')].every((x) => x.hidden));
@@ -1828,7 +1828,7 @@ test('an SSD pool has a detail page with what it read and wrote', async () => {
   const d = dom.window.document;
   d.querySelector('#dash > [data-card="lanes:cache"] .drvbtn').click();
   assert.equal(text(d.getElementById('profileTitle')), 'cache SSD');
-  assert.deepEqual(tilesOf(d), ['Gelezen 1,5 MB', 'Geschreven 1 GB', 'Drukste minuut 1 GB']);
+  assert.deepEqual(tilesOf(d), ['Gelezen 1,5 MB', 'Geschreven 1 GB', 'Geschreven per dag 1 GB/dag', 'Drukste minuut 1 GB']);
   assert.ok(d.querySelector('#profileBody .io-graph .iow').getAttribute('d').length > 0);
   assert.deepEqual([...d.querySelectorAll('#profileBody tr[data-dev]')].map((tr) => tr.dataset.dev), ['nvme0n1', 'nvme1n1']);
   assert.match(text(d.getElementById('profileBody')), /wordt niet bijgehouden/);       // file access is off for this pool
@@ -1883,5 +1883,82 @@ test('file access on an SSD pool shows in reads and writes per drive and in the 
   assert.match(text(d.getElementById('actWrites')), /^cache/);
   assert.ok([...d.querySelectorAll('#sources .src-sub .drvbtn')].some((b) => b.dataset.drive === 'd:nvme0n1'));
   assert.match(text(d.getElementById('kpis')), /^Spin-ups 0/);          // writing to an SSD wakes nothing
+  dom.window.close();
+});
+
+// ---------- SSD wear ----------
+const WEAR = served({ [today]: [
+  `${ep(300)},disk,nvme0n1,cache,ssd`, `${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},state,sdd,standby`,
+  `${ep(200)},wear,nvme0n1,2,1000000000`, `${ep(100)},wear,nvme0n1,3,1073741824`,
+  `${ep(30)},io,nvme0n1,0,52428800,0,300`,                                   // 50 GB written
+] });
+
+test('key figures get a tile for what the SSDs write per day, and no tile without SSDs', async () => {
+  const dom = await load(WEAR);
+  const d = dom.window.document;
+  assert.ok(d.getElementById('kpis').classList.contains('five'));
+  const tile = d.querySelector('#kpis [data-kpi="kpiSsdWrite"]');
+  assert.equal(text(tile.querySelector('.k-label')), 'Geschreven op SSD’s');
+  assert.equal(text(tile.querySelector('.k-val')), '50 GB/dag');
+  assert.ok(!tile.classList.contains('over'));                              // below the default of 100 GB
+  assert.ok(!tile.querySelector('.k-cmp'));                                // no io lines in the previous period
+  dom.window.close();
+  const pool = await load(POOL);
+  assert.equal(pool.window.document.querySelectorAll('#kpis .kpi').length, 4);
+  assert.ok(!pool.window.document.getElementById('kpis').classList.contains('five'));
+  pool.window.close();
+});
+
+test('SMART wear shows on the SSD page and in the overview', async () => {
+  const dom = await load(WEAR);
+  const d = dom.window.document;
+  d.querySelector('#dash > [data-card="lanes:cache"] .drvbtn').click();
+  assert.deepEqual(tilesOf(d).slice(-2), ['Slijtage (SMART) 3%', 'Geschreven sinds nieuw 1 TB']);   // the latest wear line
+  d.getElementById('profileDone').click();
+  d.getElementById('openInfo').click();
+  assert.match(text(d.querySelector('#profileBody .ov-group[data-group="cache"] .ov-row')), /50 GB\/dag · 3% versleten$/);
+  dom.window.close();
+});
+
+test('an SSD that writes more than the limit is marked everywhere', async () => {
+  const dom = await load({ ...WEAR, 'settings.json': JSON.stringify({ hide: [], wear_warn: 20 }) });
+  const d = dom.window.document;
+  assert.ok(d.querySelector('#kpis [data-kpi="kpiSsdWrite"]').classList.contains('over'));
+  const perday = d.querySelector('[data-card="lanes:cache"] .perday');
+  assert.ok(perday.classList.contains('over'));
+  assert.equal(perday.getAttribute('title'), 'Meer dan 20 GB per dag');
+  d.querySelector('#dash > [data-card="lanes:cache"] .drvbtn').click();
+  assert.match(text(d.querySelector('#profileBody .ov-note.over')), /^cache schrijft gemiddeld meer dan 20 GB per dag/);
+  dom.window.close();
+});
+
+test('the wear limit is set in Settings and saved on the server; empty means never', async () => {
+  const dom = await load({ ...WEAR, 'settings.json': JSON.stringify({ hide: [] }) });
+  const d = dom.window.document, w = dom.window;
+  d.getElementById('openSettings').click();
+  const input = d.getElementById('wearWarn');
+  assert.equal(input.value, '100');                                        // the default
+  input.value = '40'; input.dispatchEvent(new w.Event('change'));
+  await until(() => w.__posts.length);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(w.__posts[0].body, { wear_warn: 40 });
+  assert.ok(d.querySelector('#kpis [data-kpi="kpiSsdWrite"]').classList.contains('over'));
+  input.value = ''; input.dispatchEvent(new w.Event('change'));
+  await until(() => w.__posts.length > 1);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(w.__posts[1].body, { wear_warn: null });
+  assert.ok(!d.querySelector('#kpis [data-kpi="kpiSsdWrite"]').classList.contains('over'));
+  dom.window.close();
+});
+
+test('with the hourly io lines of spins.csv the SSD tile compares with the previous period', async () => {
+  const y = ep(24 * 60 + 60);                                              // yesterday, in the previous 24 hours
+  const lines = [`${ep(50 * 60)},disk,nvme0n1,cache,ssd`, `${ep(50 * 60)},disk,sdd,trunk,hdd`, `${ep(50 * 60)},state,sdd,standby`,
+    `${y},io,nvme0n1,0,10485760,0,1`, `${ep(30)},io,nvme0n1,0,20971520,0,1`];
+  const dom = await load({ ...byDay(lines), 'spins.csv': lines.join('\n') + '\n' });
+  const d = dom.window.document;
+  const tile = d.querySelector('#kpis [data-kpi="kpiSsdWrite"]');
+  assert.equal(text(tile.querySelector('.k-val')), '20 GB/dag');
+  assert.match(text(tile.querySelector('.k-cmp')), /\+100%.*10 GB\/dag$/);
   dom.window.close();
 });

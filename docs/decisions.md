@@ -140,3 +140,12 @@ model as the rest of the dashboard (meant for the local network, no login); put 
 reverse proxy's authentication when it is reachable from outside. The test endpoint only uses the
 saved URL, never one from the request.
 
+## SSD wear from SMART and from what the dashboard measures
+
+What an SSD writes per day comes from the `io` lines the dashboard already writes, so it works for every SSD
+and covers exactly the period on screen. The real wear (how much of the rated endurance is used, everything
+written since new) only the drive knows, so the poller asks SMART too: `smartctl` on an SSD wakes nothing,
+and the poller only runs it for drives the kernel calls non-rotational, with `-n standby` as a second guard
+should that ever be wrong. Once an hour is enough: wear moves by a percent in months. The warning is a
+limit per SSD rather than per pool, because a mirrored pool writes everything twice and wear is per drive.
+It is not sent to the webhook: a slow trend is not something to be woken for.

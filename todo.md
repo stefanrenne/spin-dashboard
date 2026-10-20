@@ -12,6 +12,5 @@ Open work, roughly by priority. Move finished items to `completed.md`.
 ## Features
 - [ ] Test SAS drives and HBAs; validate the `smartctl -n standby` fallback
 - [ ] Bytes per container: only possible for direct `/mnt/diskN` or pool mappings, see `docs/decisions.md`
-- [ ] SSD wear: show how much an SSD pool writes per day (from the `io` lines) in the key figures or on its drive page, with a warning above a threshold, so heavy writers (databases, logs, transcoding to the cache) stand out before they eat into the drive's TBW
 - [ ] I/O in quiet hours: optionally also notify (webhook) when a pool reads or writes more than N MB inside the quiet hours, not only on a spin-up; useful for SSD pools that never spin down
 - [ ] Reads and writes in the CSV export: the `io` lines of the period (per drive, KiB read and written) are not exported yet

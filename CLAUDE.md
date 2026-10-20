@@ -37,6 +37,7 @@ then builds the image.
 1. **Never wake a sleeping drive.** Spin state only via `hdparm -C` or
    `smartctl -n standby`. No `stat`, `ls` or `smartctl -a` on HDDs from the poller.
    An `os.path.isdir()` in the watcher is only allowed after an event, when the drive is already spinning.
+   SMART of an SSD (`smartctl -n standby -j -A`, for its wear) is fine: an SSD never sleeps.
 2. **Never write under `/mnt`.** `/mnt` is mounted read-only; all output goes to `DATA_DIR`.
 3. **Do not log our own writes** (our own PID and our own file names are skipped),
    otherwise the dashboard keeps itself awake when appdata lives on an HDD.

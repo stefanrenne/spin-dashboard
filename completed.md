@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-10-20: SSD wear
+- What the SSDs write per day: a fifth key figure (compared with the previous period, from hourly `io` totals that `spins.csv` now carries), on each SSD lane, in the overview and on the drive pages
+- SMART wear per SSD (`wear` lines: percentage used and written since new, NVMe and common SATA attributes), asked hourly and only of SSDs, shown on the drive pages and in the overview
+- Settings › File access on SSD pools: a limit in GB per day per SSD (`wear_warn`, default 100, empty = never); above it the tile, the lane, the overview and the page are marked
+- Additive changes recorded under "Migrations by change"; background in `docs/decisions.md`; screenshots refreshed
+
 ## 2026-10-20: activity on every drive, SSDs included, and a timeline per pool
 - The poller names every drive Unraid knows with its kind (`hdd`/`ssd` in the `disk` lines) and writes what every drive read and wrote per poll (`io` lines, from `/sys/block/<dev>/stat`, which never wakes a drive). While every HDD sleeps these lines wait in memory and are served along with the day file, so a busy SSD never makes the dashboard keep a drive awake
 - "Timeline per drive" is one card per pool and the array, each hidden, moved and resized on its own; an old layout puts them where the single card was. HDD lanes show the data read and written below the spin wave, SSD lanes a read/write graph with totals. SSDs stay out of the spin figures, quiet hours and causes

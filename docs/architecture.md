@@ -5,7 +5,8 @@
 │                                                                                    │
 │  poller ── hdparm -C / smartctl -n standby ──► days/<day>.csv  (spin, state)       │
 │     ├── /emhttp/disks.ini + /sys/block/*/rotational ──► days/<day>.csv  (disk)     │
-│     └── /sys/block/*/stat (every drive, SSDs too) ──► io_pending ──► (io)          │
+│     ├── /sys/block/*/stat (every drive, SSDs too) ──► io_pending ──► (io)          │
+│     └── smartctl -n standby -j -A (SSDs only, hourly) ──► io_pending ──► (wear)    │
 │                                                                                    │
 │  watcher ── fatrace -c per HDD mount   ──► queue ──► handle() ──► days/<day>.csv   │
 │             (+ SSD pools in ssd_watch)                                             │
@@ -40,7 +41,8 @@ lines, plus the name and kind (`hdd`/`ssd`) of every drive as `disk` lines. It a
 I/O counters of every drive (`/sys/block/<dev>/stat`, which never wakes a drive) and turns the
 difference with the previous poll into an `io` line. Those wait in memory (`io_pending`) while every
 HDD sleeps, so a busy SSD does not make the dashboard write every minute; the web server adds the
-waiting lines to the day file it sends. See `io` in `data-formats.md`.
+waiting lines to the day file it sends. See `io` in `data-formats.md`. Once an hour (and on the first poll
+of a day) it asks every SSD, never an HDD, for its SMART wear (`wear` lines), which wait in the same way.
 
 **Watcher.** Determines the mounts to watch: `/mnt/<name>` for array disks (`disk1`) and
 pools (pool member `trunk2` belongs to `/mnt/trunk`), plus every mount below them (ZFS datasets).
@@ -83,7 +85,10 @@ stays unchanged.
 *Timeline per drive* is one card per pool and one for the array (`lanes:<key>` in the card layout,
 made from `#laneTpl` when the pool shows up in the data). An HDD lane draws spinning and standby with the
 data read and written as a thin layer below it; an SSD lane (from the `ssd` kind in the `disk` lines) only
-draws reads and writes, and SSDs never count in the spin figures, quiet hours or causes. The drive pages
+draws reads and writes and what it wrote per day, and SSDs never count in the spin figures, quiet hours or causes.
+*Key figures* get a fifth tile with what all SSDs write per day, compared with the previous period from the hourly
+`io` totals in `spins.csv`. One SSD that writes more than the limit in Settings (`wear_warn`, default 100 GB per
+day) is marked on the tile, its lane, the overview and its page; the pages also show the SMART wear. The drive pages
 of the overview show the same reads and writes for every pool and drive.
 
 At the top, *Key figures* show spin-ups, spinning hours, the share of time all drives slept and the

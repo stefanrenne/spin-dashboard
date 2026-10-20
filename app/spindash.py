@@ -14,7 +14,7 @@ One process with these parts:
   web      serves the dashboard and the CSV files, and stores the settings (hidden paths, quiet hours).
 
 Everything lives in DATA_DIR/days: one CSV per day (YYYY-MM-DD.csv, local date) with lines
-`epoch,type,...` (disk, state, spin, io, proc, who, activity, ctr). Older separate files (spin.csv, disks.csv,
+`epoch,type,...` (disk, state, spin, io, wear, proc, who, activity, ctr). Older separate files (spin.csv, disks.csv,
 who.csv, activity.csv) are migrated to day files once at start.
 """
 import gzip
@@ -72,7 +72,7 @@ SETTINGS = os.path.join(DATA, "spindash-settings.json")
 OWN_FILES = {"spin.csv", "disks.csv", "who.csv", "activity.csv",
              "spindash-settings.json", "spindash-settings.json.tmp"}
 DAY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}\.csv(?:\.tmp)?$")
-TYPES = ("disk", "state", "spin", "io", "proc", "who", "activity", "ctr")   # order within the same second
+TYPES = ("disk", "state", "spin", "io", "wear", "proc", "who", "activity", "ctr")   # order within the same second
 
 write_lock = threading.Lock()
 # health for /health: when the poller last succeeded, what the watcher watches, whether
@@ -153,23 +153,40 @@ def day_body(path, st, gz):
     return body
 
 
-_spin_cache = {}      # path -> (mtime_ns, size, spin lines); only the disk/state/spin lines
-SPIN_TYPES = ("disk", "state", "spin")
+_spin_cache = {}      # path -> (mtime_ns, size, spin lines); only the disk/state/spin/wear lines
+SPIN_TYPES = ("disk", "state", "spin", "wear")
+
+
+def summary_lines(lines):
+    """The disk, state, spin and wear lines of `lines` as they are, plus the io lines added up per
+    drive per hour: one io line per drive per hour, at the time of the last one it covers."""
+    out, hours = [], {}
+    for line in lines:
+        p = line.rstrip("\n").split(",")
+        if len(p) >= 3 and p[1] in SPIN_TYPES:
+            out.append(line if line.endswith("\n") else line + "\n")
+        elif len(p) == 7 and p[1] == "io":
+            try:
+                t, vals = int(p[0]), [int(x) for x in p[3:]]
+            except ValueError:
+                continue
+            h = hours.setdefault((p[2], t // 3600), [0, 0, 0, 0, 0])
+            h[0] = max(h[0], t)
+            for i, v in enumerate(vals):
+                h[i + 1] += v
+    for (dev, _), h in sorted(hours.items(), key=lambda kv: kv[1][0]):
+        out.append(f"{h[0]},io,{dev}," + ",".join(map(str, h[1:])) + "\n")
+    return out
 
 
 def spin_lines(path, st):
-    """The disk, state and spin lines of one day file. Small (the who lines are most of it),
+    """The summary of one day file (see summary_lines). Small (the who and io lines are most of it),
     so the frontend can show key figures and the trend over all days without fetching everything."""
     hit = _spin_cache.get(path)
     if hit and hit[:2] == (st.st_mtime_ns, st.st_size):
         return hit[2]
-    out = []
     with open(path, encoding="utf-8", errors="replace") as f:
-        for line in f:
-            p = line.split(",", 2)
-            if len(p) == 3 and p[1] in SPIN_TYPES:
-                out.append(line if line.endswith("\n") else line + "\n")
-    text = "".join(out)
+        text = "".join(summary_lines(f))
     _spin_cache[path] = (st.st_mtime_ns, st.st_size, text)
     return text
 
@@ -182,9 +199,15 @@ def spins_body():
         path = day_path(d)
         try:
             st = os.stat(path)
-            parts.append(spin_lines(path, st))
+            text = spin_lines(path, st)
         except OSError:
             continue
+        extra = pending_io(d)          # waiting io and wear lines: added up together with the day file
+        if extra:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                text = "".join(summary_lines(list(f) + extra))
+            tag.append(f"{len(extra)}:{extra[-1]}")
+        parts.append(text)
         tag.append(f"{d}:{st.st_mtime_ns:x}:{st.st_size:x}")
     live = {day_path(d) for d in days}
     for path in [p for p in _spin_cache if p not in live]:      # forget days that were cleaned up
@@ -337,7 +360,53 @@ def io_counters(dev):
         return None
 
 
-# io lines wait here while every HDD sleeps: writing them each minute would keep a drive awake
+# Wear of an SSD from SMART: smartctl only ever runs on SSDs (never on an HDD, hard rule 1), with
+# `-n standby` as a second guard, and at most once per WEAR_INTERVAL per drive.
+WEAR_INTERVAL = 3600
+# SATA attributes whose normalised value is the life left in percent (Samsung, Kingston/SandForce, Intel,
+# Crucial/Micron, WD), and those whose raw value counts written logical blocks
+WEAR_LEFT_IDS = (177, 231, 233, 202, 169)
+WRITTEN_LBA_IDS = (241, 246)
+
+
+def parse_wear(out):
+    """(percentage used or None, KiB written or None) from `smartctl -j -A`; (None, None) when unknown."""
+    try:
+        j = json.loads(out)
+    except ValueError:
+        return None, None
+    nv = j.get("nvme_smart_health_information_log")
+    if isinstance(nv, dict):
+        pct, units = nv.get("percentage_used"), nv.get("data_units_written")
+        return (pct if isinstance(pct, int) else None,
+                units * 500 if isinstance(units, int) else None)     # units of 1000 × 512 bytes
+    table = {a.get("id"): a for a in (j.get("ata_smart_attributes") or {}).get("table", []) if isinstance(a, dict)}
+    pct = kib = None
+    for i in WEAR_LEFT_IDS:
+        v = (table.get(i) or {}).get("value")
+        if isinstance(v, int) and 0 <= v <= 100:
+            pct = 100 - v
+            break
+    lbs = j.get("logical_block_size") if isinstance(j.get("logical_block_size"), int) else 512
+    for i in WRITTEN_LBA_IDS:
+        raw = ((table.get(i) or {}).get("raw") or {}).get("value")
+        if isinstance(raw, int) and raw > 0:
+            kib = raw * lbs // 1024
+            break
+    return pct, kib
+
+
+def ssd_wear(dev):
+    """(percentage used, KiB written) of an SSD, each None when unknown."""
+    try:
+        r = subprocess.run(["smartctl", "-n", "standby", "-j", "-A", f"/dev/{dev}"],
+                           capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return None, None
+    return parse_wear(r.stdout)
+
+
+# io and wear lines wait here while every HDD sleeps: writing them each minute would keep a drive awake
 # that holds DATA_DIR (rule 3). The web server sends them along with the day file, so the
 # dashboard is live anyway; they are written as soon as something else is written or an HDD spins.
 IO_PENDING_MAX = 200_000
@@ -354,7 +423,7 @@ def flush_io():
 
 
 def pending_io(day):
-    """The io lines of `day` that are not in the day file yet."""
+    """The io and wear lines of `day` that are not in the day file yet."""
     with io_lock:
         return [ln for ln in io_pending if day_of(ln.split(",", 1)[0]) == day]
 
@@ -365,8 +434,9 @@ def poll_once(last, now=None):
     - `spin` on a state change of an HDD;
     - `state` with the current state of every HDD on the first poll of a day or after a start,
       so every day file can be read on its own. A `state` is not a spin-up. SSDs get neither;
-    - `io` with what every drive read and wrote since the previous poll (only when not zero).
-      These wait in `io_pending` while every HDD sleeps and nothing else is written.
+    - `io` with what every drive read and wrote since the previous poll (only when not zero);
+    - `wear` with the SMART wear of every SSD, once per WEAR_INTERVAL and on the first poll of a day.
+      io and wear lines wait in `io_pending` while every HDD sleeps and nothing else is written.
     `last` keeps the previous state. Returns the number of spin and state lines."""
     now = int(time.time() if now is None else now)
     day, alld = day_of(now), all_devices()
@@ -405,6 +475,14 @@ def poll_once(last, now=None):
             io.append(f"{now},io,{dev}," + ",".join(map(str, delta)))
     for dev in [d for d in prev if d not in alld]:
         del prev[dev]
+    asked = last.setdefault("wear", {})
+    for dev in sorted(d for d, (_, hdd) in alld.items() if not hdd):     # SSDs only: never smartctl on an HDD
+        if not new_day and now - asked.get(dev, -WEAR_INTERVAL) < WEAR_INTERVAL:
+            continue
+        asked[dev] = now
+        pct, kib = ssd_wear(dev)
+        if pct is not None or kib is not None:
+            io.append(f"{now},wear,{dev},{'' if pct is None else pct},{'' if kib is None else kib}")
     last["day"], last["disks"], last["all"] = day, dict(devs), dict(alld)
     with io_lock:
         io_pending.extend(io)
@@ -1311,7 +1389,17 @@ def clean_ssd_watch(value):
     return list(dict.fromkeys(value))
 
 
-SETTINGS_KEYS = {"hide": clean_hide, "quiet": clean_quiet, "webhook": clean_webhook, "ssd_watch": clean_ssd_watch}
+def clean_wear_warn(value):
+    """Warn when an SSD writes more than this many GB per day: an integer 1-1000000, or None (never)."""
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 1_000_000:
+        raise ValueError("wear_warn is a whole number of GB per day (1-1000000) or null")
+    return value
+
+
+SETTINGS_KEYS = {"hide": clean_hide, "quiet": clean_quiet, "webhook": clean_webhook, "ssd_watch": clean_ssd_watch,
+                 "wear_warn": clean_wear_warn}
 
 
 def save_settings(new):

@@ -29,6 +29,7 @@ def sd(tmp_path, monkeypatch):
     monkeypatch.setattr(spindash, "_fd_snap", {"t": 0.0, "by_name": {}})
     monkeypatch.setattr(spindash, "notified", {})
     monkeypatch.setattr(spindash, "io_pending", [])
+    monkeypatch.setattr(spindash, "ssd_wear", lambda dev: (None, None))     # no smartctl in tests
     monkeypatch.setattr(spindash, "_containers_cache", {"t": 0.0, "body": None})
     monkeypatch.setenv("TZ", "Europe/Amsterdam")      # fixed days and day start for the tests
     time.tzset()

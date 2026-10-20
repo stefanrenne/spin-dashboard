@@ -132,3 +132,13 @@ def test_old_disk_lines_without_kind_still_load(sd):
     os.makedirs(sd.DAYS)
     open(sd.day_path("2026-10-08"), "w").write("1791410400,disk,sdd,trunk\n1791410400,state,sdd,standby\n")
     assert sd.spins_body()[0].decode().splitlines() == ["1791410400,disk,sdd,trunk", "1791410400,state,sdd,standby"]
+
+
+def test_wear_warn_setting_is_checked(sd):
+    import pytest
+    assert sd.clean_wear_warn(None) is None
+    assert sd.clean_wear_warn(100) == 100
+    for bad in (0, -5, 1.5, "100", True, 2_000_000):
+        with pytest.raises(ValueError):
+            sd.clean_wear_warn(bad)
+    assert sd.save_settings({"wear_warn": None}) == {"wear_warn": None}

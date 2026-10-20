@@ -2,6 +2,7 @@ import spindash
 from conftest import make_disk, set_io
 
 T = 1791496800 + 9 * 3600          # 2026-10-09 09:00 in Amsterdam
+REAL_SSD_WEAR = spindash.ssd_wear   # the sd fixture replaces it: no smartctl in tests
 
 
 def test_parse_hdparm():
@@ -138,3 +139,56 @@ def test_stop_writes_pending_io_lines(sd, monkeypatch):
     with pytest.raises(SystemExit):
         sd.stop()
     assert open(sd.day_path("2026-10-09")).read() == f"{T},io,nvme0n1,1,0,1,0\n"
+
+
+NVME_JSON = '{"nvme_smart_health_information_log": {"percentage_used": 3, "data_units_written": 2000000}}'
+SATA_JSON = ('{"logical_block_size": 512, "ata_smart_attributes": {"table": ['
+             '{"id": 9, "value": 99, "raw": {"value": 1234}}, {"id": 177, "value": 97, "raw": {"value": 40}},'
+             '{"id": 241, "value": 99, "raw": {"value": 4000000000}}]}}')
+
+
+def test_parse_wear_nvme_sata_and_unknown():
+    p = spindash.parse_wear
+    assert p(NVME_JSON) == (3, 1_000_000_000)                  # 2e6 units of 512000 bytes = 1e9 KiB
+    assert p(SATA_JSON) == (3, 2_000_000_000)                  # 100 - 97; 4e9 LBAs of 512 bytes
+    assert p('{"ata_smart_attributes": {"table": [{"id": 231, "value": 88}]}}') == (12, None)
+    assert p('{"smartctl": {"exit_status": 2}}') == (None, None)   # e.g. standby: nothing read
+    assert p("not json") == (None, None)
+
+
+def test_wear_is_asked_only_of_ssds_once_an_hour_and_each_day(sd, monkeypatch):
+    states, _ = setup_mixed(sd, monkeypatch)
+    states["sdd"] = "active"                         # so the lines are written right away
+    asked = []
+    monkeypatch.setattr(sd, "ssd_wear", lambda dev: asked.append(dev) or (4, 123456))
+    last = {}
+    sd.poll_once(last, now=T)
+    sd.poll_once(last, now=T + 60)                   # within the hour: not again
+    sd.poll_once(last, now=T + 3600)
+    assert asked == ["nvme0n1", "nvme0n1"]           # never sdd, the HDD
+    lines = open(sd.day_path("2026-10-09")).read().splitlines()
+    assert [ln for ln in lines if ",wear," in ln] == [f"{T},wear,nvme0n1,4,123456", f"{T + 3600},wear,nvme0n1,4,123456"]
+    midnight = 1791496800 + 86400 + 30
+    sd.poll_once(last, now=midnight)                 # a new day: every day file has one
+    assert f"{midnight},wear,nvme0n1,4,123456" in open(sd.day_path("2026-10-10")).read().splitlines()
+
+
+def test_unknown_wear_writes_no_line_and_a_partial_one_keeps_the_empty_field(sd, monkeypatch):
+    states, _ = setup_mixed(sd, monkeypatch)
+    states["sdd"] = "active"
+    monkeypatch.setattr(sd, "ssd_wear", lambda dev: (None, None))
+    sd.poll_once({}, now=T)
+    assert ",wear," not in open(sd.day_path("2026-10-09")).read()
+    monkeypatch.setattr(sd, "ssd_wear", lambda dev: (None, 77))
+    sd.poll_once({}, now=T + 60)
+    assert f"{T + 60},wear,nvme0n1,,77" in open(sd.day_path("2026-10-09")).read().splitlines()
+
+
+def test_ssd_wear_runs_smartctl_with_the_standby_guard(sd, monkeypatch):
+    calls = []
+
+    class R:
+        stdout = NVME_JSON
+    monkeypatch.setattr(sd.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or R())
+    assert REAL_SSD_WEAR("nvme0n1") == (3, 1_000_000_000)
+    assert calls == [["smartctl", "-n", "standby", "-j", "-A", "/dev/nvme0n1"]]

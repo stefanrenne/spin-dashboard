@@ -247,3 +247,21 @@ def test_spins_forgets_removed_days(sd):
     os.remove(sd.day_path("2026-10-08"))
     assert sd.spins_body()[0] == b""
     assert sd.day_path("2026-10-08") not in sd._spin_cache
+
+
+def test_spins_adds_up_io_per_drive_per_hour_and_keeps_wear(server, sd):
+    """The key figures compare the SSD writes with the previous period without every day file."""
+    open(sd.day_path("2026-10-08"), "w").write(
+        "1791410400,disk,nvme0n1,cache,ssd\n1791410460,io,nvme0n1,1,10,1,2\n1791410520,io,nvme0n1,2,20,1,2\n"
+        "1791414000,io,nvme0n1,4,40,1,1\n1791410500,wear,nvme0n1,3,999\n")
+    body = get(server + "/data/spins.csv")[1].splitlines()
+    assert body[:4] == ["1791410400,disk,nvme0n1,cache,ssd", "1791410500,wear,nvme0n1,3,999",
+                        "1791410520,io,nvme0n1,3,30,2,4", "1791414000,io,nvme0n1,4,40,1,1"]
+
+
+def test_spins_includes_waiting_io_lines_and_changes_its_etag(server, sd):
+    _, _, h = fetch(server + "/data/spins.csv")
+    sd.io_pending.append("1791496860,io,nvme0n1,4,8,1,2")
+    status, body, h2 = fetch(server + "/data/spins.csv", **{"If-None-Match": h["ETag"]})
+    assert status == 200 and h2["ETag"] != h["ETag"]
+    assert body.decode().splitlines()[-1] == "1791496860,io,nvme0n1,4,8,1,2"
