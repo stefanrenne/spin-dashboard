@@ -2,7 +2,16 @@
 
 Newest first.
 
+## 2026-10-21: features
+- Refresh right away when a hidden tab becomes visible again
+- CSV export: reads and writes per drive per hour (`io`) and the SMART wear (`wear`), in four new columns at the end
+- SSD lanes can be stepped through with the arrow keys, bar by bar, with the same text as the tooltip
+- The SSD page says how the wear went in the period and, at the current pace, in about how many years the rated endurance is reached (from written since new and the percentage used)
+- Webhook messages, both optional: reads and writes above `quiet.io_mb` MB inside the quiet hours (once per lane per window; SSD pools can be chosen too), and an SSD that wrote more than the wear limit in a day (`wear_notify`, once per SSD per day)
+- Not done in this round, on purpose: Unassigned Devices and bytes per container stay in `todo.md`; testing SAS drives needs the hardware
+
 ## 2026-10-21: watcher and data quality
+- Not done, on purpose: the noisy day file of 2026-10-20 on the own server (12.9 MB, from before the watcher fixes) is left alone and ages out after 30 days
 - Writes by `dockerd` in `docker/containers/<id>/` (a container's log and config) count for that container, by name, instead of `dockerd` with a hex path as the only clue
 - The ` (deleted)` suffix of fatrace is stripped from paths
 - `/health` reports per watched filesystem whether its fatrace runs (`watcher.running`); a fatrace that cannot start because of the fanotify limit gets a hint in the log (`fs.fanotify.max_user_groups`)

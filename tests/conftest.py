@@ -43,6 +43,8 @@ def sd(tmp_path, monkeypatch):
     monkeypatch.setattr(spindash, "streams", [])
     monkeypatch.setattr(spindash, "writes_only", set())
     monkeypatch.setattr(spindash, "watching", {})
+    monkeypatch.setattr(spindash, "quiet_io", {"window": None, "kib": {}, "sent": set()})
+    monkeypatch.setattr(spindash, "wear_today", {"day": None, "kib": {}, "sent": set()})
     monkeypatch.setattr(spindash, "events_seen", {"nano": None})
     monkeypatch.setattr(spindash, "recent", spindash.OrderedDict())
     monkeypatch.setattr(spindash, "drive_states", {})

@@ -159,3 +159,63 @@ def test_notify_test_endpoint_uses_the_saved_webhook(sd):
         srv.shutdown()
         srv.server_close()
         hook.close()
+
+
+# ---------- reads and writes inside the quiet hours, and SSD wear ----------
+DEVS = {"sdd": ("trunk", True), "nvme0n1": ("cache", False), "nvme1n1": ("cache2", False)}
+
+
+def test_quiet_io_mb_is_checked(sd):
+    q = {"from": "23:00", "to": "07:00", "drives": []}
+    assert sd.clean_quiet({**q, "io_mb": 500}) == {**q, "io_mb": 500}
+    assert sd.clean_quiet({**q, "io_mb": None}) == q
+    for bad in (0, -1, 1.5, "500", True):
+        with pytest.raises(ValueError):
+            sd.clean_quiet({**q, "io_mb": bad})
+    assert sd.clean_wear_notify(True) is True
+    with pytest.raises(ValueError):
+        sd.clean_wear_notify("yes")
+
+
+def test_io_in_quiet_hours_is_sent_once_per_lane_and_window(sd):
+    sd.save_settings({"quiet": {"from": "23:00", "to": "07:00", "drives": [], "io_mb": 100}, "webhook": "http://hook/x"})
+    sent = []
+    send = lambda url, p: sent.append((url, p))
+    assert sd.notify_io(at(1), {"nvme0n1": (40 * 1024, 30 * 1024)}, DEVS, send) == []          # 70 MB: not yet
+    out = sd.notify_io(at(1, 1), {"nvme1n1": (0, 40 * 1024)}, DEVS, send)                     # the pool: 110 MB
+    assert [p["lane"] for p in out] == ["cache"] and out[0]["event"] == "io" and out[0]["kib"] == 110 * 1024
+    assert "cache read and wrote 110 MB during quiet hours (23:00-07:00)" in out[0]["text"]
+    assert sd.notify_io(at(2), {"nvme0n1": (0, 500 * 1024)}, DEVS, send) == []                 # once per window
+    assert sd.notify_io(at(12), {"nvme0n1": (0, 500 * 1024)}, DEVS, send) == []                # outside the window
+    assert [p["lane"] for p in sd.notify_io(at(23, 30), {"nvme0n1": (0, 200 * 1024)}, DEVS, send)] == ["cache"]   # next night
+    assert len(sent) == 2 and sent[0][0] == "http://hook/x"
+
+
+def test_io_in_quiet_hours_follows_the_chosen_drives_and_needs_a_limit(sd):
+    sd.save_settings({"quiet": {"from": "23:00", "to": "07:00", "drives": ["trunk"], "io_mb": 1}, "webhook": "http://hook/x"})
+    send = lambda url, p: None
+    assert sd.notify_io(at(1), {"nvme0n1": (0, 9999)}, DEVS, send) == []                       # cache does not take part
+    assert [p["lane"] for p in sd.notify_io(at(1), {"sdd": (2048, 0)}, DEVS, send)] == ["trunk"]
+    sd.save_settings({"quiet": {"from": "23:00", "to": "07:00", "drives": []}})                 # no io_mb: off
+    assert sd.notify_io(at(2), {"sdd": (99999, 0)}, DEVS, send) == []
+
+
+def test_wear_is_sent_once_per_ssd_per_day_when_switched_on(sd):
+    sd.save_settings({"wear_warn": 10, "webhook": "http://hook/x"})
+    send = lambda url, p: None
+    big = {"nvme0n1": (0, 11 * 1024 * 1024), "sdd": (0, 99 * 1024 * 1024)}                    # 11 GB; an HDD never counts
+    assert sd.notify_wear(at(9), big, DEVS, send) == []                                         # wear_notify is off
+    sd.save_settings({"wear_notify": True})
+    out = sd.notify_wear(at(10), {"nvme0n1": (0, 1)}, DEVS, send)                               # today: 11 GB + 1 KiB
+    assert [(p["event"], p["device"], p["name"]) for p in out] == [("wear", "nvme0n1", "cache")]
+    assert "cache (nvme0n1) wrote 11 GB today, more than the limit of 10 GB a day" == out[0]["text"]
+    assert sd.notify_wear(at(11), big, DEVS, send) == []                                        # once a day
+    assert len(sd.notify_wear(at(24 + 9), big, DEVS, send)) == 1                                # the next day again
+
+
+def test_quiet_window_runs_over_midnight(sd):
+    q = {"from": "23:00", "to": "07:00", "drives": []}
+    assert sd.quiet_window(at(23, 30), q) == at(23)
+    assert sd.quiet_window(at(24 + 2), q) == at(23)                                            # same window, next day
+    assert sd.quiet_window(at(12), q) is None
+    assert sd.quiet_window(at(14), {"from": "13:00", "to": "15:00", "drives": []}) == at(13)

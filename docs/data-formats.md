@@ -111,7 +111,7 @@ stream the server asks for the events since the last one it saw (`since`), so a 
 | `/data/containers.json` | Per container the bind mounts under `/mnt` and where they live: `{"docker": true, "containers": [{"name": "plex", "state": "running", "project": "", "mounts": [{"source": "/mnt/user/appdata/plex", "target": "/config", "rw": true, "where": {"kind": "share", "share": "appdata", "storage": "pool>array", "pool": "cache", "hdd": true}}]}]}`. `where.kind` is `share` (`/mnt/user/<share>`, with `storage` from Unraid's `shares.ini`: `pool`, `array`, `pool>array` (the mover moves it to the array), `array>pool` or `unknown`), `user` (all of `/mnt/user`), `disk` (`/mnt/diskN`) or `pool` (`/mnt/<pool>`), with `name`. `hdd` is `true`, `false` or `null` (unknown), from the share settings and which disks and pools are rotational, never from looking at the disks. A named local volume that binds a folder (`driver_opts: {type: none, o: bind, device: /mnt/...}`, common with Compose) counts as that folder: `source` is the volume's `device` and the entry gets `"volume": "<name>"`. Other volumes are skipped. `project` is the Docker Compose project label, empty without Compose. Live, not stored; asked from Docker at most every 30 s. Without a Docker socket: `{"docker": false, "containers": []}`. |
 | `/data/notify-test` | `POST` (JSON, body ignored) sends a test message to the saved webhook. `200 {"ok": true, "status": 200}`, `400` without a saved webhook, `502` with `{"ok": false, "error": "..."}` when the webhook cannot be reached. It never takes a URL from the request. With `SETTINGS_TOKEN` set it needs the token like a save (`401` without it). |
 | `/health` | `{"ok": true, "uptime": 560, "poller": {"last_success": 60, "error": null}, "watcher": {"mounts": ["/mnt/trunk"], "fatrace": 1, "running": {"/mnt/trunk": true}}, "docker": "connected", "threads": {"poller": true, ...}}`, status `200`, or `503` with `"ok": false` when the poller has not succeeded for `3 × POLL_INTERVAL + 60` seconds or a background thread stopped. Missing `fatrace` processes or Docker socket (`"docker": "no socket"`) are reported but keep it healthy, so an auto-heal container does not restart it forever. Used by the Docker `HEALTHCHECK`. |
-| `/data/settings.json` | Dashboard settings shared by every browser. `GET` returns `{"hide": ["/mnt/user/appdata/*", "*.log"]}`, or `{}` when nothing has been saved yet (the frontend then moves its old `spindash.hide` list from `localStorage` to the server once). `POST` with `Content-Type: application/json` and a JSON object saves it and returns what was stored. Only known keys are kept (unknown ones are ignored, so older and newer frontends can share the file). `hide`: a list of at most 200 strings of at most 500 characters without control characters; whitespace is trimmed, empty and duplicate entries are dropped. `quiet`, `webhook`, `ssd_watch`, `ssd_reads` and `wear_warn`: see "Settings file" below. Invalid input returns `400` with `{"error": "..."}`, another content type `415`, a body over 64 KiB `413`. The webhook is returned masked (`https://host/…`: scheme and host only, the rest often holds a secret); a save with exactly that masked value keeps the stored URL. With the environment variable `SETTINGS_TOKEN` set, the answer has `"locked": true` and a save needs the token in the `X-Settings-Token` header (`401 {"error": "settings token required"}` without it or with a wrong one). |
+| `/data/settings.json` | Dashboard settings shared by every browser. `GET` returns `{"hide": ["/mnt/user/appdata/*", "*.log"]}`, or `{}` when nothing has been saved yet (the frontend then moves its old `spindash.hide` list from `localStorage` to the server once). `POST` with `Content-Type: application/json` and a JSON object saves it and returns what was stored. Only known keys are kept (unknown ones are ignored, so older and newer frontends can share the file). `hide`: a list of at most 200 strings of at most 500 characters without control characters; whitespace is trimmed, empty and duplicate entries are dropped. `quiet`, `webhook`, `ssd_watch`, `ssd_reads`, `wear_warn` and `wear_notify`: see "Settings file" below. Invalid input returns `400` with `{"error": "..."}`, another content type `415`, a body over 64 KiB `413`. The webhook is returned masked (`https://host/…`: scheme and host only, the rest often holds a secret); a save with exactly that masked value keeps the stored URL. With the environment variable `SETTINGS_TOKEN` set, the answer has `"locked": true` and a save needs the token in the `X-Settings-Token` header (`401 {"error": "settings token required"}` without it or with a wrong one). |
 | `/data/stream` | Server-Sent Events. Every `who` line is pushed the moment it is logged (`data: <line>`), with a `: ping` every 30 s to keep the connection alive. Powers the live feed; the day files stay the source of truth. |
 
 ## CSV export
@@ -124,16 +124,21 @@ every UI language:
 | Column | Content |
 |---|---|
 | `time` | Local time, `YYYY-MM-DD HH:MM:SS` |
-| `type` | `spin-up`, `standby`, `state` (measured at the start of a day or after a restart), `access`, `container start`, `container die`, `container healthy`, `container unhealthy`, `container oom` |
+| `type` | `spin-up`, `standby`, `state` (measured at the start of a day or after a restart), `access`, `container start`, `container die`, `container healthy`, `container unhealthy`, `container oom`, `io` (reads and writes of a drive, added up per hour, at the time of the last poll in it), `wear` (SMART) |
 | `drive`, `device` | Drive name (`trunk`, `disk1`) and device (`sdd`); for `access` only the drive |
 | `source_kind`, `source`, `process` | `container`/`unraid`/`user`/`unknown`, its name, and the process inside a container when known |
 | `action` | For `access`: `opened`, `folder opened`, `written`, `created`, `deleted`, `moved`, `share access` |
 | `detail` | The path for `access`, `active`/`standby` for `state`, `exit code N` for `container die` |
+| `read_kib`, `written_kib` | For `io`: KiB read and written by that drive in that hour |
+| `wear_pct`, `written_since_new_kib` | For `wear`: SMART percentage used and KiB written since new (empty when the drive does not report it) |
+
+The last four columns were added on 2026-10-21; they are empty for the other types, and the first nine are
+unchanged, so a script that reads columns by name keeps working.
 
 ## Settings file
 
 `DATA_DIR/spindash-settings.json` holds what `/data/settings.json` returns: a JSON object with
-`hide` (hidden-path patterns, see `docs/development.md`), `quiet`, `webhook`, `ssd_watch`, `ssd_reads` and `wear_warn`:
+`hide` (hidden-path patterns, see `docs/development.md`), `quiet`, `webhook`, `ssd_watch`, `ssd_reads`, `wear_warn` and `wear_notify`:
 
 ```json
 {"hide": ["/mnt/user/appdata/*"],
@@ -162,6 +167,14 @@ poller POSTs to the webhook (at most once per lane per 10 minutes):
 `{"event": "spin-up", "lane": "trunk", "devices": ["sdd", "sde"], "epoch": 1791511200,
 "time": "2026-10-09T02:00:00", "text": "...", "content": "..."}`; `text` and `content` hold the same
 sentence, so ntfy, Gotify, Slack and Discord work without configuration.
+
+`quiet.io_mb` (optional, 1 to 10 000 000) also sends a message when a lane in `drives` (an SSD pool can be in
+it too) reads and writes more than that many MB inside one quiet-hours window, once per lane per window:
+`{"event": "io", "lane": "cache", "kib": 112640, "epoch": ..., "time": "...", "text": "...", "content": "..."}`.
+
+`wear_notify` (`true`/`false`, default off) sends a message when an SSD writes more than `wear_warn` GB in one
+day, at most once per SSD per day: `{"event": "wear", "device": "nvme0n1", "name": "cache", "kib": ...,
+"limit_gb": 100, "epoch": ..., "time": "...", "text": "...", "content": "..."}`.
 
 The file is written atomically (via `spindash-settings.json.tmp`) and both names are skipped by the
 watcher, like the day files. A missing or unreadable file counts as "nothing saved"; a key with an
@@ -198,6 +211,7 @@ and counted in the log; they stay in `legacy/`.
 | 2026-10-20 | `disk` lines get a third field `hdd`/`ssd` and also name SSDs; new line type `io` | None needed: purely additive. An older `disk` line has two fields and only ever named an HDD, so a missing kind reads as `hdd`; older frontends take the first two fields and ignore the rest. Older day files have no `io` lines, so the dashboard shows no reads or writes for that time; they cannot be filled in afterwards. Older frontends ignore unknown line types. Tested by `test_old_disk_lines_without_kind_still_load` and the frontend tests that load `disk` lines without a kind. |
 | 2026-10-20 | New line type `wear`; `/data/spins.csv` also carries `wear` lines and hourly `io` totals | None needed: purely additive. Older day files have no `wear` lines, so the dashboard shows no SMART wear for that time; it cannot be filled in afterwards. `spins.csv` is computed from the day files on every request, nothing stored changes. Older frontends ignore the unknown line types. Tested by `test_spins_adds_up_io_per_drive_per_hour_and_keeps_wear` and `test_old_disk_lines_without_kind_still_load`. |
 | 2026-10-20 | New key `wear_warn` in `spindash-settings.json` | None needed: purely additive. An older settings file has no `wear_warn`, which reads as the default of 100 GB per day. Older versions ignore the key. Tested by `test_wear_warn_setting_is_checked`. |
+| 2026-10-21 | New optional field `io_mb` in `quiet`, new key `wear_notify` in `spindash-settings.json` | None needed: purely additive. An older settings file has neither, which reads as "no I/O message, no wear message", what older versions did. Older versions drop the unknown field (they rebuild `quiet` from `from`, `to` and `drives`) and ignore the key. Tested by `test_quiet_io_mb_is_checked` and the notification tests. |
 | 2026-10-21 | New `ctr` event `oom` | None needed: purely additive, a new value in an existing field. Older day files simply have none; older frontends show the event without a translated label. Tested by `test_ctr_line_for_an_oom_kill` and the frontend test for an OOM kill. |
 | 2026-10-21 | New key `ssd_reads` in `spindash-settings.json` | None needed: purely additive. An older settings file has no `ssd_reads`, which reads as "only writes on every SSD pool". That is a deliberate change of what is recorded from now on: reads on SSD pools were logged before and are not anymore unless the pool is chosen; lines already in the day files stay. Older versions ignore the key. Tested by `test_ssd_pools_log_only_writes_unless_reads_are_chosen` and `test_ssd_reads_setting_is_checked`. |
 | 2026-10-20 | New key `ssd_watch` in `spindash-settings.json` | None needed: purely additive. An older settings file has no `ssd_watch`, which reads as "no SSD pool followed", exactly what older versions did. Older versions ignore the key. Tested by `test_target_mounts_adds_only_the_chosen_ssd_pools`. |

@@ -1474,14 +1474,14 @@ test('the CSV export holds the spin-ups, file access and container events of the
   assert.match(w.__download, /^spin-dashboard_\d{8}-\d{4}_\d{8}-\d{4}\.csv$/);
   const csv = (await blobText(w, w.__blob)).replace(/^\ufeff/, '');
   const lines = csv.trim().split('\r\n');
-  assert.equal(lines[0], 'time,type,drive,device,source_kind,source,process,action,detail');
+  assert.equal(lines[0], 'time,type,drive,device,source_kind,source,process,action,detail,read_kib,written_kib,wear_pct,written_since_new_kib');
   assert.ok(lines.some((l) => /,spin-up,trunk,sdd,/.test(l)), csv);
   assert.ok(lines.some((l) => /,standby,trunk,sdd,/.test(l)));
-  assert.ok(lines.some((l) => /,access,trunk,,container,plex,Plex Media Scan,opened,\/mnt\/trunk\/Media\/films\/b\.mkv$/.test(l)), csv);
-  assert.ok(lines.some((l) => /,access,trunk,,container,sonarr,,written,\/mnt\/trunk\/appdata\/sonarr\/sonarr\.db$/.test(l)));
-  assert.ok(lines.some((l) => /,container die,,,container,radarr,,,exit code 0$/.test(l)), csv);
-  assert.ok(lines.some((l) => /,container start,,,container,radarr,,,$/.test(l)));
-  assert.ok(lines.some((l) => /,container start,,,container,plex,,,$/.test(l)));
+  assert.ok(lines.some((l) => /,access,trunk,,container,plex,Plex Media Scan,opened,\/mnt\/trunk\/Media\/films\/b\.mkv,,,,$/.test(l)), csv);
+  assert.ok(lines.some((l) => /,access,trunk,,container,sonarr,,written,\/mnt\/trunk\/appdata\/sonarr\/sonarr\.db,,,,$/.test(l)));
+  assert.ok(lines.some((l) => /,container die,,,container,radarr,,,exit code 0,,,,$/.test(l)), csv);
+  assert.ok(lines.some((l) => /,container start,,,container,radarr,,,,,,,$/.test(l)));
+  assert.ok(lines.some((l) => /,container start,,,container,plex,,,,,,,$/.test(l)));
   const times = lines.slice(1).map((l) => l.slice(0, 19));
   assert.deepEqual(times, times.slice().sort());                          // in time order
   dom.window.close();
@@ -1499,7 +1499,7 @@ test('CSV cells with commas or quotes are quoted', async () => {
   });
   dom.window.document.getElementById('exportCsv').click();
   const csv = await blobText(dom.window, dom.window.__blob);
-  assert.match(csv, /,opened,"\/mnt\/trunk\/Media\/a, ""b"".mkv"\r\n/);
+  assert.match(csv, /,opened,"\/mnt\/trunk\/Media\/a, ""b"".mkv",,,,\r\n/);
   dom.window.close();
 });
 
@@ -1802,7 +1802,8 @@ test('every pool gets its own timeline card, and an SSD lane shows reads and wri
   assert.match(d.getElementById('sourceLine').textContent, /^3 schijven,/);     // HDDs and SSDs count
   assert.equal(text(d.querySelector('#kpis .kpi .k-val')), '1');
   d.getElementById('openSettings').click();
-  assert.deepEqual([...d.querySelectorAll('#quietLanes input')].map((i) => i.value), ['trunk']);
+  // the SSD pool can be chosen for quiet hours too: not for spin-ups, but for reads and writes (io_mb)
+  assert.deepEqual([...d.querySelectorAll('#quietLanes input')].map((i) => i.value), ['cache', 'trunk']);
   assert.deepEqual([...d.querySelectorAll('#cardList li label')].map(cardName).slice(0, 3),
     ['Kerncijfers', 'Tijdlijn per schijf · cache', 'Tijdlijn per schijf · trunk']);
   dom.window.close();
@@ -2118,5 +2119,75 @@ test('a container killed for lack of memory shows as a stop, and is named before
   d.querySelector('#sources .srcbtn[data-src="container|plex"]').click();
   assert.match(text(d.getElementById('profileBody')), /Geheugen vol/);
   assert.ok(d.querySelector('#profileBody .life-ev.oom'));
+  dom.window.close();
+});
+
+test('the CSV export has the reads and writes per drive per hour and the SMART wear', async () => {
+  const dom = await load(WEAR, 'http://dash/?lang=nl', ['en-US'], null, (w) => {
+    w.URL.createObjectURL = (blob) => { w.__blob = blob; return 'blob:csv'; };
+    w.URL.revokeObjectURL = () => {};
+    w.HTMLAnchorElement.prototype.click = function () {};
+  });
+  dom.window.document.getElementById('exportCsv').click();
+  const lines = (await blobText(dom.window, dom.window.__blob)).trim().split('\r\n');
+  assert.ok(lines.some((l) => /,io,cache,nvme0n1,,,,,,0,52428800,,$/.test(l)), lines.join('\n'));
+  assert.ok(lines.some((l) => /,wear,cache,nvme0n1,,,,,,,,3,1073741824$/.test(l)));
+  assert.ok(lines.every((l) => l.split(',').length >= 13));
+  dom.window.close();
+});
+
+test('an SSD lane can be stepped through with the arrow keys', async () => {
+  const dom = await load(SSD);
+  const d = dom.window.document, w = dom.window;
+  const tr = d.querySelector('[data-card="lanes:cache"] .iotrace');
+  tr.focus();
+  const seen = [];
+  for (let n = 0; n < 3; n++){ tr.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true })); seen.push(d.getElementById('tipLive').textContent); }
+  assert.ok(seen.every((x) => /^cache, .* gelezen · .* geschreven$/.test(x)), seen.join('\n'));
+  assert.notEqual(seen[0], seen[1]);                                         // another bar
+  tr.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+  assert.match(d.getElementById('tipLive').textContent, /1 GB geschreven/);   // the last bar: the 1 GB write
+  dom.window.close();
+});
+
+test('the SSD page shows how the wear went and when the endurance is reached at this pace', async () => {
+  const dom = await load(WEAR);
+  const d = dom.window.document;
+  d.querySelector('#dash > [data-card="lanes:cache"] .drvbtn').click();
+  const note = text(d.querySelector('#profileBody .wear-trend'));
+  assert.match(note, /^Slijtage in deze periode: 2% → 3%, 70 GB geschreven\./);
+  assert.match(note, /over ongeveer 1,8 jaar bereikt\.$/);                // 1 TB at 3%, 50 GB a day
+  dom.window.close();
+});
+
+test('back to a hidden tab, the data is refreshed right away', async () => {
+  let hidden = true;
+  const dom = await load(POOL, 'http://dash/?lang=nl', ['en-US'], null, (w) => {
+    Object.defineProperty(w.Document.prototype, 'hidden', { get: () => hidden, configurable: true });
+  });
+  const d = dom.window.document, w = dom.window;
+  const before = w.__fetched.filter((u) => u.includes('days.json')).length;
+  hidden = false;
+  d.dispatchEvent(new w.Event('visibilitychange'));
+  await until(() => w.__fetched.filter((u) => u.includes('days.json')).length > before);
+  assert.ok(w.__fetched.filter((u) => u.includes('days.json')).length > before);
+  dom.window.close();
+});
+
+test('reads and writes in the quiet hours and the wear message are set in Settings and saved', async () => {
+  const quiet = { from: '23:00', to: '07:00', drives: [] };
+  const dom = await load({ ...WEAR, 'settings.json': JSON.stringify({ hide: [], quiet, webhook: 'https://ntfy.sh/…' }) });
+  const d = dom.window.document, w = dom.window;
+  d.getElementById('openSettings').click();
+  assert.equal(d.getElementById('quietIo').value, '');
+  const io = d.getElementById('quietIo');
+  io.value = '500'; io.dispatchEvent(new w.Event('change'));
+  await until(() => w.__posts.length);
+  assert.deepEqual(w.__posts[0].body, { quiet: { ...quiet, io_mb: 500 }, webhook: 'https://ntfy.sh/…' });   // masked: unchanged
+  const box = d.getElementById('wearNotify');
+  assert.equal(box.checked, false);
+  box.checked = true; box.dispatchEvent(new w.Event('change'));
+  await until(() => w.__posts.length > 1);
+  assert.deepEqual(w.__posts[1].body, { wear_notify: true });
   dom.window.close();
 });

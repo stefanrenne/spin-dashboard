@@ -148,7 +148,9 @@ written since new) only the drive knows, so the poller asks SMART too: `smartctl
 and the poller only runs it for drives the kernel calls non-rotational, with `-n standby` as a second guard
 should that ever be wrong. Once an hour is enough: wear moves by a percent in months. The warning is a
 limit per SSD rather than per pool, because a mirrored pool writes everything twice and wear is per drive.
-It is not sent to the webhook: a slow trend is not something to be woken for.
+It is not sent to the webhook by default: a slow trend is not something to be woken for. Who wants it
+anyway switches on `wear_notify`: at most one message per SSD per day, when it wrote more than the limit
+that day.
 
 ## Looking up a file through /mnt/user only when no sleeping drive can be touched
 

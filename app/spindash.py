@@ -582,7 +582,7 @@ def poll_once(last, now=None):
             lines.append(f"{now},state,{dev},{st}")
             n += 1
         known[dev] = st
-    prev, io = last.setdefault("io", {}), []
+    prev, io, deltas = last.setdefault("io", {}), [], {}
     for dev in sorted(alld):
         c = io_counters(dev)
         if c is None:
@@ -595,6 +595,7 @@ def poll_once(last, now=None):
             continue
         if any(delta):
             io.append(f"{now},io,{dev}," + ",".join(map(str, delta)))
+            deltas[dev] = (delta[0], delta[1])
     for dev in [d for d in prev if d not in alld]:
         del prev[dev]
     asked = last.setdefault("wear", {})
@@ -624,11 +625,13 @@ def poll_once(last, now=None):
         flush_io()
     if lines:
         append_lines(lines)
-    if ups:
-        try:
+    try:                                        # a notification must never break the poll
+        if ups:
             notify_spinups(now, ups)
-        except Exception as e:                  # a notification must never break the poll
-            log("notify failed:", repr(e))
+        notify_io(now, deltas, alld)
+        notify_wear(now, deltas, alld)
+    except Exception as e:
+        log("notify failed:", repr(e))
     if not devs:
         log("No HDDs found. Is /var/local/emhttp mounted and is the container privileged?")
     return n
@@ -690,6 +693,82 @@ def notify_spinups(now, ups, send=None):
         else:
             threading.Thread(target=webhook_safely, args=(url, payload), daemon=True).start()
     return sent
+
+
+def quiet_window(ts, quiet):
+    """Start (epoch) of the quiet-hours window `ts` lies in, or None outside it."""
+    if not in_quiet(ts, quiet):
+        return None
+    lt = time.localtime(ts)
+    m = lt.tm_hour * 60 + lt.tm_min
+    f = int(quiet["from"][:2]) * 60 + int(quiet["from"][3:])
+    start = ts - (m - f) * 60 - lt.tm_sec
+    return start if m >= f else start - 86400          # a window over midnight started yesterday
+
+
+quiet_io = {"window": None, "kib": {}, "sent": set()}    # what each lane did in the current quiet window
+wear_today = {"day": None, "kib": {}, "sent": set()}     # what each SSD wrote today
+
+
+def notify_io(now, deltas, devs, send=None):
+    """Reads and writes inside the quiet hours: one message per lane per window once it passes quiet.io_mb.
+    `deltas` is {device: (KiB read, KiB written)} of this poll."""
+    st = read_settings()
+    quiet, url = st.get("quiet"), st.get("webhook")
+    window = quiet_window(now, quiet) if quiet and quiet.get("io_mb") and url else None
+    if window != quiet_io["window"]:
+        quiet_io.update(window=window, kib={}, sent=set())
+    if window is None:
+        return []
+    sent = []
+    for dev, (r, w) in sorted(deltas.items()):
+        if dev not in devs:
+            continue
+        k = lane_key(devs[dev][0])
+        if quiet["drives"] and k not in quiet["drives"]:
+            continue
+        total = quiet_io["kib"][k] = quiet_io["kib"].get(k, 0) + r + w
+        if total > quiet["io_mb"] * 1024 and k not in quiet_io["sent"]:
+            quiet_io["sent"].add(k)
+            msg = (f"{k} read and wrote {total // 1024} MB during quiet hours ({quiet['from']}-{quiet['to']}), "
+                   f"more than {quiet['io_mb']} MB")
+            sent.append({"event": "io", "lane": k, "kib": total, "epoch": now,
+                         "time": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)), "text": msg, "content": msg})
+    deliver(url, sent, send)
+    return sent
+
+
+def notify_wear(now, deltas, devs, send=None):
+    """An SSD that wrote more than wear_warn GiB today: one message per SSD per day (wear_notify)."""
+    day = day_of(now)
+    if wear_today["day"] != day:
+        wear_today.update(day=day, kib={}, sent=set())
+    for dev, (_, w) in deltas.items():
+        if dev in devs and not devs[dev][1]:
+            wear_today["kib"][dev] = wear_today["kib"].get(dev, 0) + w
+    st = read_settings()
+    limit, url = st.get("wear_warn", 100), st.get("webhook")
+    if not st.get("wear_notify") or not url or not limit:
+        return []
+    sent = []
+    for dev, kib in sorted(wear_today["kib"].items()):
+        if kib > limit * 1024 * 1024 and dev not in wear_today["sent"]:
+            wear_today["sent"].add(dev)
+            name = devs[dev][0]
+            msg = f"{name} ({dev}) wrote {kib / 1048576:.0f} GB today, more than the limit of {limit} GB a day"
+            sent.append({"event": "wear", "device": dev, "name": name, "kib": kib, "limit_gb": limit, "epoch": now,
+                         "time": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(now)), "text": msg, "content": msg})
+    deliver(url, sent, send)
+    return sent
+
+
+def deliver(url, payloads, send=None):
+    """Send each payload, each in its own thread so the poller never waits for the network."""
+    for payload in payloads:
+        if send:
+            send(url, payload)
+        else:
+            threading.Thread(target=webhook_safely, args=(url, payload), daemon=True).start()
 
 
 def webhook_safely(url, payload):
@@ -1638,8 +1717,9 @@ LANE_NAME = re.compile(r"^[\w.-]{1,64}$")
 
 
 def clean_quiet(value):
-    """Quiet hours: None (off) or {from, to, drives}. from/to as HH:MM (may run over midnight),
-    drives a list of lane keys (array, trunk, ...); empty = all drives."""
+    """Quiet hours: None (off) or {from, to, drives[, io_mb]}. from/to as HH:MM (may run over midnight),
+    drives a list of lane keys (array, trunk, ...); empty = all drives. io_mb: also notify when a lane
+    reads and writes more than this many MB inside the window (1-10000000); missing or null: not."""
     if value is None:
         return None
     if not isinstance(value, dict):
@@ -1649,7 +1729,13 @@ def clean_quiet(value):
         raise ValueError("quiet.from and quiet.to are two different times as HH:MM")
     if not isinstance(drives, list) or len(drives) > 64 or not all(isinstance(d, str) and LANE_NAME.match(d) for d in drives):
         raise ValueError("quiet.drives is a list of at most 64 drive or pool names")
-    return {"from": f, "to": t, "drives": list(dict.fromkeys(drives))}
+    out = {"from": f, "to": t, "drives": list(dict.fromkeys(drives))}
+    mb = value.get("io_mb")
+    if mb is not None:
+        if isinstance(mb, bool) or not isinstance(mb, int) or not 1 <= mb <= 10_000_000:
+            raise ValueError("quiet.io_mb is a whole number of MB (1-10000000) or null")
+        out["io_mb"] = mb
+    return out
 
 
 def clean_webhook(value):
@@ -1664,6 +1750,13 @@ def clean_webhook(value):
             or any(ord(c) <= 32 or ord(c) == 127 for c in v)):
         raise ValueError("webhook is an http(s) URL of at most 500 characters")
     return v
+
+
+def clean_wear_notify(value):
+    """Send a webhook message (at most once a day per SSD) when an SSD writes more than wear_warn in a day."""
+    if not isinstance(value, bool):
+        raise ValueError("wear_notify is true or false")
+    return value
 
 
 def clean_ssd_reads(value):
@@ -1690,7 +1783,7 @@ def clean_wear_warn(value):
 
 
 SETTINGS_KEYS = {"hide": clean_hide, "quiet": clean_quiet, "webhook": clean_webhook, "ssd_watch": clean_ssd_watch,
-                 "ssd_reads": clean_ssd_reads,
+                 "ssd_reads": clean_ssd_reads, "wear_notify": clean_wear_notify,
                  "wear_warn": clean_wear_warn}
 
 

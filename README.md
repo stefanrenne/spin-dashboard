@@ -19,8 +19,8 @@ See when your hard drives spin up and down, and **why**.
 - **Overview** (the ⓘ button next to Settings): every pool and the array with their drives, and every Docker container with a coloured label per pool or the array where its folders live (both places when the mover moves them). Click through to a detail page per container, per pool or the array, and per drive: key figures, who reads and writes, what woke it, folders, files and which containers map it.
 - **Container start, stop and process**: container restarts and health changes are marked on the source timeline and named when they come right before a spin-up; the feed and the profile show which process inside a container did it ("plex › Plex Media Scan").
 - **Reads per drive** and **Writes per drive**: per drive the top sources and files over the selected period — answers "why is this drive never idle", even when there were no spin-ups.
-- **Quiet hours**: set a window in which the drives should sleep (for example 23:00–07:00, for all drives or chosen pools). Spin-ups inside it are marked, and can be sent to a webhook (ntfy, Gotify, Discord, Slack, Home Assistant).
-- **CSV export** of the selected period: spin-ups, file access with source and process, and container events, ready for a spreadsheet.
+- **Quiet hours**: set a window in which the drives should sleep (for example 23:00–07:00, for all drives or chosen pools). Spin-ups inside it are marked, and can be sent to a webhook (ntfy, Gotify, Discord, Slack, Home Assistant); optionally also when a drive or SSD pool reads and writes more than a number of MB inside the window.
+- **CSV export** of the selected period: spin-ups, file access with source and process, container events, reads and writes per drive per hour and the SMART wear, ready for a spreadsheet.
 - **Live activity feed**: the most recent file events stream in as they happen (over Server-Sent Events), newest first, with an R/W marker, source and relative time.
 - Click a spin-up to see every file that was opened during that session, with time and source.
 - Rankings of what wakes your drives, by folder and by source.
@@ -31,7 +31,7 @@ See when your hard drives spin up and down, and **why**.
 - Hide noisy paths with wildcards under Settings › Hidden paths (for example `/mnt/user/appdata/*`); they no longer count anywhere in the dashboard. The list is stored on the server, so it is the same in every browser. The data on disk stays complete.
 - Works with the array and with HDD pools (XFS, Btrfs, ZFS). SSD/NVMe pools show how much they read and write (from the kernel's counters, which never wake a drive); which file is written by whom (and optionally read) can be switched on per SSD pool under Settings › File access on SSD pools.
 - **Reads per drive** and **Writes per drive** also cover an SSD pool once its file access is switched on.
-- **SSD wear**: what the SSDs write per day (a key figure, compared with the previous period), and per SSD the wear and total written from SMART. An SSD that writes more than a limit you set (100 GB per day by default) is marked.
+- **SSD wear**: what the SSDs write per day (a key figure, compared with the previous period), and per SSD the wear and total written from SMART. An SSD that writes more than a limit you set (100 GB per day by default) is marked, and can send a message through the webhook. The SSD page shows how the wear went in the period and, at the current pace, in how many years the rated endurance is reached.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/active-drives-live-activity.png">
