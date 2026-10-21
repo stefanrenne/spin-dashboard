@@ -42,6 +42,8 @@ def sd(tmp_path, monkeypatch):
     monkeypatch.setattr(spindash, "procs", [])
     monkeypatch.setattr(spindash, "streams", [])
     monkeypatch.setattr(spindash, "writes_only", set())
+    monkeypatch.setattr(spindash, "watching", {})
+    monkeypatch.setattr(spindash, "events_seen", {"nano": None})
     monkeypatch.setattr(spindash, "recent", spindash.OrderedDict())
     monkeypatch.setattr(spindash, "drive_states", {})
     monkeypatch.setattr(spindash, "known_devices", {})

@@ -1103,6 +1103,7 @@ def resolve_shfs_later(ts, pid, op, path):
 # libraries here, thousands of opens a minute, so opens are not logged; writes to a layer are logged as
 # that layer's folder (an image pull writes thousands of files), writes in containers/<id>/ (the logs) as they are.
 DOCKER_STORE = re.compile(r"^(.*?/docker/(overlay2|btrfs|zfs|vfs|image|buildkit|containerd|containers|network|plugins|runtimes|tmp)/)(.*)$")
+CONTAINER_DIR = re.compile(r"^.*?/docker/containers/([0-9a-f]{64})/")
 LAYER_ID = re.compile(r"^(?:subvolumes/|graph/)?[0-9a-f]{25,64}(?:-init)?(?=/|$)")
 
 
@@ -1132,6 +1133,8 @@ def handle(line):
     if not m:
         return
     ts, comm, pid, types, path = m.groups()
+    if path.endswith(" (deleted)"):            # fatrace marks files that were already removed
+        path = path[:-10]
     if pid == MY_PID or pid in own_pids or is_own_file(path):
         return                               # do not log ourselves (rule 3)
     op = next((label for c, label in OPS if c in types), None)
@@ -1150,6 +1153,9 @@ def handle(line):
         resolve_shfs_later(ts, pid, op, path)
         return
     src = classify(pid, comm)
+    log_of = CONTAINER_DIR.match(path)
+    if log_of and src and src[0] == "unraid":        # dockerd writing a container's log or config: that container
+        src = ("container", container_name(log_of.group(1)))
     # Cache Dirs runs find so briefly that fatrace sometimes only sees "unknown" and the parents are gone.
     # find only opens folders: a folder open by an already stopped process without a source does not count then.
     if src and src[0] == "onbekend" and op == "geopend" and path.endswith("/") and ignore_active():
@@ -1166,6 +1172,18 @@ def consumer():
             log("error handling event:", repr(e))
 
 
+watching = {}          # mount -> its fatrace process, for /health
+FANOTIFY_HINT = ("fanotify limit reached? Each watched filesystem needs a fanotify group; raise "
+                 "fs.fanotify.max_user_groups on the host (sysctl) or watch fewer pools")
+
+
+def fatrace_stderr(mp, line):
+    """An error of fatrace in the log; when the fanotify limit is the cause, say what to do about it."""
+    log(f"fatrace {mp}:", line.rstrip())
+    if "Too many open files" in line or "EMFILE" in line:
+        log(FANOTIFY_HINT)
+
+
 def start_fatrace(mp):
     try:
         p = subprocess.Popen(["fatrace", "-c", "-tt", "-f", "O+WD<"], cwd=mp,
@@ -1175,6 +1193,7 @@ def start_fatrace(mp):
         log("could not start fatrace for", mp, e)
         return
     procs.append(p)
+    watching[mp] = p
     own_pid(p.pid)
 
     def pump_out():
@@ -1192,7 +1211,7 @@ def start_fatrace(mp):
 
     def pump_err():
         for line in p.stderr:
-            log(f"fatrace {mp}:", line.rstrip())
+            fatrace_stderr(mp, line)
 
     threading.Thread(target=pump_out, daemon=True).start()
     threading.Thread(target=pump_err, daemon=True).start()
@@ -1222,6 +1241,7 @@ def watch_once(current):
         for p in procs:
             p.terminate()
         procs.clear()
+        watching.clear()
         if mounts:
             log("Watching:", " ".join(mounts))
             for mp in mounts:
@@ -1250,8 +1270,9 @@ def watcher():
 # =====================================================================================
 # Docker: lifecycle (ctr lines) and mounts per container
 # =====================================================================================
-CTR_ACTIONS = {"start": "start", "die": "die",
+CTR_ACTIONS = {"start": "start", "die": "die", "oom": "oom",
                "health_status: healthy": "healthy", "health_status: unhealthy": "unhealthy"}
+events_seen = {"nano": None}   # time of the last Docker event, to ask for what was missed after a reconnect
 
 
 def ctr_line(ev, now=None):
@@ -1272,10 +1293,16 @@ def ctr_line(ev, now=None):
 
 
 def docker_events_once():
-    """One connection to the event stream; returns when Docker closes the connection."""
+    """One connection to the event stream; returns when Docker closes the connection. After a reconnect
+    it asks for the events since the last one it saw, so a Docker restart (when containers stop and
+    start) leaves no gap."""
     flt = urllib.parse.quote(json.dumps({"type": ["container"]}))
+    since = ""
+    if events_seen["nano"] is not None:
+        n = events_seen["nano"] + 1                         # just after the last one: no duplicates
+        since = f"&since={n // 10**9}.{n % 10**9:09d}"
     c = docker_conn(None)
-    c.request("GET", f"/events?filters={flt}")
+    c.request("GET", f"/events?filters={flt}{since}")
     r = c.getresponse()
     if r.status != 200:
         raise OSError(f"docker events: HTTP {r.status}")
@@ -1286,9 +1313,12 @@ def docker_events_once():
             health["docker"] = "disconnected"
             return
         try:
-            line = ctr_line(json.loads(raw))
+            ev = json.loads(raw)
         except ValueError:
             continue
+        if isinstance(ev.get("timeNano"), int):
+            events_seen["nano"] = ev["timeNano"]
+        line = ctr_line(ev)
         if line:
             append_lines([line])
 
@@ -1992,7 +2022,8 @@ def health_status(now=None):
         "uptime": int(now - health["started"]),
         "poller": {"last_success": None if health["poll"] is None else int(now - health["poll"]),
                    "error": health["poll_error"]},
-        "watcher": {"mounts": health["mounts"], "fatrace": sum(p.poll() is None for p in procs)},
+        "watcher": {"mounts": health["mounts"], "fatrace": sum(p.poll() is None for p in procs),
+                    "running": {mp: watching[mp].poll() is None if mp in watching else False for mp in health["mounts"]}},
         "docker": docker,
         "threads": alive,
     }

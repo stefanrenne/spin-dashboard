@@ -62,7 +62,10 @@ from an SSD wakes nothing and does not wear it, and the opens of program files w
 (a Docker volume that binds a folder of the pool) would report every event a second time under another
 path, so of the mounts of one source only the shortest under `/mnt` is used. Overlay (container root
 filesystems, when Docker's data-root is on a pool), tmpfs and other non-drive filesystems are skipped.
-Because fatrace marks the whole filesystem, Docker's own storage on a watched pool still shows up through
+`/health` says per watched filesystem whether its fatrace runs; when one cannot start because the fanotify
+limit is reached, the log says how to raise it. Writes by `dockerd` in `docker/containers/<id>/` (a
+container's log and config) count for that container. Because fatrace marks the whole filesystem, Docker's
+own storage on a watched pool still shows up through
 its real paths: every program a container starts opens its binaries in `docker/overlay2/<layer>/`. Opens
 in Docker's storage are therefore not logged, a write to a layer is logged as that layer's folder (one
 line instead of thousands on an image pull), and writes in `docker/containers/<id>/` (the container

@@ -329,7 +329,7 @@ def test_docker_storage_opens_are_skipped_and_layer_writes_collapse(sd, monkeypa
         ("1", "container", "swag", "9", "geschreven", f"{root}/overlay2/{layer}/"),
         ("1", "unraid", "dockerd", "3", "aangemaakt", f"{root}/overlay2/{layer}-init/"),
         ("1", "unraid", "dockerd", "3", "geschreven", f"{root}/image/"),
-        ("1", "unraid", "dockerd", "3", "geschreven", f"{root}/containers/{layer}/{layer}-json.log"),
+        ("1", "container", layer[:12], "3", "geschreven", f"{root}/containers/{layer}/{layer}-json.log"),   # its container
         ("1", "container", "sonarr", "10", "geschreven", "/mnt/frunk/appdata/sonarr/sonarr.db-wal"),
         ("1", "container", "plex", "11", "geopend", "/mnt/frunk/appdata/docker-compose/plex.yml"),
     ]

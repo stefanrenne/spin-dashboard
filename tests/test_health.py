@@ -21,7 +21,7 @@ def test_healthy_after_start_and_while_the_poller_keeps_succeeding(sd):
     ok, body = sd.health_status(now=1560)
     assert ok
     assert body == {"ok": True, "uptime": 560, "poller": {"last_success": 60, "error": None},
-                    "watcher": {"mounts": ["/mnt/trunk"], "fatrace": 0}, "docker": "connected",
+                    "watcher": {"mounts": ["/mnt/trunk"], "fatrace": 0, "running": {"/mnt/trunk": False}}, "docker": "connected",
                     "threads": {"poller": True, "watcher": True, "housekeeping": True, "docker_events": True}}
 
 
@@ -41,7 +41,7 @@ def test_no_docker_socket_or_fatrace_does_not_make_it_unhealthy(sd):
     sd.threads.update(poller=T(True), watcher=T(True), housekeeping=T(True), docker_events=T(False))
     sd.health.update(poll=1000, docker="no socket", mounts=[])
     ok, body = sd.health_status(now=1010)
-    assert ok and body["docker"] == "no socket" and body["watcher"] == {"mounts": [], "fatrace": 0}
+    assert ok and body["docker"] == "no socket" and body["watcher"] == {"mounts": [], "fatrace": 0, "running": {}}
 
 
 def test_health_endpoint_answers_200_or_503(sd):
@@ -100,3 +100,26 @@ def test_watch_once_restarts_fatrace_only_when_needed(sd, monkeypatch):
     assert sd.watch_once(current) == ["/mnt/trunk"] and started[-1] == "/mnt/trunk" and len(sd.procs) == 1
     mounts[0] = []
     assert sd.watch_once(["/mnt/trunk"]) == [] and sd.procs == [] and sd.health["mounts"] == []
+
+
+def test_health_says_per_filesystem_whether_its_fatrace_runs(sd, monkeypatch):
+    monkeypatch.setattr(sd, "target_mounts", lambda: ["/mnt/trunk", "/mnt/frunk"])
+    def start(mp):
+        p = FakeProc(mp)
+        sd.procs.append(p)
+        sd.watching[mp] = p
+    monkeypatch.setattr(sd, "start_fatrace", start)
+    sd.watch_once(None)
+    sd.watching["/mnt/frunk"].code = 1
+    ok, body = sd.health_status(now=sd.health["started"] + 1)
+    assert body["watcher"]["running"] == {"/mnt/trunk": True, "/mnt/frunk": False}
+
+
+def test_a_fanotify_limit_gets_a_hint_in_the_log(sd, monkeypatch):
+    logged = []
+    monkeypatch.setattr(sd, "log", lambda *a: logged.append(" ".join(map(str, a))))
+    sd.fatrace_stderr("/mnt/x", "Cannot initialize fanotify: Too many open files\n")
+    assert logged[0] == "fatrace /mnt/x: Cannot initialize fanotify: Too many open files"
+    assert "max_user_groups" in logged[1]
+    sd.fatrace_stderr("/mnt/x", "some other error\n")
+    assert len(logged) == 3

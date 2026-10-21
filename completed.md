@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-10-21: watcher and data quality
+- Writes by `dockerd` in `docker/containers/<id>/` (a container's log and config) count for that container, by name, instead of `dockerd` with a hex path as the only clue
+- The ` (deleted)` suffix of fatrace is stripped from paths
+- `/health` reports per watched filesystem whether its fatrace runs (`watcher.running`); a fatrace that cannot start because of the fanotify limit gets a hint in the log (`fs.fanotify.max_user_groups`)
+- Docker events: after a reconnect the stream continues from the last event it saw (`since`), and an `oom` kill is logged as a `ctr` event (shown like a stop, labelled "out of memory")
+
 ## 2026-10-21: security
 - Optional `SETTINGS_TOKEN`: saving settings and testing the webhook need it in the `X-Settings-Token` header; the settings answer then says `"locked": true` and each browser asks for the token once (kept in `localStorage`)
 - The webhook URL never leaves the server in full: browsers get scheme and host only, and that masked value sent back keeps the stored URL

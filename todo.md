@@ -14,10 +14,6 @@ Open work, roughly by priority. Move finished items to `completed.md`.
 - [ ] Large downloads with "All": day files are ~6 MB a day on a busy server (mostly `who` lines), so 30 days is ~180 MB. Measure again now that SSD pools log only writes and live days are fetched in parts; only if it is still too much: a per-day summary endpoint (like `spins.csv`) for the cards that do not need single lines, or filtering `who` lines on the server by the window
 
 ## Watcher and data quality
-- [ ] Container names instead of Docker IDs: writes to `docker/containers/<id>/…-json.log` and `docker/overlay2/<layer>/` show hex IDs with `dockerd` as the source. Look up the container through the Docker API (`LogPath`, `GraphDriver.Data.UpperDir`) and name it as the source ("plex, container log")
-- [ ] Strip the ` (deleted)` suffix that fatrace adds to paths of files that are already removed
-- [ ] `/health` should report per watched filesystem whether its fatrace runs (now only a count; once 7 ran for ~60 mounts unnoticed), and name the fanotify limit (`fs.fanotify.max_user_groups`) when starting one fails
-- [ ] Docker events: after a reconnect the events of the gap are lost, exactly when Docker restarts and containers stop and start. Reconnect with `/events?since=<time of the last event>`. Also log `oom` (a container killed for lack of memory) as a `ctr` event
 - [ ] Optional, on the own server: clean the noise from 2026-10-20 (12.9 MB instead of the usual 0.3–0.5 MB: some 25,000 opens in `docker/overlay2` and doubled paths from before the watcher fixes); otherwise it ages out after 30 days
 
 ## Features

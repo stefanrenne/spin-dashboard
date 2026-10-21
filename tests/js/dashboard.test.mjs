@@ -2102,3 +2102,21 @@ test('without a token the field stays hidden', async () => {
   assert.equal(d.getElementById('tokenBox').hidden, true);
   dom.window.close();
 });
+
+test('a container killed for lack of memory shows as a stop, and is named before a spin-up', async () => {
+  const OOM = served({ [today]: [
+    `${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`,
+    `${ep(200)},who,container,plex,7,geopend,/mnt/trunk/Media/x.mkv`,
+    `${ep(122)},ctr,plex,oom`, `${ep(121.9)},ctr,plex,die,137`,
+    `${ep(121)},who,container,plex,7,geopend,/mnt/trunk/Media/y.mkv`,
+    `${ep(120)},spin,sdd,active`, `${ep(60)},spin,sdd,standby`,
+  ] });
+  const dom = await load(OOM);
+  const d = dom.window.document;
+  const plex = d.querySelector('#srcLaneList .srow[data-k="container|plex"]');
+  assert.equal((plex.querySelector('.cd').getAttribute('d').match(/M/g) || []).length, 2);   // the oom and the die
+  d.querySelector('#sources .srcbtn[data-src="container|plex"]').click();
+  assert.match(text(d.getElementById('profileBody')), /Geheugen vol/);
+  assert.ok(d.querySelector('#profileBody .life-ev.oom'));
+  dom.window.close();
+});

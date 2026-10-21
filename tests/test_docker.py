@@ -231,3 +231,41 @@ def test_container_name_only_remembers_real_names(sd, monkeypatch):
     assert len(asked) == 1
     assert sd.container_name(cid, now=1061) == "plex"
     assert sd.container_name(cid, now=1062) == "plex" and len(asked) == 2
+
+
+def test_ctr_line_for_an_oom_kill():
+    sd = __import__("spindash")
+    assert sd.ctr_line(ev("oom")) == "1791496800,ctr,radarr,oom"
+
+
+def test_docker_events_resume_after_a_reconnect(sd, monkeypatch):
+    """Events during a Docker restart are not lost: the next connection asks for what came after the last one."""
+    first = {**ev("start"), "timeNano": 1791496800123456789}
+    fake = FakeDocker({"/events": (json.dumps(first),)})
+    try:
+        monkeypatch.setattr(sd, "DOCKER_SOCK", fake.path)
+        sd.docker_events_once()
+        sd.docker_events_once()
+    finally:
+        fake.close()
+    assert "since" not in fake.requests[0]
+    assert fake.requests[1].endswith("&since=1791496800.123456790")
+
+
+def test_dockerd_writing_a_container_log_counts_for_that_container(sd, monkeypatch):
+    calls = []
+    monkeypatch.setattr(sd, "write_who", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(sd, "classify", lambda pid, comm: ("unraid", comm))
+    monkeypatch.setattr(sd, "docker_get", lambda path, timeout=2: {"Name": "/plex"})
+    cid = "f" * 64
+    sd.handle(f"1.0 dockerd(3): W   /mnt/frunk/appdata/docker/containers/{cid}/{cid}-json.log\n")
+    sd.handle("1.0 dockerd(3): W   /mnt/frunk/appdata/docker/image/overlay2/repositories.json\n")   # not one container
+    assert [(c[1], c[2]) for c in calls] == [("container", "plex"), ("unraid", "dockerd")]
+
+
+def test_deleted_suffix_is_stripped(sd, monkeypatch):
+    calls = []
+    monkeypatch.setattr(sd, "write_who", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(sd, "classify", lambda pid, comm: ("container", "swag"))
+    sd.handle("1.0 nginx(9): W   /mnt/frunk/appdata/swag/tmp/0000000001 (deleted)\n")
+    assert calls[0][5] == "/mnt/frunk/appdata/swag/tmp/0000000001"
