@@ -282,3 +282,61 @@ def test_a_closed_stream_is_forgotten(sd, server):
         sd.broadcast("1791496800,who,container,plex,1,geopend,/mnt/trunk/a.mkv")
         time.sleep(0.05)
     assert sd.streams == []
+
+
+def part(server, day, **q):
+    """GET a day file with ?from=…: (status, body, headers)."""
+    qs = "&".join(f"{k}={v}" for k, v in q.items())
+    return fetch(f"{server}/data/days/{day}.csv?{qs}")
+
+
+def test_day_part_sends_only_what_was_added(server, sd):
+    status, body, h = part(server, "2026-10-09", **{"from": 0})
+    assert (status, body, h["X-From"], h["X-Size"]) == (200, b"1791496800,spin,sdd,active\n", "0", "27")
+    fid = h["X-File"]
+    with open(sd.day_path("2026-10-09"), "a") as f:
+        f.write("1791496900,spin,sdd,standby\n1791497000,who,unraid,x,1,geo")   # the last line is not complete yet
+    status, body, h = part(server, "2026-10-09", **{"from": 27, "file": fid})
+    assert (body, h["X-From"], h["X-Size"]) == (b"1791496900,spin,sdd,standby\n", "27", "55")
+    status, body, h = part(server, "2026-10-09", **{"from": 55, "file": fid})
+    assert (body, h["X-Size"]) == (b"", "55")                                   # nothing whole added yet
+
+
+def test_day_part_starts_over_when_the_file_was_rewritten(server, sd):
+    _, _, h = part(server, "2026-10-09", **{"from": 0})
+    path = sd.day_path("2026-10-09")
+    open(path + ".tmp", "w").write("1791496800,spin,sdd,active\n1791496801,spin,sdd,standby\n")
+    sd.os.replace(path + ".tmp", path)                                           # like relabel_existing()
+    _, body, h2 = part(server, "2026-10-09", **{"from": 27, "file": h["X-File"]})
+    assert h2["X-From"] == "0" and body.count(b"\n") == 2 and h2["X-File"] != h["X-File"]
+    _, body, h3 = part(server, "2026-10-09", **{"from": 999})                    # beyond the end
+    assert h3["X-From"] == "0"
+    assert part(server, "2026-10-09", **{"from": "x"})[0] == 400
+    assert part(server, "2026-01-01", **{"from": 0})[0] == 404
+
+
+def test_day_part_leaves_the_waiting_lines_to_pending(server, sd):
+    sd.io_pending.extend(["1791496860,io,nvme0n1,4,8,1,2", "1791583260,wear,nvme0n1,3,"])
+    _, body, _ = part(server, "2026-10-09", **{"from": 0})
+    assert b",io," not in body
+    status, body, h = fetch(server + "/data/pending.csv")
+    assert (status, body) == (200, b"1791496860,io,nvme0n1,4,8,1,2\n1791583260,wear,nvme0n1,3,\n")
+    assert fetch(server + "/data/pending.csv", **{"If-None-Match": h["ETag"]})[0] == 304
+    sd.io_pending.clear()
+    assert fetch(server + "/data/pending.csv")[1] == b""
+
+
+def test_spins_keeps_the_file_summary_and_only_adds_the_waiting_lines(server, sd, monkeypatch):
+    open(sd.day_path("2026-10-09"), "w").write("1791496800,disk,nvme0n1,cache,ssd\n1791496860,io,nvme0n1,1,2,1,1\n")
+    get(server + "/data/spins.csv")
+    reads = []
+    real = sd.summary_parts
+    def counting(lines, hours=None):
+        lines = list(lines)
+        reads.append(len(lines))
+        return real(lines, hours)
+    monkeypatch.setattr(sd, "summary_parts", counting)
+    sd.io_pending.append("1791496920,io,nvme0n1,1,2,1,1")
+    body = get(server + "/data/spins.csv")[1].splitlines()
+    assert "1791496920,io,nvme0n1,2,4,2,2" in body                               # file and waiting lines in one hour
+    assert reads == [1]                                                          # only the waiting line was read

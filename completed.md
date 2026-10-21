@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-10-21: performance
+- The live days are fetched in parts: `/data/days/<day>.csv?from=N&file=ID` sends only the bytes added since (whole lines), and the waiting `io`/`wear` lines come from `/data/pending.csv`. The browser keeps every day as parsed lines and only parses what is new, instead of downloading today's file and parsing every loaded day again every minute. Older servers and frontends keep working as before
+- `/data/spins.csv` keeps the summary of each day file and only adds the waiting lines
+- SSD pools log only writes unless "also reads" is chosen per pool (`ssd_reads`): a read from an SSD wakes and wears nothing, and the opens of program files made the day files ~6× bigger
+- `write_who()` forgets old keys in time order (`OrderedDict`) instead of walking all of them for every line during a big scan
+- The poller asks all HDDs at the same time and keeps a fixed rate (`next_poll()`)
+
 ## 2026-10-21: development chores from the review
 - `docs/architecture.md`: the diagram is English again, with the newer parts (io buffer, SMART, one fatrace per filesystem, the guarded shfs lookup, `/data/notify-test`) and straight borders
 - README › Permissions: what the Docker socket is used for and when `smartctl` runs; `DEDUP_SECONDS` in the README and the CA template

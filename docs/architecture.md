@@ -37,7 +37,8 @@
 
 ## Components
 
-**Poller.** Every `POLL_INTERVAL` seconds. A spin-up inside the quiet hours (Settings) of a drive that
+**Poller.** Every `POLL_INTERVAL` seconds, on a fixed rate (`next_poll()`: a slow poll does not shift the
+next one), asking all HDDs at the same time so one slow or hanging drive does not hold up the others. A spin-up inside the quiet hours (Settings) of a drive that
 takes part is sent to the webhook, in a separate thread so a slow receiver never delays the poll. Determines every drive from `disks.ini` and whether it
 spins (`rotational`); only HDDs are asked their state, and changes become `spin` lines. On the first
 poll after start and on the first poll of each day it writes the current state of every HDD as `state`
@@ -56,7 +57,8 @@ registers their PIDs so the watcher never logs them (rule 3).
 **Watcher.** Determines the mounts to watch: `/mnt/<name>` for array disks (`disk1`) and
 pools (pool member `trunk2` belongs to `/mnt/trunk`), plus every mount below them (ZFS datasets).
 SSD pools are only watched when they are chosen in Settings (`ssd_watch`): an appdata or cache pool
-gives a lot of events. One `fatrace` per filesystem: a bind mount of a filesystem that is already watched
+gives a lot of events. Of those only writes are logged unless reads are chosen too (`ssd_reads`): a read
+from an SSD wakes nothing and does not wear it, and the opens of program files would fill the day files. One `fatrace` per filesystem: a bind mount of a filesystem that is already watched
 (a Docker volume that binds a folder of the pool) would report every event a second time under another
 path, so of the mounts of one source only the shortest under `/mnt` is used. Overlay (container root
 filesystems, when Docker's data-root is on a pool), tmpfs and other non-drive filesystems are skipped.
@@ -89,8 +91,10 @@ are removed as a whole. On start, `migrate()` converts files from older versions
 **Frontend.** It fetches `days.json` and only the day files the shown period needs: the window
 plus one day on each side (a cause just after midnight, a session that ends the next day), and
 always today and yesterday for the live feed. Fetched days stay in memory; browsing back or
-choosing "All" fetches the missing days on demand. Every minute it refetches `days.json` and the
-live days (conditionally, 304 when unchanged). It merges `activity` lines (old inotify data) and `who` lines into one activity stream
+choosing "All" fetches the missing days on demand. A day is parsed once and kept as parsed lines; every
+minute it refetches `days.json`, only the bytes added to the live days since the last fetch (`?from=`, see
+`data-formats.md`, parsing only those) and the waiting `io`/`wear` lines (`/data/pending.csv`), and then
+merges the parsed parts into one data set. It merges `activity` lines (old inotify data) and `who` lines into one activity stream
 and links it to spin-ups. `state` lines set the state but are never a spin-up. The period is
 last hour, 24 hours (the default), 7 days, 30 days or all; `offset` shifts the window back by whole
 periods. Every switch shows the skeleton and the loading bar while missing days are fetched and the

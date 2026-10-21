@@ -16,12 +16,7 @@ Open work, roughly by priority. Move finished items to `completed.md`.
 - [ ] The whole dashboard (every file path, container and share name) is readable without authentication. Say so in the README and the CA template, and advise against exposing it to the internet without a login in front
 
 ## Performance
-- [ ] Today's day file is downloaded in full every minute: the waiting `io` lines change its ETag every poll, so the browser fetches it again (around 1 MB gzipped on a busy day) and `rebuild()` parses every loaded day again, 30 days with "All". Fetch only the bytes added since the last fetch (a `Range` request or `?from=`) and parse only the new lines
-- [ ] Large downloads with "All": day files are ~6 MB a day on a busy server (mostly `who` lines), so 30 days is ~180 MB. A per-day summary endpoint (like `spins.csv`) for the cards that do not need single lines, or filtering `who` lines on the server by the window
-- [ ] `/data/spins.csv` and `/data/days/<today>.csv` read and gzip today's whole file on every request while `io` lines wait in memory (the caches are bypassed). Cache the file part and only add the waiting lines
-- [ ] File access on an SSD pool fills the day files with reads that matter little: with `frunk` watched a day file grew from ~0.4 MB to ~2.6 MB in 9 hours, mostly opens of program files (scrypted's Python plugins, Plex). A read from an SSD wakes nothing and does not wear it: a "writes only" option per SSD pool, on by default
-- [ ] `write_who()`: when `recent` holds more than 50,000 keys that are all younger than `DEDUP_SECONDS` (a big scan), every new line walks the whole dict under `write_lock`. Evict in time order (`OrderedDict`) instead
-- [ ] The poller asks the drives one after another (`hdparm` with a 15 s timeout each) and then sleeps `POLL_INTERVAL`, so one slow or hanging drive delays all others and the poll times drift. Ask the drives in parallel and keep a fixed rate
+- [ ] Large downloads with "All": day files are ~6 MB a day on a busy server (mostly `who` lines), so 30 days is ~180 MB. Measure again now that SSD pools log only writes and live days are fetched in parts; only if it is still too much: a per-day summary endpoint (like `spins.csv`) for the cards that do not need single lines, or filtering `who` lines on the server by the window
 
 ## Watcher and data quality
 - [ ] Container names instead of Docker IDs: writes to `docker/containers/<id>/…-json.log` and `docker/overlay2/<layer>/` show hex IDs with `dockerd` as the source. Look up the container through the Docker API (`LogPath`, `GraphDriver.Data.UpperDir`) and name it as the source ("plex, container log")

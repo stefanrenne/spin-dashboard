@@ -29,7 +29,7 @@ See when your hard drives spin up and down, and **why**.
 - Settings also let you hide cards and change their order; the layout is remembered per browser.
 - Pools and the array show as one lane each by default (a lane spins when any of its drives spins); one switch in Settings shows every drive separately.
 - Hide noisy paths with wildcards under Settings › Hidden paths (for example `/mnt/user/appdata/*`); they no longer count anywhere in the dashboard. The list is stored on the server, so it is the same in every browser. The data on disk stays complete.
-- Works with the array and with HDD pools (XFS, Btrfs, ZFS). SSD/NVMe pools show how much they read and write (from the kernel's counters, which never wake a drive); which file is opened by whom can be switched on per SSD pool under Settings › File access on SSD pools.
+- Works with the array and with HDD pools (XFS, Btrfs, ZFS). SSD/NVMe pools show how much they read and write (from the kernel's counters, which never wake a drive); which file is written by whom (and optionally read) can be switched on per SSD pool under Settings › File access on SSD pools.
 - **Reads per drive** and **Writes per drive** also cover an SSD pool once its file access is switched on.
 - **SSD wear**: what the SSDs write per day (a key figure, compared with the previous period), and per SSD the wear and total written from SMART. An SSD that writes more than a limit you set (100 GB per day by default) is marked.
 

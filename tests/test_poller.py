@@ -274,3 +274,24 @@ def test_written_units_come_from_the_attribute_name():
     intel = ('{"ata_smart_attributes": {"table": [{"id": 233, "value": 98},'
              '{"id": 241, "name": "Host_Writes_32MiB", "raw": {"value": 100}}]}}')
     assert spindash.parse_wear(intel) == (2, 100 * 32 * 1024)
+
+
+def test_next_poll_keeps_a_fixed_rate():
+    n = spindash.next_poll
+    assert n(1000, 1000.5, 60) == 1060                    # a quick poll: the next minute
+    assert n(1000, 1059.9, 60) == 1060                    # a slow one does not push the next one back
+    assert n(1000, 1130, 60) == 1180                      # longer than a minute: the missed time is skipped
+
+
+def test_drives_are_asked_at_the_same_time(sd, monkeypatch):
+    """One slow drive (hdparm can take up to its 15 s timeout) does not hold up the others."""
+    import threading
+    (sd._tmp / "emhttp" / "disks.ini").write_text("".join(f'["disk{i}"]\ndevice="sd{c}"\n' for i, c in enumerate("bcde", 1)))
+    for c in "bcde":
+        make_disk(sd._tmp, f"sd{c}")
+    barrier = threading.Barrier(4, timeout=5)
+    def state(dev):
+        barrier.wait()                                     # only passes when all four are asked at once
+        return "standby"
+    monkeypatch.setattr(sd, "drive_state", state)
+    assert sd.poll_once({}, now=T) == 4

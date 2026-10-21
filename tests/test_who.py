@@ -419,3 +419,37 @@ def test_run_own_registers_the_pid_and_behaves_like_run(sd):
     sd.own_pids.update({k: 0.0 for k in sd.own_pids})                               # long ago
     sd.own_pid(1)
     assert list(sd.own_pids) == ["1"]                                               # old ones are forgotten
+
+
+def test_ssd_pools_log_only_writes_unless_reads_are_chosen(sd, monkeypatch):
+    calls = []
+    monkeypatch.setattr(sd, "write_who", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(sd, "classify", lambda pid, comm: ("container", comm))
+    devs = {"nvme0n1": ("frunk", False), "nvme1n1": ("frunk2", False), "sdd": ("trunk", True)}
+    assert sd.writes_only_mounts({"ssd_watch": ["frunk"]}, devs) == {"frunk"}
+    assert sd.writes_only_mounts({"ssd_watch": ["frunk"], "ssd_reads": ["frunk"]}, devs) == set()
+    assert sd.writes_only_mounts({"ssd_watch": ["trunk"]}, devs) == set()           # an HDD pool: always everything
+    sd.writes_only.update({"frunk"})
+    sd.handle("1.0 scrypted(7): O   /mnt/frunk/appdata/scrypted/plugin.py\n")       # read on frunk: skipped
+    sd.handle("1.0 scrypted(7): W   /mnt/frunk/appdata/scrypted/scrypted.db\n")
+    sd.handle("1.0 plex(8): O   /mnt/trunk/Media/a.mkv\n")                         # HDD: reads count
+    assert [(c[4], c[5]) for c in calls] == [("geschreven", "/mnt/frunk/appdata/scrypted/scrypted.db"),
+                                             ("geopend", "/mnt/trunk/Media/a.mkv")]
+
+
+def test_ssd_reads_setting_is_checked(sd):
+    import pytest
+    assert sd.save_settings({"ssd_reads": ["frunk", "frunk"]}) == {"ssd_reads": ["frunk"]}
+    with pytest.raises(ValueError):
+        sd.save_settings({"ssd_reads": "frunk"})
+
+
+def test_dedup_forgets_old_keys_in_time_order(sd):
+    """A big scan fills `recent`; old keys go first, without walking all of them for every line."""
+    for i in range(5):
+        sd.write_who("1", "container", "plex", "5", "geopend", f"/mnt/trunk/{i}", now=1000 + i)
+    assert list(sd.recent)[0][0] == "/mnt/trunk/0"
+    sd.write_who("2", "container", "plex", "5", "geopend", "/mnt/trunk/new", now=1000 + sd.DEDUP_S + 2.5)
+    assert [k[0] for k in sd.recent] == ["/mnt/trunk/3", "/mnt/trunk/4", "/mnt/trunk/new"]   # 0..2 are older than DEDUP_S
+    sd.write_who("3", "container", "plex", "5", "geopend", "/mnt/trunk/new", now=1000 + sd.DEDUP_S + 3)
+    assert open(sd.day_path(sd.day_of(2))).read().count("/mnt/trunk/new") == 1          # still once per DEDUP_S

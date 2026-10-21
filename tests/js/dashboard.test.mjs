@@ -36,6 +36,11 @@ function load(files, url = 'http://dash/?lang=nl', languages = ['en-US'], stored
         }
         const key = Object.keys(files).find((k) => u.includes(k));
         if (!key || files[key] === null) return Promise.resolve({ ok: false });
+        if (typeof files[key] === 'function') {   // a server that answers per request: {body, headers}
+          const res = files[key](u);
+          return Promise.resolve({ ok: true, text: () => Promise.resolve(res.body), json: () => Promise.resolve(JSON.parse(res.body)),
+                                   headers: { get: (h) => (res.headers || {})[h] ?? null } });
+        }
         return Promise.resolve({ ok: true, text: () => Promise.resolve(files[key]),
                                  json: () => Promise.resolve(JSON.parse(files[key])) });
       };
@@ -1867,13 +1872,20 @@ test('file access on SSD pools can be switched on per pool and is saved on the s
   const dom = await load({ ...SSD, 'settings.json': JSON.stringify({ hide: [], ssd_watch: [] }) });
   const d = dom.window.document, w = dom.window;
   d.getElementById('openSettings').click();
-  const box = d.querySelector('#ssdLanes input[value="cache"]');
-  assert.deepEqual([...d.querySelectorAll('#ssdLanes input')].map((i) => i.value), ['cache']);
+  const box = d.querySelector('#ssdLanes input[data-ssd="watch"][value="cache"]');
+  assert.deepEqual([...d.querySelectorAll('#ssdLanes input[data-ssd="watch"]')].map((i) => i.value), ['cache']);
   assert.equal(box.checked, false);
+  assert.equal(d.querySelector('#ssdLanes input[data-ssd="reads"]').disabled, true);   // only for a followed pool
   box.checked = true; box.dispatchEvent(new w.Event('change', { bubbles: true }));
   await until(() => w.__posts.length);
   await new Promise((r) => setTimeout(r, 20));                           // the reply of the save
-  assert.deepEqual(w.__posts[0], { url: 'data/settings.json', type: 'application/json', body: { ssd_watch: ['cache'] } });
+  assert.deepEqual(w.__posts[0], { url: 'data/settings.json', type: 'application/json', body: { ssd_watch: ['cache'], ssd_reads: [] } });
+  const reads = d.querySelector('#ssdLanes input[data-ssd="reads"]');
+  assert.equal(reads.disabled, false);
+  reads.checked = true; reads.dispatchEvent(new w.Event('change', { bubbles: true }));
+  await until(() => w.__posts.length > 1);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(w.__posts[1].body, { ssd_watch: ['cache'], ssd_reads: ['cache'] });
   assert.equal(d.getElementById('ssdStatus').textContent, '');
   // switched on: the detail page no longer says that nothing is recorded
   d.getElementById('settingsDone').click();
@@ -2017,5 +2029,41 @@ test('a server with only SSDs shows its drives instead of "no data"', async () =
   assert.ok(cache && cache.querySelector('.lane.io'));
   assert.ok(d.querySelector('#kpis [data-kpi="kpiSsdWrite"]'));
   assert.equal(d.querySelectorAll('#devFilter option').length, 1);          // the whole render ran (it is near the end)
+  dom.window.close();
+});
+
+// ---------- only what was added: the live day in parts ----------
+test('the live day is fetched in parts: only the bytes added since, and the waiting lines apart', async () => {
+  let file = [`${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},state,sdd,standby`].join('\n') + '\n', id = 'f1';
+  const asked = [];
+  const day = (u) => {     // what the server does with ?from= (ASCII here, so characters are bytes)
+    const q = new URL(u, 'http://dash/').searchParams, from = +q.get('from');
+    const start = (q.get('file') && q.get('file') !== id) || from > file.length ? 0 : from;
+    asked.push(start);
+    return { body: file.slice(start), headers: { 'X-From': String(start), 'X-Size': String(file.length), 'X-File': id } };
+  };
+  let pending = `${ep(1)},io,sdd,4096,0,1,0\n`;
+  const dom = await load({ 'days.json': JSON.stringify({ days: [today] }), [`days/${today}.csv`]: day, 'pending.csv': () => ({ body: pending }) },
+    'http://dash/?lang=nl', ['en-US'], null, (w) => {
+      w.setInterval = (fn, ms) => { if (ms === 60000) w.__tick = fn; return 0; };     // the minute refresh, by hand
+      Object.defineProperty(w.Document.prototype, 'hidden', { get: () => false, configurable: true });
+    });
+  const d = dom.window.document, w = dom.window;
+  const label = () => d.querySelector('[data-card="lanes:trunk"] .trace').getAttribute('aria-label');
+  assert.deepEqual(asked, [0]);
+  assert.match(label(), /^trunk: 0 spin-ups/);
+  assert.ok(d.querySelector('[data-card="lanes:trunk"] .ior').getAttribute('d').length > 0);   // the waiting io line counts
+  const before = file.length;
+  file += `${ep(2)},spin,sdd,active\n`;
+  w.__tick();
+  await until(() => /^trunk: 1 spin-ups/.test(label()));
+  assert.deepEqual(asked, [0, before]);                                     // only the new line was asked for
+  assert.match(label(), /^trunk: 1 spin-ups/);
+  // the file was rewritten (another file ID): the server starts at 0 and the old lines are dropped
+  id = 'f2'; file = [`${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},state,sdd,standby`].join('\n') + '\n'; pending = '';
+  w.__tick();
+  await until(() => /^trunk: 0 spin-ups/.test(label()));
+  assert.equal(asked[asked.length - 1], 0);
+  assert.match(label(), /^trunk: 0 spin-ups/);
   dom.window.close();
 });

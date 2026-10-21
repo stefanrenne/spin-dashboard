@@ -22,6 +22,8 @@ import hashlib
 import http.client
 import http.server
 import json
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
 import os
 import queue
 import re
@@ -154,14 +156,14 @@ def day_body(path, st, gz):
     return body
 
 
-_spin_cache = {}      # path -> (mtime_ns, size, spin lines); only the disk/state/spin/wear lines
+_spin_cache = {}      # path -> (mtime_ns, size, lines, hours): the summary of a day file (summary_parts)
 SPIN_TYPES = ("disk", "state", "spin", "wear")
 
 
-def summary_lines(lines):
-    """The disk, state, spin and wear lines of `lines` as they are, plus the io lines added up per
-    drive per hour: one io line per drive per hour, at the time of the last one it covers."""
-    out, hours = [], {}
+def summary_parts(lines, hours=None):
+    """The disk, state, spin and wear lines of `lines` as they are, and the io lines added up per drive per
+    hour into `hours` ({(device, hour): [time of the last line, KiB read, KiB written, reads, writes]})."""
+    out, hours = [], {} if hours is None else hours
     for line in lines:
         p = line.rstrip("\n").split(",")
         if len(p) >= 3 and p[1] in SPIN_TYPES:
@@ -175,21 +177,25 @@ def summary_lines(lines):
             h[0] = max(h[0], t)
             for i, v in enumerate(vals):
                 h[i + 1] += v
-    for (dev, _), h in sorted(hours.items(), key=lambda kv: kv[1][0]):
-        out.append(f"{h[0]},io,{dev}," + ",".join(map(str, h[1:])) + "\n")
-    return out
+    return out, hours
 
 
-def spin_lines(path, st):
-    """The summary of one day file (see summary_lines). Small (the who and io lines are most of it),
-    so the frontend can show key figures and the trend over all days without fetching everything."""
+def summary_text(lines, hours):
+    """One io line per drive per hour, at the time of the last line it covers, after the other lines."""
+    io = [f"{h[0]},io,{dev}," + ",".join(map(str, h[1:])) + "\n"
+          for (dev, _), h in sorted(hours.items(), key=lambda kv: kv[1][0])]
+    return "".join(lines + io)
+
+
+def spin_summary(path, st):
+    """(lines, hours) of one day file, kept as long as the file does not change."""
     hit = _spin_cache.get(path)
     if hit and hit[:2] == (st.st_mtime_ns, st.st_size):
-        return hit[2]
+        return hit[2], hit[3]
     with open(path, encoding="utf-8", errors="replace") as f:
-        text = "".join(summary_lines(f))
-    _spin_cache[path] = (st.st_mtime_ns, st.st_size, text)
-    return text
+        lines, hours = summary_parts(f)
+    _spin_cache[path] = (st.st_mtime_ns, st.st_size, lines, hours)
+    return lines, hours
 
 
 def spins_body():
@@ -200,15 +206,15 @@ def spins_body():
         path = day_path(d)
         try:
             st = os.stat(path)
-            text = spin_lines(path, st)
+            lines, hours = spin_summary(path, st)
         except OSError:
             continue
-        extra = pending_io(d)          # waiting io and wear lines: added up together with the day file
+        extra = pending_io(d)          # waiting io and wear lines: added to the cached summary of the file
         if extra:
-            with open(path, encoding="utf-8", errors="replace") as f:
-                text = "".join(summary_lines(list(f) + extra))
+            more, hours = summary_parts(extra, {k: list(v) for k, v in hours.items()})
+            lines = lines + more
             tag.append(f"{len(extra)}:{extra[-1]}")
-        parts.append(text)
+        parts.append(summary_text(lines, hours))
         tag.append(f"{d}:{st.st_mtime_ns:x}:{st.st_size:x}")
     live = {day_path(d) for d in days}
     for path in [p for p in _spin_cache if p not in live]:      # forget days that were cleaned up
@@ -557,8 +563,11 @@ def poll_once(last, now=None):
     if new_day or alld != last.get("all"):
         lines += [f"{now},disk,{d},{n},{'hdd' if hdd else 'ssd'}" for d, (n, hdd) in sorted(alld.items())]
     n, ups = 0, []
+    # every drive at the same time: one slow or hanging drive (15 s timeout) does not hold up the others
+    with ThreadPoolExecutor(max_workers=max(1, min(16, len(devs)))) as pool:
+        states = dict(zip(sorted(devs), pool.map(drive_state, sorted(devs))))
     for dev in sorted(devs):
-        st = drive_state(dev)
+        st = states[dev]
         if not st:
             continue
         if dev in known and st != known[dev]:
@@ -687,8 +696,15 @@ def webhook_safely(url, payload):
         log("webhook failed:", repr(e))
 
 
+def next_poll(start, now, interval=None):
+    """When the next poll starts: on a fixed rate from `start`, so a slow poll does not shift the times.
+    A poll that took longer than the interval skips the times it missed."""
+    interval = POLL_INTERVAL if interval is None else interval
+    return start + (int((now - start) // interval) + 1) * interval
+
+
 def poller():
-    last = {}
+    last, start = {}, time.time()
     while True:
         try:
             poll_once(last)
@@ -696,7 +712,8 @@ def poller():
         except Exception as e:
             health["poll_error"] = repr(e)
             log("poller error:", repr(e))
-        time.sleep(POLL_INTERVAL)
+        now = time.time()
+        time.sleep(max(0.0, next_poll(start, now) - now))
 
 
 # =====================================================================================
@@ -711,7 +728,7 @@ SHELLS = {"sshd": "ssh", "sshd-session": "ssh", "ttyd": "webterminal", "login": 
 
 events = queue.Queue(maxsize=20_000)
 procs = []
-recent = {}
+recent = OrderedDict()   # (path, kind, name, op) -> time it was last logged, oldest first
 names = {}
 seen = {}             # pid -> (time, comm, result of classify)
 ignored_comms = {}    # comm -> last time a process with that name was ignored
@@ -1038,9 +1055,12 @@ def write_who(ts, kind, name, pid, op, path, now=None, comm=None):
         if now - recent.get(k, 0) < DEDUP_S:
             return
         recent[k] = now
-        if len(recent) > 50_000:
-            for kk in [kk for kk, t in recent.items() if now - t > DEDUP_S]:
-                del recent[kk]
+        recent.move_to_end(k)
+        while recent:                        # oldest first: stop at the first one that still counts
+            kk, t = next(iter(recent.items()))
+            if now - t <= DEDUP_S:
+                break
+            del recent[kk]
     line = f"{ts},who,{kind},{name.replace(',', ' ')},{pid},{op},{path}"
     proc = proc_line(ts, pid, comm) if kind == "container" and comm else None
     append_lines([proc, line] if proc else [line])
@@ -1114,6 +1134,8 @@ def handle(line):
     op = next((label for c, label in OPS if c in types), None)
     if not op:
         return
+    if op == "geopend" and path.split("/")[2:3] and path.split("/")[2] in writes_only:
+        return                               # a read on an SSD pool that only logs writes
     store = docker_store_path(path, op)
     if store is None:
         return
@@ -1173,9 +1195,24 @@ def start_fatrace(mp):
     threading.Thread(target=pump_err, daemon=True).start()
 
 
+# Mounts of SSD pools whose reads are not logged (only writes): kept up to date by the watcher every minute
+writes_only = set()
+
+
+def writes_only_mounts(settings=None, devs=None):
+    """The mounts (under /mnt) of the watched SSD pools that are not in `ssd_reads`."""
+    st = read_settings() if settings is None else settings
+    watch, reads = set(st.get("ssd_watch", [])), set(st.get("ssd_reads", []))
+    devs = (known_devices or all_devices()) if devs is None else devs
+    return {b for n, hdd in devs.values() if not hdd and lane_key(n) in watch and lane_key(n) not in reads
+            and (b := mount_base(n))}
+
+
 def watch_once(current):
     """One round of the watcher: (re)start every fatrace when the mounts changed or one of them stopped.
     Returns the mounts that are watched now."""
+    global writes_only
+    writes_only = writes_only_mounts()
     mounts = target_mounts()
     dead = any(p.poll() is not None for p in procs)
     if mounts != current or dead:
@@ -1596,6 +1633,11 @@ def clean_webhook(value):
     return v
 
 
+def clean_ssd_reads(value):
+    """SSD pools (lane keys) whose reads are logged too; by default only writes (a read wakes and wears nothing)."""
+    return clean_ssd_watch(value)
+
+
 def clean_ssd_watch(value):
     """SSD pools (lane keys: cache, array, ...) whose file access the watcher follows; empty = none."""
     if value is None:
@@ -1615,6 +1657,7 @@ def clean_wear_warn(value):
 
 
 SETTINGS_KEYS = {"hide": clean_hide, "quiet": clean_quiet, "webhook": clean_webhook, "ssd_watch": clean_ssd_watch,
+                 "ssd_reads": clean_ssd_reads,
                  "wear_warn": clean_wear_warn}
 
 
@@ -1652,6 +1695,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if clean == "/data/spins.csv":
             self.send_spins()
             return
+        if clean == "/data/pending.csv":
+            self.send_pending()
+            return
         if clean == "/data/containers.json":
             self.send_json(containers_info())
             return
@@ -1664,7 +1710,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         m = re.fullmatch(r"/data/days/(\d{4}-\d{2}-\d{2}\.csv)", clean)
         if m:
-            self.send_day(os.path.join(DAYS, m.group(1)))
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            if "from" in query:
+                self.send_day_part(os.path.join(DAYS, m.group(1)), query)
+            else:
+                self.send_day(os.path.join(DAYS, m.group(1)))
             return
         super().do_GET()
 
@@ -1786,6 +1836,64 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_header("ETag", etag)
         self.send_header("Vary", "Accept-Encoding")
         self.send_header("Last-Modified", self.date_time_string(st.st_mtime))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_day_part(self, path, query):
+        """?from=N[&file=ID]: only the bytes of a day file from byte N, up to its last whole line, without the
+        waiting lines (those are in /data/pending.csv). X-From says where the part starts (0 when the file
+        was rewritten since: another file ID, or shorter than N), X-Size where it ends and X-File the ID,
+        for the next request. So the browser fetches only what was added."""
+        try:
+            st = os.stat(path)
+            start = int((query.get("from") or ["0"])[0])
+        except OSError:
+            self.send_error(404)
+            return
+        except ValueError:
+            self.send_error(400)
+            return
+        fid = f"{st.st_dev:x}-{st.st_ino:x}"
+        if start < 0 or start > st.st_size or (query.get("file") or [fid])[0] != fid:
+            start = 0
+        try:
+            with open(path, "rb") as f:
+                f.seek(start)
+                body = f.read(st.st_size - start)
+        except OSError:
+            self.send_error(404)
+            return
+        body = body[:body.rfind(b"\n") + 1]            # only whole lines; the rest comes next time
+        end = start + len(body)
+        gz = "gzip" in self.headers.get("Accept-Encoding", "") and len(body) > 1024
+        if gz:
+            body = gzip.compress(body, compresslevel=6, mtime=0)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        if gz:
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-From", str(start))
+        self.send_header("X-Size", str(end))
+        self.send_header("X-File", fid)
+        self.send_header("Vary", "Accept-Encoding")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_pending(self):
+        """The io and wear lines that wait in memory (see io_pending), of every day."""
+        with io_lock:
+            body = "".join(ln + "\n" for ln in io_pending).encode()
+        etag = f'"p-{hashlib.sha1(body).hexdigest()[:16]}"'
+        if etag in self.headers.get("If-None-Match", ""):
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "text/csv; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("ETag", etag)
         self.end_headers()
         self.wfile.write(body)
 
