@@ -2,6 +2,10 @@ name: Dependabot auto-merge
 
 # When CI passed on a Dependabot pull request (the tests and an image build), merge it and build main.
 # Runs as workflow_run, in the context of main: it never checks out the PR's code.
+#
+# GITHUB_TOKEN may not merge a change to a workflow file (the github-actions updates touch ci.yml).
+# For those, store a fine-grained token as the repository secret AUTOMERGE_TOKEN (this repository only;
+# Contents, Pull requests and Workflows: read and write). Without it those PRs stay open for a manual merge.
 on:
   workflow_run:
     workflows: [CI]
@@ -13,7 +17,7 @@ permissions:
   actions: write
 
 concurrency:
-  group: dependabot-automerge
+  group: dependabot-automerge-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 jobs:
@@ -26,7 +30,8 @@ jobs:
     steps:
       - name: Merge the pull request
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || secrets.GITHUB_TOKEN }}
+          OWN_TOKEN: ${{ secrets.AUTOMERGE_TOKEN != '' }}
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           SHA: ${{ github.event.workflow_run.head_sha }}
@@ -35,6 +40,18 @@ jobs:
           pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,author,headRefOid \
                  --jq ".[] | select(.author.login == \"app/dependabot\" and .headRefOid == \"$SHA\") | .number")
           if [ -z "$pr" ]; then echo "No open Dependabot PR for $BRANCH at $SHA"; exit 0; fi
-          gh pr merge "$pr" --repo "$REPO" --squash --delete-branch --match-head-commit "$SHA"
-          # a merge with GITHUB_TOKEN does not start the push workflow: build main (and latest) explicitly
-          gh workflow run ci.yml --repo "$REPO" --ref main
+          if ! out=$(gh pr merge "$pr" --repo "$REPO" --squash --delete-branch --match-head-commit "$SHA" 2>&1); then
+            echo "$out"
+            if grep -q "workflows. permission" <<<"$out"; then
+              echo "::notice::PR #$pr changes a workflow file; GITHUB_TOKEN may not merge that. Merge it by hand, or add the AUTOMERGE_TOKEN secret."
+              exit 0
+            fi
+            if grep -q "merge conflicts" <<<"$out"; then
+              echo "::notice::PR #$pr conflicts with main after another merge; Dependabot rebases it and CI runs again."
+              exit 0
+            fi
+            exit 1
+          fi
+          # a merge with GITHUB_TOKEN does not start the push workflow: build main (and latest) explicitly.
+          # With AUTOMERGE_TOKEN the merge is a normal push and starts CI itself.
+          if [ "$OWN_TOKEN" != "true" ]; then gh workflow run ci.yml --repo "$REPO" --ref main; fi
