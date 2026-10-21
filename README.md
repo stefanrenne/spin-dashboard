@@ -4,7 +4,7 @@ See when your hard drives spin up and down, and **why**.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-dark.png">
-  <img alt="Spin Dashboard: key figures compared with the previous week, a timeline per pool and the array with every spin-up and the data read and written (an NVMe cache pool as a read/write graph with what it writes per day), what the SSDs write per day in the key figures, a timeline per source with every access, spin-ups per day and per hour of day, what wakes the drives and what keeps them awake, spin-ups and activity by source, the rhythm of each source, active drives for reading and writing, spin duration and rest, live activity and a table of events with the cause of each spin-up" src="docs/images/screenshot-light.png">
+  <img alt="Spin Dashboard: key figures compared with the previous week, a timeline per pool and the array with every spin-up and the data read and written (an NVMe cache pool as a read/write graph with what it writes per day), what the SSDs write per day in the key figures, a timeline per source with every access, spin-ups per day and per hour of day, what wakes the drives and what keeps them awake, spin-ups and activity by source and the rhythm of each source (each with a checkbox per pool), reads and writes per drive with a card per pool, spin duration and rest, live activity and a table of events with the cause of each spin-up" src="docs/images/screenshot-light.png">
 </picture>
 
 - **Key figures** at the top: spin-ups, spinning hours, how much of the time all drives slept and the longest full rest, each compared with the previous period, so you see right away whether a change helped.
@@ -12,13 +12,13 @@ See when your hard drives spin up and down, and **why**.
 - **Spin-ups per day**: the trend over all stored days, with the selected period highlighted. Spin-ups per hour of day cover at least the last week.
 - **Activity per source**: every container or process ranked by the spin-ups it caused, with how often it read and wrote and on which drives. Click a name for its profile: figures, an activity heatmap by day and hour, its folders and files.
 - **Kept awake per source**: which sources keep postponing the spin-down, and by how much spinning time.
-- **Timeline per source** and **Rhythm per source**: every access per container on the same time axis as the drives, and fixed schedules recognised automatically ("every 15 min", "daily around 03:30").
+- **Timeline per source** and **Rhythm per source**: every access per container on the same time axis as the drives, and fixed schedules recognised automatically ("every 15 min", "daily around 03:30"). Activity per source, Rhythm per source, Timeline per source and the events table each have checkboxes per pool (and the array) to choose which pools they cover.
 - **Spin time and rest per drive**: per drive the median run after a spin-up, the longest rest, and how often it woke up again within 30 minutes of going to standby (a hint that a longer spin-down delay would help).
 - The cause of each spin-up: the first file that was opened, and **who** opened it: a Docker container (Plex, Sonarr, Bazarr, …), Unraid itself (mover, cron / User Scripts, webGUI, shfs) or a user (SMB/NFS share, shell).
 - **Reads vs. writes**: each access is labelled read or write, so you can see whether a drive is being read or kept busy by writes (logs, databases, metadata).
 - **Overview** (the ⓘ button next to Settings): every pool and the array with their drives, and every Docker container with a coloured label per pool or the array where its folders live (both places when the mover moves them). Click through to a detail page per container, per pool or the array, and per drive: key figures, who reads and writes, what woke it, folders, files and which containers map it.
 - **Container start, stop and process**: container restarts and health changes are marked on the source timeline and named when they come right before a spin-up; the feed and the profile show which process inside a container did it ("plex › Plex Media Scan").
-- **Reads per drive** and **Writes per drive**: per drive the top sources and files over the selected period — answers "why is this drive never idle", even when there were no spin-ups.
+- **Reads per drive** and **Writes per drive**, a card of each per pool and the array: per drive the top sources and files over the selected period — answers "why is this drive never idle", even when there were no spin-ups.
 - **Quiet hours**: set a window in which the drives should sleep (for example 23:00–07:00, for all drives or chosen pools). Spin-ups inside it are marked, and can be sent to a webhook (ntfy, Gotify, Discord, Slack, Home Assistant); optionally also when a drive or SSD pool reads and writes more than a number of MB inside the window.
 - **CSV export** of the selected period: spin-ups, file access with source and process, container events, reads and writes per drive per hour and the SMART wear, ready for a spreadsheet.
 - **Live activity feed**: the most recent file events stream in as they happen (over Server-Sent Events), newest first, with an R/W marker, source and relative time; checkboxes per pool (and the array) choose which ones it shows.
@@ -37,7 +37,7 @@ See when your hard drives spin up and down, and **why**.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/active-drives-live-activity.png">
-  <img alt="Reads per drive and writes per drive with the top processes and files, spin time and rest per drive, and a live activity feed of the most recent file events with a checkbox per pool" src="docs/images/active-drives-live-activity-light.png">
+  <img alt="Reads per drive and writes per drive, a card per pool with the top processes and files, spin time and rest per drive, and a live activity feed of the most recent file events with a checkbox per pool" src="docs/images/active-drives-live-activity-light.png">
 </picture>
 
 ## Install

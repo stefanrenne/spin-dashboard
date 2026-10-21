@@ -66,6 +66,8 @@ const until = async (ok, ms = 2000) => { for (const end = Date.now() + ms; !ok()
 // name of a card in the settings, without the position that is only for screen readers
 const cardName = (label) => [...label.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim();
 const rows = (doc) => [...doc.querySelectorAll('#events tr')].map(text);
+// "Reads per drive" / "Writes per drive" of one pool (by default the first card of that direction)
+const actBody = (d, dir, pool) => d.querySelector(`[data-card${pool ? `="act${dir}:${pool}"` : `^="act${dir}:"`}] .actBody`);
 
 const POOL = served({ [today]: [
   `${ep(300)},disk,sdd,trunk`, `${ep(300)},disk,sde,trunk2`,
@@ -135,16 +137,22 @@ test('"Per bron" ranks sources by the spin-ups they caused, with reads, writes a
   dom.window.close();
 });
 
-test('filtering on one disk shows its events separately', async () => {
-  const dom = await load(POOL, 'http://dash/?lang=nl', ['en-US'], null, (w) => w.localStorage.setItem('spindash.group', JSON.stringify({ merge: false })));
-  const d = dom.window.document;
-  const sel = d.getElementById('devFilter');
-  sel.value = 'sde';
-  sel.dispatchEvent(new dom.window.Event('change'));
-  const r = rows(d);
-  assert.ok(r.every((x) => !/trunk, trunk2/.test(x)));
-  assert.ok(r.some((x) => /trunk2 Opgespind/.test(x)));
+test('events can be filtered per pool, and the choice is remembered', async () => {
+  const dom = await load(ARRAYDATA);
+  const d = dom.window.document, w = dom.window;
+  const box = d.getElementById('eventsFilter');
+  assert.equal(box.hidden, false);
+  assert.deepEqual([...box.querySelectorAll('label')].map(text), ['Array', 'trunk']);
+  assert.ok(rows(d).some((x) => /Array Opgespind/.test(x)));             // only the array spun up here
+  const arr = box.querySelector('input[value="array"]');
+  arr.checked = false; arr.dispatchEvent(new w.Event('change', { bubbles: true }));
+  assert.deepEqual(rows(d), ['Geen gebeurtenissen in deze periode.']);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.eventsHide')), ['array']);
   dom.window.close();
+  const again = await load(ARRAYDATA, 'http://dash/?lang=nl', ['en-US'], null, (w2) => w2.localStorage.setItem('spindash.eventsHide', '["array"]'));
+  assert.equal(again.window.document.querySelector('#eventsFilter input[value="array"]').checked, false);
+  assert.ok(rows(again.window.document).every((x) => !/Array/.test(x)));
+  again.window.close();
 });
 
 // ---------- languages ----------
@@ -335,7 +343,7 @@ const RW = served({ [today]: [
 test('a write event is grouped under the drive in the writing card, a read in the reading card', async () => {
   const dom = await load(RW);
   const d = dom.window.document;
-  const ws = d.getElementById('actWrites'), rs = d.getElementById('actReads');
+  const ws = actBody(d, 'W'), rs = actBody(d, 'R');
   assert.ok(ws.querySelector('.actdisk'), text(ws));
   assert.match(text(ws), /plex/);
   assert.match(text(ws), /sonarr/);
@@ -365,11 +373,11 @@ test('active drives ranks the top writer and shows write and read counts', async
   const dom = await load(RW);
   const d = dom.window.document;
   // plex wrote 2x, sonarr 1x, bazarr read 1x: 4 events on trunk
-  const ws = text(d.getElementById('actWrites')), rs = text(d.getElementById('actReads'));
+  const ws = text(actBody(d, 'W')), rs = text(actBody(d, 'R'));
   assert.match(ws, /trunk 3 keer geschreven \(75% van 4 gebeurtenissen\)/);
   assert.match(rs, /trunk 1 keer gelezen \(25% van 4 gebeurtenissen\)/);
   // order: plex (2) before sonarr (1)
-  const names = [...d.querySelectorAll('#actWrites .cn')].map(text);
+  const names = [...d.querySelectorAll('[data-card^="actW:"] .actBody .cn')].map(text);
   assert.ok(names.indexOf('plex') < names.indexOf('sonarr'), names.join(','));
   dom.window.close();
 });
@@ -381,8 +389,8 @@ test('a direction without activity says so in its own card', async () => {
   ] });
   const dom = await load(RO);
   const d = dom.window.document;
-  assert.equal(text(d.getElementById('actWrites')), 'Niets geschreven in deze periode.');
-  assert.match(text(d.getElementById('actReads')), /bazarr/);
+  assert.equal(text(actBody(d, 'W')), 'Niets geschreven in deze periode.');
+  assert.match(text(actBody(d, 'R')), /bazarr/);
   dom.window.close();
 });
 
@@ -447,7 +455,7 @@ test('last hour toggle narrows the window and shows minute ticks', async () => {
 test('hovering a file path in Active drives shows the full path overlay', async () => {
   const dom = await load(RW);
   const d = dom.window.document, w = dom.window;
-  const el = d.querySelector('#actWrites .haspath');
+  const el = d.querySelector('[data-card^="actW:"] .actBody .haspath');
   assert.ok(el, 'file row with path');
   el.dispatchEvent(new w.Event('focusin', { bubbles: true }));
   const tip = d.getElementById('tip');
@@ -673,7 +681,7 @@ test('the settings button opens a dialog with the language choice and the card l
   const names = [...d.querySelectorAll('#cardList li label')].map(cardName);
   assert.deepEqual(names, ['Kerncijfers', 'Tijdlijn per schijf · trunk', 'Tijdlijn per bron', 'Spin-ups per dag', 'Spin-ups per uur van de dag',
     'Oorzaken van spin-ups per map', 'Wakker gehouden per bron', 'Activiteit per bron', 'Ritme per bron',
-    'Lezen per schijf', 'Schrijven per schijf', 'Draaitijd en rust per schijf', 'Live activiteit', 'Gebeurtenissen']);
+    'Lezen per schijf · trunk', 'Schrijven per schijf · trunk', 'Draaitijd en rust per schijf', 'Live activiteit', 'Gebeurtenissen']);
   d.getElementById('settingsDone').click();
   assert.ok(!d.getElementById('settings').hasAttribute('open'));
   assert.equal(d.activeElement, gear);                    // focus back on the button
@@ -683,13 +691,13 @@ test('the settings button opens a dialog with the language choice and the card l
 test('cards can be hidden and moved, and the layout is remembered', async () => {
   const dom = await load(POOL);
   const d = dom.window.document, w = dom.window;
-  assert.deepEqual(cardOrder(d), ['kpi', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed', 'events']);
+  assert.deepEqual(cardOrder(d), ['kpi', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR:trunk', 'actW:trunk', 'rest', 'feed', 'events']);
   d.getElementById('openSettings').click();
-  const box = d.querySelector('#cardList li[data-card="actR"] input');
+  const box = d.querySelector('#cardList li[data-card="actR:trunk"] input');
   box.checked = false; box.dispatchEvent(new w.Event('change', { bubbles: true }));
-  assert.equal(d.querySelector('#dash > [data-card="actR"]').hidden, true);
+  assert.equal(d.querySelector('#dash > [data-card="actR:trunk"]').hidden, true);
   d.querySelector('#cardList li[data-card="events"] [data-move="-1"]').click();   // events one up
-  assert.deepEqual(cardOrder(d), ['kpi', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actW', 'rest', 'events', 'feed']);
+  assert.deepEqual(cardOrder(d), ['kpi', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actW:trunk', 'rest', 'events', 'feed']);
   assert.equal(d.activeElement, d.querySelector('#cardList li[data-card="events"] [data-move="-1"]'));
   assert.equal(d.getElementById('cardLive').textContent, 'Gebeurtenissen: plaats 13 van 14');
   for (let i = 0; i < 4; i++) d.querySelector('#cardList li[data-card="hist"] [data-move="-1"]').click();   // the histogram to the top
@@ -699,7 +707,7 @@ test('cards can be hidden and moved, and the layout is remembered', async () => 
   dom.window.close();
 
   const again = await load(POOL, 'http://dash/?lang=nl', ['en-US'], null, (w2) => w2.localStorage.setItem('spindash.cards', saved));
-  assert.deepEqual(cardOrder(again.window.document), ['hist', 'kpi', 'lanes:trunk', 'srcLanes', 'days', 'causes', 'awake', 'src', 'rhythm', 'actW', 'rest', 'events', 'feed']);
+  assert.deepEqual(cardOrder(again.window.document), ['hist', 'kpi', 'lanes:trunk', 'srcLanes', 'days', 'causes', 'awake', 'src', 'rhythm', 'actW:trunk', 'rest', 'events', 'feed']);
   again.window.close();
 });
 
@@ -707,10 +715,10 @@ test('a saved layout with unknown or missing cards still shows every known card'
   const stored = JSON.stringify([{ id: 'feed' }, { id: 'nope' }, { id: 'feed', hidden: true }, { id: 'hist', hidden: true }]);
   const dom = await load(POOL, 'http://dash/?lang=nl', ['en-US'], null, (w) => w.localStorage.setItem('spindash.cards', stored));
   const d = dom.window.document;
-  assert.deepEqual(cardOrder(d), ['feed', 'kpi', 'lanes:trunk', 'srcLanes', 'days', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'events']);
+  assert.deepEqual(cardOrder(d), ['feed', 'kpi', 'lanes:trunk', 'srcLanes', 'days', 'causes', 'awake', 'src', 'rhythm', 'actR:trunk', 'actW:trunk', 'rest', 'events']);
   d.getElementById('openSettings').click();
   d.getElementById('resetCards').click();
-  assert.deepEqual(cardOrder(d), ['kpi', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed', 'events']);
+  assert.deepEqual(cardOrder(d), ['kpi', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR:trunk', 'actW:trunk', 'rest', 'feed', 'events']);
   assert.equal(dom.window.localStorage.getItem('spindash.cards'), null);
   dom.window.close();
 });
@@ -720,9 +728,9 @@ test('a saved layout with the old Active drives card gets the reading and writin
   const dom = await load(POOL, 'http://dash/?lang=nl', ['en-US'], null, (w) => w.localStorage.setItem('spindash.cards', stored));
   const d = dom.window.document;
   assert.deepEqual([...d.querySelectorAll('#dash > [data-card]')].map((el) => el.dataset.card),
-    ['actR', 'actW', 'lanes:trunk', 'events', 'hist', 'causes', 'feed', 'kpi', 'srcLanes', 'days', 'awake', 'src', 'rhythm', 'rest']);
-  assert.equal(d.querySelector('#dash > [data-card="actR"]').hidden, true);   // hidden stays hidden
-  assert.equal(d.querySelector('#dash > [data-card="actW"]').hidden, true);
+    ['actR:trunk', 'actW:trunk', 'lanes:trunk', 'events', 'hist', 'causes', 'feed', 'kpi', 'srcLanes', 'days', 'awake', 'src', 'rhythm', 'rest']);
+  assert.equal(d.querySelector('#dash > [data-card="actR:trunk"]').hidden, true);   // hidden stays hidden
+  assert.equal(d.querySelector('#dash > [data-card="actW:trunk"]').hidden, true);
   dom.window.close();
 });
 
@@ -730,7 +738,7 @@ test('every card except the timeline and the events is half width on a wide scre
   const dom = await load(POOL);
   const d = dom.window.document;
   const half = [...d.querySelectorAll('#dash > [data-card]')].filter((el) => el.hasAttribute('data-half')).map((el) => el.dataset.card);
-  assert.deepEqual(half, ['days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
+  assert.deepEqual(half, ['days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR:trunk', 'actW:trunk', 'rest', 'feed']);
   assert.match(HTML, /#dash>\.card\[data-half\]\{grid-column:auto\}/);
   assert.match(HTML, /@media \(max-width:820px\)\{[^@]*#dash>\.card\[data-half\]\{grid-column:1\/-1\}/);   // phone: full width
   dom.window.close();
@@ -766,7 +774,7 @@ test('a pool shows as one lane and one event row by default', async () => {
   const r = rows(d);
   assert.ok(r.some((x) => /^\S+ \S+ \S+, \S+ trunk Opgespind/.test(x)), r.join('\n'));
   assert.ok(r.every((x) => !/trunk2/.test(x)));
-  assert.deepEqual([...d.querySelectorAll('#devFilter option')].map(text), ['Alle pools', 'trunk']);
+  assert.equal(d.getElementById('eventsFilter').hidden, true);          // one pool: nothing to filter
   assert.equal(d.getElementById('groupDrives').checked, true);
   dom.window.close();
 });
@@ -776,14 +784,13 @@ test('the array is one lane by default, and one switch shows every drive again',
   const d = dom.window.document, w = dom.window;
   assert.deepEqual(laneNames(d), ['Array 3 schijven', 'trunk sdd, sde']);
   assert.match(d.getElementById('sourceLine').textContent, /^5 schijven,/);   // the summary counts drives, not lanes
-  assert.equal(text(d.querySelector('#devFilter option')), 'Alle schijven en pools');
   // disk1 alone, later disk2 and disk1 almost together: woken twice
   assert.match(d.querySelector('.trace').getAttribute('aria-label'), /^Array: 2 spin-ups/);
   assert.match(text(d.getElementById('causes')), /^Films 1 Onbekend/);   // activity of disk1 counts for the array
   const box = d.getElementById('groupDrives');
   box.checked = false; box.dispatchEvent(new w.Event('change'));
   assert.deepEqual(laneNames(d), ['parity sdb', 'disk1 sdc', 'disk2 sdf', 'trunk sdd', 'trunk2 sde']);
-  assert.equal(text(d.querySelector('#devFilter option')), 'Alle schijven');
+  assert.deepEqual([...d.querySelectorAll('#eventsFilter label')].map(text), ['Array', 'trunk']);   // per pool, also with every drive apart
   assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.group')), { merge: false, compose: false });
   dom.window.close();
 });
@@ -816,11 +823,11 @@ test('cards can be dragged into a new order by their handle', async () => {
   ev('pointermove', grip, 50);    // between the first and second row
   assert.equal(w.localStorage.getItem('spindash.cards'), null);
   ev('pointerup', d, 50);
-  assert.deepEqual(cardOrder(d), ['kpi', 'events', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
-  assert.deepEqual([...d.querySelectorAll('#cardList li')].map((li) => li.dataset.card), ['kpi', 'events', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
+  assert.deepEqual(cardOrder(d), ['kpi', 'events', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR:trunk', 'actW:trunk', 'rest', 'feed']);
+  assert.deepEqual([...d.querySelectorAll('#cardList li')].map((li) => li.dataset.card), ['kpi', 'events', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR:trunk', 'actW:trunk', 'rest', 'feed']);
   assert.ok(!d.querySelector('#cardList .dragging'));
   assert.equal(d.getElementById('cardLive').textContent, 'Gebeurtenissen: plaats 2 van 14');
-  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.cards')).map((c) => c.id), ['kpi', 'events', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR', 'actW', 'rest', 'feed']);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.cards')).map((c) => c.id), ['kpi', 'events', 'lanes:trunk', 'srcLanes', 'days', 'hist', 'causes', 'awake', 'src', 'rhythm', 'actR:trunk', 'actW:trunk', 'rest', 'feed']);
   // the handle is outside the label: dragging does not toggle the card
   assert.ok(!d.querySelector('#cardList li label .grip'));
   dom.window.close();
@@ -1038,7 +1045,7 @@ test('the previous-hour button reads "Vorig uur" in Dutch', async () => {
 test('the reading and writing cards label processes and files', async () => {
   const dom = await load(RW);
   const d = dom.window.document;
-  assert.deepEqual([...d.querySelectorAll('#actWrites h4')].map(text), ['Processen', 'Bestanden']);
+  assert.deepEqual([...d.querySelectorAll('[data-card^="actW:"] .actBody h4')].map(text), ['Processen', 'Bestanden']);
   dom.window.close();
 });
 
@@ -1361,7 +1368,7 @@ test('the card list shows which cards are small or large and which sit side by s
   const d = dom.window.document;
   d.getElementById('openSettings').click();
   assert.deepEqual(posOf(d), { kpi: 'full', 'lanes:trunk': 'full', srcLanes: 'full', days: 'left', hist: 'right', causes: 'left', awake: 'right',
-    src: 'left', rhythm: 'right', actR: 'left', actW: 'right', rest: 'left', feed: 'right', events: 'full' });
+    src: 'left', rhythm: 'right', 'actR:trunk': 'left', 'actW:trunk': 'right', rest: 'left', feed: 'right', events: 'full' });
   const li = (id) => d.querySelector(`#cardList li[data-card="${id}"]`);
   assert.ok(li('days').classList.contains('pair-l') && li('hist').classList.contains('pair-r'));
   assert.equal(text(li('days').querySelector('.size')), 'Klein');
@@ -1446,7 +1453,7 @@ test('full file paths can be reached with the keyboard and keep focus when the f
   const fp = d.querySelector('#feed .haspath');
   assert.equal(fp.getAttribute('tabindex'), '0');
   assert.match(fp.getAttribute('aria-label'), /^\/mnt\//);                 // a screen reader hears the whole path
-  assert.equal(d.querySelector('#actWrites .haspath').getAttribute('tabindex'), '0');
+  assert.equal(d.querySelector('[data-card^="actW:"] .actBody .haspath').getAttribute('tabindex'), '0');
   fp.focus();
   assert.equal(d.getElementById('tip').hidden, false);
   fp.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -1612,10 +1619,10 @@ test('a feed source outside the selected period stays plain text', async () => {
 test('a process in Reads and Writes per drive opens its profile', async () => {
   const dom = await load(RW);
   const d = dom.window.document;
-  const names = [...d.querySelectorAll('#actWrites .srcbtn')].map((b) => b.dataset.src);
+  const names = [...d.querySelectorAll('[data-card^="actW:"] .actBody .srcbtn')].map((b) => b.dataset.src);
   assert.deepEqual(names, ['container|plex', 'container|sonarr']);
-  assert.equal(d.querySelectorAll('#actWrites .haspath .srcbtn, #actWrites .srcbtn.haspath').length, 0);   // files stay paths
-  d.querySelector('#actReads .srcbtn[data-src="container|bazarr"]').click();
+  assert.equal(d.querySelectorAll('[data-card^="actW:"] .actBody .haspath .srcbtn, [data-card^="actW:"] .srcbtn.haspath').length, 0);   // files stay paths
+  d.querySelector('[data-card^="actR:"] .actBody .srcbtn[data-src="container|bazarr"]').click();
   assert.ok(d.getElementById('profile').hasAttribute('open'));
   assert.equal(text(d.getElementById('profileTitle')), 'bazarr');
   dom.window.close();
@@ -1719,8 +1726,8 @@ test('every place that names a drive, pool or the array links to its page', asyn
   const drives = (sel) => [...d.querySelectorAll(`${sel} .drvbtn`)].map((b) => b.dataset.drive);
   // trunk has one drive here, so the lane is the drive itself (sdd)
   assert.ok(drives('#sources .src-sub').includes('d:sdd'), 'Activiteit per bron');
-  assert.ok(drives('#actReads .actdisk .head').includes('d:sdd'), 'Lezen per schijf');
-  assert.ok(drives('#actWrites .actdisk .head').includes('d:sdd'), 'Schrijven per schijf');
+  assert.ok(drives('[data-card^="actR:"] .actBody .actdisk .head').includes('d:sdd'), 'Lezen per schijf');
+  assert.ok(drives('[data-card^="actW:"] .actBody .actdisk .head').includes('d:sdd'), 'Schrijven per schijf');
   assert.ok(drives('#rest tbody').includes('d:sdd'), 'Draaitijd en rust');
   // in the profile: the drives and the location labels at the paths
   d.querySelector('#sources .srcbtn[data-src="container|plex"]').click();
@@ -1906,8 +1913,8 @@ test('file access on an SSD pool shows in reads and writes per drive and in the 
   ] });
   const dom = await load(days);
   const d = dom.window.document;
-  assert.deepEqual([...d.querySelectorAll('#actWrites .actdisk .head .drvbtn')].map((b) => b.dataset.drive), ['d:nvme0n1']);
-  assert.match(text(d.getElementById('actWrites')), /^cache/);
+  assert.deepEqual([...d.querySelectorAll('[data-card^="actW:"] .actBody .actdisk .head .drvbtn')].map((b) => b.dataset.drive), ['d:nvme0n1']);
+  assert.match(text(actBody(d, 'W', 'cache')), /^cache/);
   assert.ok([...d.querySelectorAll('#sources .src-sub .drvbtn')].some((b) => b.dataset.drive === 'd:nvme0n1'));
   assert.match(text(d.getElementById('kpis')), /^Spin-ups 0/);          // writing to an SSD wakes nothing
   dom.window.close();
@@ -2013,12 +2020,12 @@ test('the live stream keeps the SSD pools in reads and writes per drive', async 
     `${ep(60)},who,container,sonarr,5,geschreven,/mnt/cache/appdata/sonarr/sonarr.db`];
   const dom = await loadWithStream(served({ [today]: lines }));
   const d = dom.window.document, w = dom.window;
-  assert.match(text(d.getElementById('actWrites')), /^cache/);
+  assert.match(text(actBody(d, 'W', 'cache')), /^cache/);
   w.__push(`${Math.floor(Date.now() / 1000)},who,container,radarr,6,geschreven,/mnt/cache/appdata/radarr/radarr.db`);
   await until(() => /radarr\.db/.test(d.getElementById('feed').textContent));
   await new Promise((r) => setTimeout(r, 20));
-  assert.match(text(d.getElementById('actWrites')), /^cache/);              // still there after the live redraw
-  assert.match(text(d.getElementById('actWrites')), /radarr/);
+  assert.match(text(actBody(d, 'W', 'cache')), /^cache/);              // still there after the live redraw
+  assert.match(text(actBody(d, 'W', 'cache')), /radarr/);
   dom.window.close();
 });
 
@@ -2033,7 +2040,7 @@ test('a server with only SSDs shows its drives instead of "no data"', async () =
   const cache = d.querySelector('#dash > [data-card="lanes:cache"]');
   assert.ok(cache && cache.querySelector('.lane.io'));
   assert.ok(d.querySelector('#kpis [data-kpi="kpiSsdWrite"]'));
-  assert.equal(d.querySelectorAll('#devFilter option').length, 1);          // the whole render ran (it is near the end)
+  assert.equal(text(d.querySelector('#events tr')), 'Geen gebeurtenissen in deze periode.');   // the whole render ran (it is near the end)
   dom.window.close();
 });
 
@@ -2234,6 +2241,50 @@ test('live activity can be filtered per pool, and the choice is remembered', asy
   assert.doesNotMatch(text(d2.getElementById('feed')), /sonarr\.db|b\.pdf/);
   assert.match(text(d2.getElementById('feed')), /a\.mkv/);
   again.window.close();
+});
+
+const POOLS3 = served({ [today]: [
+  `${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},disk,sdc,disk1,hdd`, `${ep(300)},disk,nvme0n1,frunk,ssd`, `${ep(300)},state,sdd,standby`, `${ep(300)},state,sdc,standby`,
+  `${ep(30)},who,container,plex,7,geopend,/mnt/trunk/Media/a.mkv`,
+  `${ep(20)},who,container,sonarr,8,geschreven,/mnt/frunk/appdata/sonarr/sonarr.db`,
+  `${ep(10)},who,gebruiker,shell (ssh),9,geopend,/mnt/disk1/Documents/b.pdf`,
+] });
+
+test('reads and writes per drive get a card per pool', async () => {
+  const dom = await load(POOLS3);
+  const d = dom.window.document;
+  const ids = [...d.querySelectorAll('#dash > [data-card^="act"]:not([hidden])')].map((el) => el.dataset.card);
+  assert.deepEqual(ids, ['actR:array', 'actR:frunk', 'actR:trunk', 'actW:array', 'actW:frunk', 'actW:trunk']);
+  assert.equal(text(d.querySelector('[data-card="actR:trunk"] h2')), 'Lezen per schijf · trunk');
+  assert.match(text(actBody(d, 'R', 'trunk')), /plex/);
+  assert.doesNotMatch(text(actBody(d, 'R', 'trunk')), /shell/);
+  assert.match(text(actBody(d, 'R', 'array')), /shell/);
+  assert.match(text(actBody(d, 'W', 'frunk')), /sonarr/);
+  assert.equal(text(actBody(d, 'W', 'trunk')), 'Niets geschreven in deze periode.');
+  // every card in the card list, with its pool
+  d.getElementById('openSettings').click();
+  assert.ok([...d.querySelectorAll('#cardList li')].some((li) => li.dataset.card === 'actW:frunk'));
+  dom.window.close();
+});
+
+test('activity, rhythm and timeline per source each have their own pool filter', async () => {
+  const dom = await load(POOLS3);
+  const d = dom.window.document, w = dom.window;
+  for (const id of ['srcFilter', 'rhythmFilter', 'srcLanesFilter'])
+    assert.deepEqual([...d.querySelectorAll(`#${id} label`)].map(text), ['Array', 'frunk', 'trunk'], id);
+  assert.match(text(d.getElementById('sources')), /sonarr/);
+  const frunk = d.querySelector('#srcFilter input[value="frunk"]');
+  frunk.checked = false; frunk.dispatchEvent(new w.Event('change', { bubbles: true }));
+  assert.doesNotMatch(text(d.getElementById('sources')), /sonarr/);
+  assert.match(text(d.getElementById('sources')), /plex/);
+  assert.match(text(d.getElementById('rhythm')), /sonarr/);                 // the other cards keep their own choice
+  assert.match(text(d.getElementById('srcLaneList')), /sonarr/);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.srcHide')), ['frunk']);
+  const arr = d.querySelector('#srcLanesFilter input[value="array"]');
+  arr.checked = false; arr.dispatchEvent(new w.Event('change', { bubbles: true }));
+  assert.doesNotMatch(text(d.getElementById('srcLaneList')), /shell/);
+  assert.match(text(d.getElementById('rhythm')), /shell/);
+  dom.window.close();
 });
 
 test('with one pool there is nothing to filter', async () => {

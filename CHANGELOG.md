@@ -9,6 +9,9 @@ What changed per version, for people who run Spin Dashboard. The detailed log of
 - Live activity can be filtered per pool (and the array) with checkboxes; the choice is kept per browser.
 - Unassigned Devices: drives mounted by the plugin at `/mnt/disks/<label>` are followed like pools, each as its own lane.
 - Bytes per container: what each container read and wrote per drive, in its profile and on the drive pages.
+- Reads per drive and Writes per drive get a card per pool (and the array), like the timeline.
+- Activity per source, Rhythm per source, Timeline per source and Events can be filtered per pool with checkboxes, each
+  card with its own choice; Events no longer has the drive dropdown.
 
 ## [0.9.0] - 2026-10-21
 

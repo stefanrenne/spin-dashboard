@@ -30,7 +30,9 @@ for (const scheme of ['light', 'dark']) {
   await page.screenshot({ path: `${out}screenshot-${scheme}.png`, fullPage: true });
   // detail: reads and writes, spin time and live activity
   const clip = await page.evaluate(() => {
-    const rs = ['actR', 'actW', 'rest', 'feed'].map((id) => document.querySelector(`[data-card="${id}"]`).getBoundingClientRect());
+    // reads and writes are a card per pool: all of them that are shown
+    const rs = ['[data-card^="actR:"]', '[data-card^="actW:"]', '[data-card="rest"]', '[data-card="feed"]']
+      .flatMap((sel) => [...document.querySelectorAll(`#dash > ${sel}`)].filter((el) => !el.hidden)).map((el) => el.getBoundingClientRect());
     const top = Math.min(...rs.map((r) => r.top)) + scrollY, bottom = Math.max(...rs.map((r) => r.bottom)) + scrollY;
     const left = Math.min(...rs.map((r) => r.left)), right = Math.max(...rs.map((r) => r.right));
     return { x: left - 10, y: top - 10, width: right - left + 20, height: bottom - top + 20 };
