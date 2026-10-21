@@ -40,13 +40,19 @@ jobs:
           pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,author,headRefOid \
                  --jq ".[] | select(.author.login == \"app/dependabot\" and .headRefOid == \"$SHA\") | .number")
           if [ -z "$pr" ]; then echo "No open Dependabot PR for $BRANCH at $SHA"; exit 0; fi
-          # behind main (another PR was merged first): rebase first, CI runs again and this workflow follows.
-          # Merging it as it is would make GitHub write a new version of a workflow file, which
-          # GITHUB_TOKEN may not do.
+          # A PR that changes a workflow file and is behind main (another PR was merged first) cannot be merged
+          # with GITHUB_TOKEN: the squash would write a new version of that file. It needs a rebase first, and
+          # Dependabot only takes "@dependabot rebase" from a user with push access: so only with AUTOMERGE_TOKEN.
+          # Every other PR (npm, pip, docker) is merged as it is, also when it is behind.
           behind=$(gh api "repos/$REPO/compare/main...$SHA" --jq .behind_by)
-          if [ "$behind" != "0" ]; then
-            gh pr comment "$pr" --repo "$REPO" --body "@dependabot rebase"
-            echo "::notice::PR #$pr is $behind commit(s) behind main; asked Dependabot to rebase it."
+          workflows=$(gh pr diff "$pr" --repo "$REPO" --name-only | grep -c '^\.github/workflows/' || true)
+          if [ "$behind" != "0" ] && [ "$workflows" != "0" ]; then
+            if [ "$OWN_TOKEN" = "true" ]; then
+              gh pr comment "$pr" --repo "$REPO" --body "@dependabot rebase"
+              echo "::notice::PR #$pr changes a workflow file and is $behind commit(s) behind main; asked Dependabot to rebase it."
+            else
+              echo "::notice::PR #$pr changes a workflow file and is behind main: merge it by hand, comment '@dependabot rebase', or add the AUTOMERGE_TOKEN secret."
+            fi
             exit 0
           fi
           if ! out=$(gh pr merge "$pr" --repo "$REPO" --squash --delete-branch --match-head-commit "$SHA" 2>&1); then
