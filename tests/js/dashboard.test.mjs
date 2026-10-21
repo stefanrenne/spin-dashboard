@@ -1755,6 +1755,7 @@ test('the detail dialog steps a period back and forward without moving the dashb
 const SSD = served({ [today]: [
   `${ep(300)},disk,nvme0n1,cache,ssd`, `${ep(300)},disk,nvme1n1,cache2,ssd`, `${ep(300)},disk,sdd,trunk,hdd`,
   `${ep(300)},state,sdd,standby`,
+  `${ep(1380)},io,sdd,1,0,1,0`,                                         // measured for (almost) a day
   `${ep(130)},io,sdd,4096,0,8,0`,
   `${ep(121)},who,container,bazarr,2,geopend,/mnt/trunk/Media/series/a.mkv`,
   `${ep(120)},spin,sdd,active`, `${ep(60)},spin,sdd,standby`,
@@ -1780,7 +1781,7 @@ test('every pool gets its own timeline card, and an SSD lane shows reads and wri
   assert.match(trunk.querySelector('.trace').getAttribute('aria-label'), /^trunk: 1 spin-ups/);
   assert.ok(trunk.querySelector('.ior').getAttribute('d').length > 0);
   // SSDs do not count as drives that spin: summary, key figures and quiet hours are about the HDD
-  assert.match(d.getElementById('sourceLine').textContent, /^1 schijf,/);       // singular
+  assert.match(d.getElementById('sourceLine').textContent, /^3 schijven,/);     // HDDs and SSDs count
   assert.equal(text(d.querySelector('#kpis .kpi .k-val')), '1');
   d.getElementById('openSettings').click();
   assert.deepEqual([...d.querySelectorAll('#quietLanes input')].map((i) => i.value), ['trunk']);
@@ -1890,6 +1891,7 @@ test('file access on an SSD pool shows in reads and writes per drive and in the 
 const WEAR = served({ [today]: [
   `${ep(300)},disk,nvme0n1,cache,ssd`, `${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},state,sdd,standby`,
   `${ep(200)},wear,nvme0n1,2,1000000000`, `${ep(100)},wear,nvme0n1,3,1073741824`,
+  `${ep(1439)},io,nvme0n1,1,0,1,0`,                                         // measured for a whole day
   `${ep(30)},io,nvme0n1,0,52428800,0,300`,                                   // 50 GB written
 ] });
 
@@ -1954,11 +1956,57 @@ test('the wear limit is set in Settings and saved on the server; empty means nev
 test('with the hourly io lines of spins.csv the SSD tile compares with the previous period', async () => {
   const y = ep(24 * 60 + 60);                                              // yesterday, in the previous 24 hours
   const lines = [`${ep(50 * 60)},disk,nvme0n1,cache,ssd`, `${ep(50 * 60)},disk,sdd,trunk,hdd`, `${ep(50 * 60)},state,sdd,standby`,
+    `${ep(47 * 60)},io,nvme0n1,1,0,1,0`, `${ep(23 * 60)},io,nvme0n1,1,0,1,0`,      // measured over both days
     `${y},io,nvme0n1,0,10485760,0,1`, `${ep(30)},io,nvme0n1,0,20971520,0,1`];
   const dom = await load({ ...byDay(lines), 'spins.csv': lines.join('\n') + '\n' });
   const d = dom.window.document;
   const tile = d.querySelector('#kpis [data-kpi="kpiSsdWrite"]');
   assert.equal(text(tile.querySelector('.k-val')), '20 GB/dag');
   assert.match(text(tile.querySelector('.k-cmp')), /\+100%.*10 GB\/dag$/);
+  dom.window.close();
+});
+
+// ---------- bugs found in the review ----------
+test('"per day" counts from the first measurement, not from days that were never measured', async () => {
+  // 30 days of history, reads and writes only measured since 10 hours ago (the update): 50 GB written
+  const old = ep(29 * 24 * 60);
+  const lines = [`${old},disk,sdd,trunk`, `${old},state,sdd,standby`,
+    `${ep(600)},disk,nvme0n1,cache,ssd`, `${ep(599)},io,nvme0n1,0,26214400,0,1`, `${ep(5)},io,nvme0n1,0,26214400,0,1`];
+  const dom = await load({ ...byDay(lines), 'settings.json': JSON.stringify({ hide: [], wear_warn: 100 }) });
+  const d = dom.window.document;
+  d.querySelector('[data-range="30"]').click();
+  await until(() => d.querySelector('[data-range="30"]').getAttribute('aria-pressed') === 'true' && !d.getElementById('dash').hidden);
+  const tile = d.querySelector('#kpis [data-kpi="kpiSsdWrite"]');
+  assert.equal(text(tile.querySelector('.k-val')), '120 GB/dag');            // 50 GB in 10 hours, not 50/30
+  assert.ok(tile.classList.contains('over'));                               // above 100 GB a day: marked
+  dom.window.close();
+});
+
+test('the live stream keeps the SSD pools in reads and writes per drive', async () => {
+  const lines = [`${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},disk,nvme0n1,cache,ssd`, `${ep(300)},state,sdd,standby`,
+    `${ep(60)},who,container,sonarr,5,geschreven,/mnt/cache/appdata/sonarr/sonarr.db`];
+  const dom = await loadWithStream(served({ [today]: lines }));
+  const d = dom.window.document, w = dom.window;
+  assert.match(text(d.getElementById('actWrites')), /^cache/);
+  w.__push(`${Math.floor(Date.now() / 1000)},who,container,radarr,6,geschreven,/mnt/cache/appdata/radarr/radarr.db`);
+  await until(() => /radarr\.db/.test(d.getElementById('feed').textContent));
+  await new Promise((r) => setTimeout(r, 20));
+  assert.match(text(d.getElementById('actWrites')), /^cache/);              // still there after the live redraw
+  assert.match(text(d.getElementById('actWrites')), /radarr/);
+  dom.window.close();
+});
+
+test('a server with only SSDs shows its drives instead of "no data"', async () => {
+  const lines = [`${ep(300)},disk,nvme0n1,cache,ssd`, `${ep(300)},wear,nvme0n1,2,1048576`,
+    `${ep(120)},io,nvme0n1,2048,4096,1,2`, `${ep(60)},io,nvme0n1,0,8192,0,3`];
+  const dom = await load({ ...served({ [today]: lines }), 'spins.csv': lines.join('\n') + '\n' });
+  const d = dom.window.document;
+  assert.equal(d.getElementById('status').hidden, true);
+  assert.equal(d.getElementById('dash').hidden, false);
+  assert.match(d.getElementById('sourceLine').textContent, /^1 schijf,/);
+  const cache = d.querySelector('#dash > [data-card="lanes:cache"]');
+  assert.ok(cache && cache.querySelector('.lane.io'));
+  assert.ok(d.querySelector('#kpis [data-kpi="kpiSsdWrite"]'));
+  assert.equal(d.querySelectorAll('#devFilter option').length, 1);          // the whole render ran (it is near the end)
   dom.window.close();
 });

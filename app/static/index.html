@@ -1115,7 +1115,7 @@ async function fetchSpins(){
   if (txt == null || txt === spinsText) return false;
   // spins.csv also has the io lines added up per hour and the wear lines (newer servers)
   const {ev, names, kinds, io, wear} = parseText(txt);
-  if (!ev.length) return false;
+  if (!ev.length && !io.length && !Object.keys(names).length) return false;
   spinsText = txt; spins = {disks: toTransitions(ev), names, kinds, io: ioIndex(io), wear: ioIndex(wear)};
   return true;
 }
@@ -1150,10 +1150,25 @@ function ssdActDevs(){
   for (const d of ssdDevs().sort(devOrder)) first[laneKeyOfName(nameOf(d))] ||= d;
   return Object.values(first);
 }
-// Written per day: over the period, or over the last 24 hours when the period is shorter
+// When reads and writes were first measured in [a, b]: the first io line of any drive (older versions
+// wrote none). Any drive, not only the asked ones: a drive that did nothing for a while has no lines either.
+function measuredFrom(a, b, src = data){
+  let first = Infinity;
+  for (const l of Object.values(src.io || {})){
+    const i = lowerBound(l, a);
+    if (i < l.length && l[i].t <= b) first = Math.min(first, l[i].t);
+  }
+  return first;
+}
+// Written per day: over the period (the last 24 hours when it is shorter), counted from the first measurement,
+// so a period that starts before the update is not averaged with days that were never measured. A line covers
+// the poll before it: a minute in the day files, an hour in the summary of spins.csv. At least an hour.
 function perDay(devs, a, b, src = data){
-  const from = b - a < DAY ? b - DAY : a;
-  return ioSum(devs, from, b, src).w * DAY / Math.max(1, b - from);
+  let from = b - a < DAY ? b - DAY : a;
+  const first = measuredFrom(from, b, src);
+  if (first === Infinity) return 0;
+  from = Math.max(from, first - (src === data ? 60e3 : HOUR));
+  return ioSum(devs, from, b, src).w * DAY / Math.max(HOUR, b - from);
 }
 // SSD wear (Settings): warn when one SSD writes more than wearWarn GB per day; null = never
 let wearWarn = 100;
@@ -1574,7 +1589,9 @@ function render(){
       $(id).title = t(k + range); $(id).setAttribute('aria-label', t(k + range));
     }
   }
-  $('sourceLine').innerHTML = esc(t('summary', {drives: tn('disk', Object.keys(data.disks).length), from: fmtFull.format(a), to: fmtFull.format(b)})) +
+  // every drive counts, HDDs and SSDs
+  const driveCount = new Set([...Object.keys(data.disks), ...ssdDevs()]).size;
+  $('sourceLine').innerHTML = esc(t('summary', {drives: tn('disk', driveCount), from: fmtFull.format(a), to: fmtFull.format(b)})) +
     (data.demo ? `<span class="demo-note">${esc(t('demo'))}</span>` : '') +
     (data.source === LIVE && offset === 0 ? `<span class="demo-note">${esc(t('live', {time: fmtTime.format(Date.now())}))}</span>` : '');
 
@@ -2795,7 +2812,7 @@ function bindTips(a, b){
 async function load(text, source, demo=false, keepRange=false, step=null){
   if (step) await step(.82, 'loadingProcess');
   const {ev, act, names, kinds, who, procs, ctrs, io, wear} = parseText(text);
-  if (!ev.length) return false;
+  if (!ev.length && !io.length && !Object.keys(names).length) return false;   // a server with only SSDs has no spin lines
   const pidx = procIndex(procs);
   setComms(pidx, who);
   if (step) await step(.88, 'loadingProcess');
@@ -3484,7 +3501,7 @@ let liveTimer = null, livePending = false;
 function scheduleLive(){
   if (liveTimer){ livePending = true; return; }
   renderFeed();
-  renderActDrives(...bounds(), viewDevs());
+  renderActDrives(...bounds(), viewDevs().concat(ssdActDevs()));
   liveTimer = setTimeout(() => { liveTimer = null; if (livePending){ livePending = false; scheduleLive(); } }, 300);
 }
 })();

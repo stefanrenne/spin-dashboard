@@ -39,10 +39,15 @@ spins (`rotational`); only HDDs are asked their state, and changes become `spin`
 poll after start and on the first poll of each day it writes the current state of every HDD as `state`
 lines, plus the name and kind (`hdd`/`ssd`) of every drive as `disk` lines. It also reads the kernel's
 I/O counters of every drive (`/sys/block/<dev>/stat`, which never wakes a drive) and turns the
-difference with the previous poll into an `io` line. Those wait in memory (`io_pending`) while every
-HDD sleeps, so a busy SSD does not make the dashboard write every minute; the web server adds the
+difference with the previous poll into an `io` line. Those wait in memory (`io_pending`) while the drive
+that holds `DATA_DIR` sleeps (`data_dir_devices()`; unknown: while every HDD sleeps), so a busy SSD does
+not make the dashboard wake that drive every minute; the web server adds the
 waiting lines to the day file it sends. See `io` in `data-formats.md`. Once an hour (and on the first poll
 of a day) it asks every SSD, never an HDD, for its SMART wear (`wear` lines), which wait in the same way.
+
+The poller keeps what it last saw (`drive_states`, `known_devices`) for the watcher, so the watcher never
+has to ask a drive itself. Our own tools (`hdparm`, `smartctl`, `fatrace`) run through `run_own()`, which
+registers their PIDs so the watcher never logs them (rule 3).
 
 **Watcher.** Determines the mounts to watch: `/mnt/<name>` for array disks (`disk1`) and
 pools (pool member `trunk2` belongs to `/mnt/trunk`), plus every mount below them (ZFS datasets).
@@ -63,7 +68,8 @@ seen as well. Every minute it checks whether the mounts changed or a `fatrace` s
 an ancestor, are not logged. After that the order is: container (cgroup) → stopped process →
 SMB/NFS → shell (sshd, ttyd, login) → shfs → btrfs → mover → cron → webGUI → process name. Opens by
 `shfs` are re-examined 0.4 s later: which other process has the same file open via `/mnt/user`
-(inode comparison)? The source of a new PID is already determined in the reader thread
+(inode comparison)? Only when that lookup through `/mnt/user` cannot touch a sleeping drive
+(`user_share_lookup_safe()`, see `decisions.md`); otherwise the access is logged as `shfs (via /mnt/user)`. The source of a new PID is already determined in the reader thread
 (`classify_early`) and remembered per PID for `PID_TTL` (30 s), so events of a process that has
 stopped in the meantime get the same source; "stopped" itself is not remembered. See
 *Ignoring Cache Dirs* in `decisions.md`.

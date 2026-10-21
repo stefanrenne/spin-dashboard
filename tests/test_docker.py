@@ -219,3 +219,15 @@ def test_a_client_that_hangs_up_leaves_no_traceback(sd, capsys):
         assert "ValueError: echt stuk" in capsys.readouterr().err
     finally:
         srv.server_close()
+
+
+def test_container_name_only_remembers_real_names(sd, monkeypatch):
+    """When Docker does not answer once, the container is not stuck with its short ID."""
+    cid = "a" * 64
+    answers, asked = [None, {"Name": "/plex"}], []
+    monkeypatch.setattr(sd, "docker_get", lambda path, timeout=2: asked.append(path) or answers.pop(0))
+    assert sd.container_name(cid, now=1000) == "a" * 12
+    assert sd.container_name(cid, now=1030) == "a" * 12        # not asked again within NAME_RETRY
+    assert len(asked) == 1
+    assert sd.container_name(cid, now=1061) == "plex"
+    assert sd.container_name(cid, now=1062) == "plex" and len(asked) == 2

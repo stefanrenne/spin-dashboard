@@ -2,6 +2,17 @@
 
 Newest first.
 
+## 2026-10-21: the bugs from the review
+- "Per day" counts from the first measurement (the first `io` line of any drive), so periods that start before the update no longer divide by days that were never measured; at least an hour
+- Our own tools are never logged: `run_own()` registers the PIDs of `hdparm` and `smartctl`, and `fatrace` registers its own (rule 3)
+- The waiting `io`/`wear` lines are written when the drive of `DATA_DIR` spins or is an SSD (`data_dir_devices()` from mountinfo), not when any HDD spins; the start log names that drive
+- The lookup through `/mnt/user` for the container behind an shfs access only happens when no sleeping drive of the share can be touched (`user_share_lookup_safe()`, rule 1)
+- `WATCH` works outside `/mnt` again (also on tmpfs, as in `docs/development.md`)
+- The live stream keeps the SSD pools in Reads/Writes per drive
+- A server with only SSDs shows its drives instead of "no data"; the summary counts HDDs and SSDs
+- "Written since new" uses the unit in the SMART attribute name (Intel `Host_Writes_32MiB`, `Lifetime_Writes_GiB`, …)
+- `container_name()` no longer keeps a short ID as name when Docker did not answer once; it asks again after a minute
+
 ## 2026-10-21: `docker stop` writes the waiting lines (checked on the server)
 - Checked on real hardware that `stop()` (SIGTERM) works: the containers with the handler stopped with exit code 0 within Docker's timeout (the version without it: 143), and an `io` line that only existed in memory at the stop (17:50:55 on 2026-10-20, all HDDs asleep) is in the day file
 

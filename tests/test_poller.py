@@ -189,6 +189,88 @@ def test_ssd_wear_runs_smartctl_with_the_standby_guard(sd, monkeypatch):
 
     class R:
         stdout = NVME_JSON
-    monkeypatch.setattr(sd.subprocess, "run", lambda cmd, **kw: calls.append(cmd) or R())
+    monkeypatch.setattr(sd, "run_own", lambda cmd, timeout: calls.append(cmd) or R())
     assert REAL_SSD_WEAR("nvme0n1") == (3, 1_000_000_000)
     assert calls == [["smartctl", "-n", "standby", "-j", "-A", "/dev/nvme0n1"]]
+
+
+def mountinfo(sd, monkeypatch, line):
+    """DATA_DIR is /data, mounted as `line` describes (fields after the mount point: options - type source)."""
+    monkeypatch.setattr(sd, "DATA", "/data")
+    (sd._tmp / "mountinfo").write_text("22 1 0:20 / / rw - overlay overlay rw\n" + line + "\n")
+
+
+POOLS = {"nvme0n1": ("cache", False), "nvme1n1": ("cache2", False), "sdc": ("disk1", True),
+         "sdd": ("trunk", True), "sde": ("trunk2", True), "sdf": ("disk2", True)}
+
+
+def test_data_dir_devices_from_mountinfo(sd, monkeypatch):
+    cases = [
+        ("36 22 0:31 /appdata/spin-dashboard/data /data rw - zfs trunk/appdata rw", ["sdd", "sde"]),
+        ("36 22 9:1 / /data rw - xfs /dev/md1p1 rw", ["sdc"]),
+        ("36 22 9:2 / /data rw - xfs /dev/mapper/md2p1 rw", ["sdf"]),                    # encrypted array disk
+        ("36 22 259:1 /appdata /data rw - btrfs /dev/nvme0n1p1 rw", ["nvme0n1", "nvme1n1"]),   # one member names the pool
+        ("36 22 0:44 / /data rw - ext4 /dev/sdz1 rw", None),                             # a drive we do not know
+        ("36 22 0:50 / /data rw - nfs server:/x rw", None),
+    ]
+    for line, want in cases:
+        mountinfo(sd, monkeypatch, line)
+        assert sd.data_dir_devices(POOLS) == want, line
+    (sd._tmp / "mountinfo").unlink()
+    assert sd.data_dir_devices(POOLS) is None
+
+
+def test_data_dir_on_a_user_share_counts_only_when_it_lives_on_one_pool(sd, monkeypatch):
+    mountinfo(sd, monkeypatch, "36 22 0:40 /appdata/spin-dashboard /data rw - fuse.shfs shfs rw")
+    (sd._tmp / "emhttp" / "shares.ini").write_text('["appdata"]\nuseCache="only"\ncachePool="cache"\n')
+    assert sd.data_dir_devices(POOLS) == ["nvme0n1", "nvme1n1"]
+    sd._shares_cache.update(body=None)
+    (sd._tmp / "emhttp" / "shares.ini").write_text('["appdata"]\nuseCache="yes"\ncachePool="cache"\n')
+    assert sd.data_dir_devices(POOLS) is None                  # the mover can put it on any array disk
+
+
+def test_waiting_lines_only_wake_the_drive_of_data_dir_when_it_spins(sd, monkeypatch):
+    """DATA_DIR on HDD pool tank (asleep); another HDD spinning is no reason to write."""
+    (sd._tmp / "emhttp" / "disks.ini").write_text('["trunk"]\ndevice="sdd"\n["tank"]\ndevice="sdg"\n["cache"]\ndevice="nvme0n1"\n')
+    for dev, rot in (("sdd", True), ("sdg", True), ("nvme0n1", False)):
+        make_disk(sd._tmp, dev, rotational=rot)
+    states = {"sdd": "active", "sdg": "standby"}
+    monkeypatch.setattr(sd, "drive_state", lambda dev: states[dev])
+    mountinfo(sd, monkeypatch, "36 22 0:31 / /data rw - zfs tank/spin rw")
+    set_io(sd._tmp, "nvme0n1", 0, 0, 0, 0)
+    last = {}
+    sd.poll_once(last, now=T)
+    set_io(sd._tmp, "nvme0n1", 0, 8, 0, 1)
+    sd.poll_once(last, now=T + 60)
+    assert sd.pending_io("2026-10-09") == [f"{T + 60},io,nvme0n1,0,4,0,1"]       # trunk spins, tank sleeps
+    states["sdg"] = "active"
+    sd.poll_once(last, now=T + 120)
+    assert sd.pending_io("2026-10-09") == []
+    # DATA_DIR on the SSD pool: written right away, whatever the HDDs do
+    states.update(sdd="standby", sdg="standby")
+    sd.poll_once(last, now=T + 180)
+    mountinfo(sd, monkeypatch, "36 22 259:1 / /data rw - btrfs /dev/nvme0n1p1 rw")
+    set_io(sd._tmp, "nvme0n1", 0, 16, 0, 2)
+    sd.poll_once(last, now=T + 240)
+    assert sd.pending_io("2026-10-09") == []
+
+
+def test_poll_keeps_what_the_watcher_needs(sd, monkeypatch):
+    setup_mixed(sd, monkeypatch)
+    sd.poll_once({}, now=T)
+    assert sd.drive_states == {"sdd": "standby"}
+    assert sd.known_devices == {"sdd": ("trunk", True), "nvme0n1": ("cache", False)}
+
+
+def test_written_units_come_from_the_attribute_name():
+    w = spindash.written_kib
+    assert w("Total_LBAs_Written", 2_000_000, 512) == 1_000_000           # Samsung: logical blocks
+    assert w("Total_LBAs_Written", 1000, 4096) == 4000
+    assert w("Host_Writes_32MiB", 10, 512) == 10 * 32 * 1024              # Intel
+    assert w("Lifetime_Writes_GiB", 3, 512) == 3 * 1024 * 1024           # Kingston
+    assert w("Host_Writes_GiB", 3, 512) == 3 * 1024 * 1024
+    assert w("Host_Writes_MiB", 5, 512) == 5 * 1024
+    assert w(None, 4, 512) == 2
+    intel = ('{"ata_smart_attributes": {"table": [{"id": 233, "value": 98},'
+             '{"id": 241, "name": "Host_Writes_32MiB", "raw": {"value": 100}}]}}')
+    assert spindash.parse_wear(intel) == (2, 100 * 32 * 1024)

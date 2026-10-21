@@ -57,6 +57,7 @@ IGNORE_SCAN = 30      # how often to check again whether an IGNORE_PROCS process
 PROC = "/proc"
 SYS_BLOCK = "/sys/block"
 MOUNTS_FILE = "/proc/self/mounts"
+MOUNTINFO = "/proc/self/mountinfo"
 USER_SHARES = "/mnt/user"
 DOCKER_SOCK = "/var/run/docker.sock"
 
@@ -293,6 +294,17 @@ def hdd_devices(devs=None):
     return {d: n for d, (n, hdd) in devs.items() if hdd}
 
 
+# What the poller saw last: the watcher uses it without asking the drives again
+drive_states = {}      # device -> 'active' / 'standby'
+known_devices = {}     # device -> (name, hdd), the last all_devices()
+
+
+def mount_devices(base, devs=None):
+    """The devices of a mount under /mnt: the members of a pool (trunk, trunk2), or one array disk (diskN)."""
+    devs = known_devices if devs is None else devs
+    return sorted(d for d, (n, _) in devs.items() if mount_base(n) == base)
+
+
 # Not a filesystem on a drive: container root filesystems (Docker's data-root can live on a pool), memory
 # and kernel filesystems, and the user shares
 SKIP_FSTYPES = {"overlay", "tmpfs", "ramfs", "proc", "sysfs", "nsfs", "devtmpfs", "devpts", "mqueue", "cgroup",
@@ -322,7 +334,11 @@ def target_mounts():
         ssd = set(read_settings().get("ssd_watch", []))
         roots = sorted({f"/mnt/{b}" for n, hdd in all_devices().values()
                         if (hdd or lane_key(n) in ssd) and (b := mount_base(n))})
-    mps = [(src, mp) for src, mp, fs in mounted() if fs not in SKIP_FSTYPES and mp.startswith("/mnt/")]
+    def in_scope(mp):
+        return mp.startswith("/mnt/") or any(mp == r or mp.startswith(r + "/") for r in roots)
+    # a root given in WATCH counts whatever its type (/tmp is often tmpfs); below it the usual skips apply
+    mps = [(src, mp) for src, mp, fs in mounted()
+           if in_scope(mp) and (fs not in SKIP_FSTYPES or (WATCH_OVERRIDE and mp in roots))]
     real = {}
     for src, mp in sorted(mps, key=lambda x: (len(x[1]), x[1])):
         real.setdefault(src, mp)
@@ -346,18 +362,46 @@ def parse_hdparm(out):
     return None
 
 
+# Our own tools (hdparm, smartctl, fatrace) are never logged (rule 3): their PIDs are registered as soon as
+# they exist, and kept a little after they end, because their events can still be in the queue.
+own_pids = {}          # pid -> time it ended, None while it runs
+OWN_PID_KEEP = 60
+
+
+def own_pid(pid, running=True):
+    now = time.time()
+    own_pids[str(pid)] = None if running else now
+    for k, t in list(own_pids.items()):
+        if t is not None and now - t > OWN_PID_KEEP:
+            own_pids.pop(k, None)
+
+
+def run_own(cmd, timeout):
+    """subprocess.run for one of our own tools, with its PID registered in own_pids."""
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    own_pid(p.pid)
+    try:
+        out, err = p.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.communicate()
+        raise
+    finally:
+        own_pid(p.pid, running=False)
+    return subprocess.CompletedProcess(cmd, p.returncode, out, err)
+
+
 def drive_state(dev):
     """'active', 'standby' or None. hdparm does not wake the drive; neither does smartctl -n standby."""
     try:
-        out = subprocess.run(["hdparm", "-C", f"/dev/{dev}"], capture_output=True, text=True, timeout=15).stdout
+        out = run_own(["hdparm", "-C", f"/dev/{dev}"], timeout=15).stdout
         st = parse_hdparm(out)
         if st:
             return st
     except (OSError, subprocess.TimeoutExpired):
         pass
     try:   # SAS and controllers where hdparm says nothing
-        r = subprocess.run(["smartctl", "-n", "standby", "-i", f"/dev/{dev}"],
-                           capture_output=True, text=True, timeout=15)
+        r = run_own(["smartctl", "-n", "standby", "-i", f"/dev/{dev}"], timeout=15)
         if "STANDBY" in r.stdout.upper():
             return "standby"
         if r.returncode == 0:
@@ -406,18 +450,31 @@ def parse_wear(out):
             break
     lbs = j.get("logical_block_size") if isinstance(j.get("logical_block_size"), int) else 512
     for i in WRITTEN_LBA_IDS:
-        raw = ((table.get(i) or {}).get("raw") or {}).get("value")
+        a = table.get(i) or {}
+        raw = (a.get("raw") or {}).get("value")
         if isinstance(raw, int) and raw > 0:
-            kib = raw * lbs // 1024
+            kib = written_kib(a.get("name"), raw, lbs)
             break
     return pct, kib
+
+
+def written_kib(name, raw, lbs):
+    """KiB from a 'written' attribute: the unit is in its name (Intel Host_Writes_32MiB, Kingston and others
+    Lifetime_Writes_GiB / Host_Writes_GiB, some _MiB); without a unit it counts logical blocks."""
+    n = (name or "").lower()
+    if "32mib" in n:
+        return raw * 32 * 1024
+    if "gib" in n or n.endswith("_gb"):
+        return raw * 1024 * 1024
+    if "mib" in n:
+        return raw * 1024
+    return raw * lbs // 1024
 
 
 def ssd_wear(dev):
     """(percentage used, KiB written) of an SSD, each None when unknown."""
     try:
-        r = subprocess.run(["smartctl", "-n", "standby", "-j", "-A", f"/dev/{dev}"],
-                           capture_output=True, text=True, timeout=15)
+        r = run_own(["smartctl", "-n", "standby", "-j", "-A", f"/dev/{dev}"], timeout=15)
     except (OSError, subprocess.TimeoutExpired):
         return None, None
     return parse_wear(r.stdout)
@@ -443,6 +500,42 @@ def pending_io(day):
     """The io and wear lines of `day` that are not in the day file yet."""
     with io_lock:
         return [ln for ln in io_pending if day_of(ln.split(",", 1)[0]) == day]
+
+
+def data_dir_devices(devs=None):
+    """The devices that hold DATA_DIR, from mountinfo: a ZFS pool, an array disk (/dev/mdX, also encrypted),
+    a pool partition, or a user share that only lives on a pool. None when that cannot be told."""
+    devs = (known_devices or all_devices()) if devs is None else devs
+    best = None
+    try:
+        for line in open(MOUNTINFO):
+            pre, _, post = line.partition(" - ")
+            f, g = pre.split(), post.split()
+            if len(f) < 5 or len(g) < 2:
+                continue
+            mp = f[4].replace("\\040", " ")
+            if (DATA == mp or DATA.startswith(mp.rstrip("/") + "/")) and (best is None or len(mp) >= len(best[0])):
+                best = (mp, f[3].replace("\\040", " "), g[0], g[1])
+    except OSError:
+        return None
+    if not best:
+        return None
+    mp, root, fstype, src = best
+    if fstype == "zfs":
+        return mount_devices(src.split("/")[0], devs) or None
+    if fstype == "fuse.shfs":
+        inner = root.rstrip("/") + DATA[len(mp.rstrip("/")):]       # the path below /mnt/user
+        share = inner.strip("/").split("/")[0]
+        st, pool = share_storage(shares_ini().get(share, {}))
+        return (mount_devices(pool, devs) or None) if st == "pool" else None
+    m = re.fullmatch(r"/dev/(?:mapper/)?md(\d+)(?:p\d+)?", src)
+    if m:
+        return mount_devices(f"disk{m.group(1)}", devs) or None
+    m = re.fullmatch(r"/dev/(?:mapper/)?(sd[a-z]+|nvme\d+n\d+)(?:p?\d+)?", src)
+    if m and m.group(1) in devs:
+        base = mount_base(devs[m.group(1)][0])
+        return (mount_devices(base, devs) if base else [m.group(1)]) or None
+    return None
 
 
 def poll_once(last, now=None):
@@ -501,10 +594,21 @@ def poll_once(last, now=None):
         if pct is not None or kib is not None:
             io.append(f"{now},wear,{dev},{'' if pct is None else pct},{'' if kib is None else kib}")
     last["day"], last["disks"], last["all"] = day, dict(devs), dict(alld)
+    drive_states.clear()
+    drive_states.update(known)
+    known_devices.clear()
+    known_devices.update(alld)
     with io_lock:
         io_pending.extend(io)
         del io_pending[:-IO_PENDING_MAX]
-    if lines or not devs or any(known.get(d) == "active" for d in devs):
+    # write the waiting lines when something is written anyway, or when it cannot wake a drive: the drive
+    # of DATA_DIR is an SSD or spins; when that drive is unknown, when any HDD spins
+    data_devs = data_dir_devices(alld)
+    if data_devs is not None:
+        safe = any(not alld[d][1] or known.get(d) == "active" for d in data_devs if d in alld)
+    else:
+        safe = any(known.get(d) == "active" for d in devs)
+    if lines or not devs or safe:
         flush_io()
     if lines:
         append_lines(lines)
@@ -716,11 +820,23 @@ def docker_get(path, timeout=2):
         return None
 
 
-def container_name(cid):
+names_failed = {}      # container id -> when Docker last gave no name; asked again after NAME_RETRY
+NAME_RETRY = 60
+
+
+def container_name(cid, now=None):
+    """Name of a container. Only real names are remembered: when Docker does not answer, the short ID is
+    used for now and Docker is asked again after NAME_RETRY (not for every event)."""
     if cid in names:
         return names[cid]
-    info = docker_get(f"/containers/{cid}/json")
-    name = (info or {}).get("Name", "").lstrip("/") or cid[:12]
+    now = time.time() if now is None else now
+    if now - names_failed.get(cid, -NAME_RETRY) < NAME_RETRY:
+        return cid[:12]
+    name = (docker_get(f"/containers/{cid}/json") or {}).get("Name", "").lstrip("/")
+    if not name:
+        names_failed[cid] = now
+        return cid[:12]
+    names_failed.pop(cid, None)
     names[cid] = name
     return name
 
@@ -816,10 +932,59 @@ def fd_snapshot(since):
         return by
 
 
-def via_user_share(path, since=None):
-    """Who has /mnt/pool/Share/x open through /mnt/user/Share/x? Compares inodes."""
+_shares_cache = {"t": 0.0, "body": None}
+
+
+def shares_ini(now=None):
+    """read_shares_ini(), read again at most every 30 s (shfs events can come thousands a second)."""
+    now = time.time() if now is None else now
+    if _shares_cache["body"] is None or now - _shares_cache["t"] >= 30:
+        _shares_cache.update(t=now, body=read_shares_ini())
+    return _shares_cache["body"]
+
+
+def share_locations(share, shares=None):
+    """The mounts (pools, diskN) where a user share can have files, from its settings; None when unknown."""
+    sh = (shares_ini() if shares is None else shares).get(share)
+    if not sh:
+        return None
+    st, pool = share_storage(sh)
+    if st == "unknown":
+        return None
+    pools = [p for p in dict.fromkeys((pool, sh.get("cachePool2"))) if p]
+    inc = [x for x in (sh.get("include") or "").split(",") if x]
+    exc = {x for x in (sh.get("exclude") or "").split(",") if x}
+    disks = sorted({n for n, _ in known_devices.values() if re.fullmatch(r"disk\d+", n)
+                    and (not inc or n in inc) and n not in exc}, key=lambda n: int(n[4:]))
+    return {"pool": pools, "array": disks}.get(st, pools + disks)
+
+
+def user_share_lookup_safe(path):
+    """Rule 1: a lookup through /mnt/user lets shfs look on every disk or pool the share may use. Only safe
+    when none of them, apart from the mount of the event itself (spinning), is an HDD that is not spinning
+    or whose state is unknown. Unknown share settings or drives: not safe."""
     parts = path.split("/")
-    if len(parts) < 5:
+    if len(parts) < 5 or not known_devices:
+        return False
+    locs = share_locations(parts[3])
+    if locs is None:
+        return False
+    for loc in locs:
+        if loc == parts[2]:
+            continue
+        devs = mount_devices(loc)
+        if not devs:
+            return False
+        if any(known_devices[d][1] and drive_states.get(d) != "active" for d in devs):
+            return False
+    return True
+
+
+def via_user_share(path, since=None):
+    """Who has /mnt/pool/Share/x open through /mnt/user/Share/x? Compares inodes. Only when the lookup
+    through /mnt/user cannot touch a sleeping drive (user_share_lookup_safe)."""
+    parts = path.split("/")
+    if len(parts) < 5 or not user_share_lookup_safe(path):
         return None
     try:
         want = os.stat(f"{USER_SHARES}/" + "/".join(parts[3:]))
@@ -935,7 +1100,7 @@ def classify_early(line):
     """Determine the source of a new PID right away (in the reading thread), while the process
     is still running. The consumer can lag behind; classify() then returns the remembered result."""
     m = LINE.match(line)
-    if m and m.group(3) not in seen and m.group(3) != MY_PID:
+    if m and m.group(3) not in seen and m.group(3) != MY_PID and m.group(3) not in own_pids:
         classify(m.group(3), m.group(2))
 
 
@@ -944,8 +1109,8 @@ def handle(line):
     if not m:
         return
     ts, comm, pid, types, path = m.groups()
-    if pid == MY_PID or is_own_file(path):
-        return                               # do not log our own writes
+    if pid == MY_PID or pid in own_pids or is_own_file(path):
+        return                               # do not log ourselves (rule 3)
     op = next((label for c, label in OPS if c in types), None)
     if not op:
         return
@@ -985,6 +1150,7 @@ def start_fatrace(mp):
         log("could not start fatrace for", mp, e)
         return
     procs.append(p)
+    own_pid(p.pid)
 
     def pump_out():
         for line in p.stdout:
@@ -997,6 +1163,7 @@ def start_fatrace(mp):
             except queue.Full:
                 stats["dropped"] += 1
         log("fatrace stopped for", mp, "exit code", p.wait())
+        own_pid(p.pid, running=False)
 
     def pump_err():
         for line in p.stderr:
@@ -1728,6 +1895,10 @@ def main():
     log(f"Spin Dashboard starting (data: {DATA}, polling every {POLL_INTERVAL}s, "
         f"keeping {RETENTION_DAYS} days, fatrace: {fatrace_version()})")
     relabel_existing()
+    devs = all_devices()
+    where = data_dir_devices(devs)
+    log("Data on " + (", ".join(f"{d} ({'hdd' if devs[d][1] else 'ssd'})" for d in where) if where else
+                      "an unknown drive: waiting lines are written while any HDD spins"))
     threading.excepthook = lambda a: log("thread error:", repr(a.exc_value))
     signal.signal(signal.SIGTERM, stop)
     for target in (poller, watcher, housekeeping, docker_events):

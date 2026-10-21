@@ -2,17 +2,6 @@
 
 Open work, roughly by priority. Move finished items to `completed.md`.
 
-## Bugs
-- [ ] "Per day" is far too low for periods that start before the update: `perDay()` in `index.html` divides by the whole period, also the days without `io` lines, so with "30 days" or "All" an SSD seems to write ~30× less and the wear warning never fires. Average from the first `io` line of those drives in the period (key figures, lane, drive page, overview); test with data where only the last day has `io` lines
-- [ ] Our own child processes are logged: rule 3 only skips `MY_PID`, so `hdparm`, `smartctl` and `fatrace` (started by the dashboard) showed up as sources on an SSD pool. Remember children of `MY_PID` in `classify_early` while they run and skip them in `handle()`; test with `make_proc(..., ppid=MY_PID)`
-- [ ] The `io` buffer is written when *any* HDD spins, not when the HDD that holds `DATA_DIR` spins: with appdata on HDD X and HDD Y spinning, the write still wakes X. Find the device of `DATA_DIR` (mountinfo → source → `disks.ini`) and only flush when it is active or an SSD; unknown keeps today's behaviour. The `who` lines have the same issue; record it in `docs/decisions.md`
-- [ ] Rule 1 risk in `via_user_share()`: it stats `/mnt/user/<share>/<path>` to compare inodes, and shfs may look that path up on other array disks first, which could touch a sleeping disk. Match on the link of `/proc/<pid>/fd/<n>` (the `/mnt/user/...` path as text) and only fall back to inodes when that is ambiguous; verify on a real array with sleeping disks
-- [ ] `WATCH` outside `/mnt` no longer works: since the bind-mount fix `target_mounts()` only keeps mounts under `/mnt/`, so the local development example in `docs/development.md` (`WATCH=/tmp`) watches nothing. Apply the `/mnt` limit only to the automatic roots
-- [ ] The live stream drops the SSD pools from Reads/Writes per drive: `scheduleLive()` calls `renderActDrives(...bounds(), viewDevs())` without `ssdActDevs()`, so their sections disappear on every streamed event until the next full render
-- [ ] A server without HDDs shows "no data": `load()` returns false when there are no `state`/`spin` lines, although the poller now records `io` and `wear` for SSD-only servers. Show the SSD lanes and the wear without spin cards
-- [ ] Wrong "written since new" for SATA SSDs that count attribute 241/246 in other units (Intel `Host_Writes_32MiB`, several vendors `Lifetime_Writes_GiB`/`Host_Writes_GiB`): `parse_wear()` always multiplies by the logical block size. Pick the unit from the attribute name in smartctl's JSON; test per vendor
-- [ ] `container_name()` caches its fallback (the first 12 hex characters of the ID) when the Docker API does not answer once within 2 s, so that container keeps a hex name until the dashboard restarts. Only cache real names
-
 ## Before the first public release
 - [ ] Test on a system with a classic array and parity (`/mnt/diskN`, `/dev/mdXpY`)
 - [ ] Test with a ZFS pool with a dataset per share

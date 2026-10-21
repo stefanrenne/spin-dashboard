@@ -75,9 +75,11 @@ gets no line. The first poll after a start only reads the counters; a counter th
 device) is skipped and counting starts over.
 
 An SSD is busy every minute, and a line per minute would keep the drive with `DATA_DIR` awake when appdata
-lives on an HDD (hard rule 3). So `io` lines wait in memory while every HDD sleeps, and are written as soon
-as something else is written (the `disk`/`state` lines of a new day, a spin change) or an HDD spins, and when
-the container stops. Until then `/data/days/<day>.csv` appends them to the day file it sends, so the
+lives on an HDD (hard rule 3). So `io` lines wait in memory while the drive that holds `DATA_DIR` sleeps,
+and are written as soon as something else is written (the `disk`/`state` lines of a new day, a spin change),
+that drive spins or is an SSD, and when the container stops. The poller finds that drive in
+`/proc/self/mountinfo` (a ZFS pool, an array disk, a pool partition, or a user share that only lives on one
+pool); when it cannot tell, the lines are written while any HDD spins. Until then `/data/days/<day>.csv` appends them to the day file it sends, so the
 dashboard is live anyway. Lines that were still waiting are lost when the container is killed instead of
 stopped. Lines can therefore be appended out of time order; readers sort by time.
 

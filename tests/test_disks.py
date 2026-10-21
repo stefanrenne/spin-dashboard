@@ -169,3 +169,11 @@ def test_target_mounts_skip_bind_mounts_and_container_filesystems(sd):
 def test_mount_points_with_spaces(sd):
     (sd._tmp / "mounts").write_text("tank/My\\040Files /mnt/tank/My\\040Files zfs rw 0 0\n")
     assert sd.mounted() == [("tank/My Files", "/mnt/tank/My Files", "zfs")]
+
+
+def test_watch_override_outside_mnt_and_on_tmpfs(sd, monkeypatch):
+    """docs/development.md runs it with WATCH=/tmp: a root given in WATCH counts, even as tmpfs."""
+    monkeypatch.setattr(sd, "WATCH_OVERRIDE", ["/tmp"])
+    (sd._tmp / "mounts").write_text("tmpfs /tmp tmpfs rw 0 0\noverlay /tmp/c/merged overlay rw 0 0\n"
+                                    "tmpfs /run tmpfs rw 0 0\n")
+    assert sd.target_mounts() == ["/tmp"]

@@ -149,3 +149,24 @@ and the poller only runs it for drives the kernel calls non-rotational, with `-n
 should that ever be wrong. Once an hour is enough: wear moves by a percent in months. The warning is a
 limit per SSD rather than per pool, because a mirrored pool writes everything twice and wear is per drive.
 It is not sent to the webhook: a slow trend is not something to be woken for.
+
+## Looking up a file through /mnt/user only when no sleeping drive can be touched
+
+To name the container behind an access through `/mnt/user`, the watcher compares inodes: it stats the file
+through `/mnt/user` and looks for a process that has the same file open. That stat goes through shfs, which
+may look the path up on every disk or pool the share can use, so on an array with sleeping disks it could
+touch one of them (hard rule 1). Whether it really does was never measured; the lookup is therefore guarded
+instead of removed: from the share settings (`shares.ini`: storage, primary and secondary pool,
+`include`/`exclude`) the watcher knows where the share can live, and it only looks up when every one of those
+places, apart from the drive of the event itself (which is spinning), is an SSD or a spinning HDD according to
+the last poll. Unknown settings or drives: no lookup. The access is then logged as `shfs (via /mnt/user)`,
+less precise but never a reason for a drive to wake up.
+
+## Waiting lines are written when the drive of DATA_DIR is awake
+
+The `io` and `wear` lines wait in memory and are written when that cannot wake a drive: when the drive that
+holds `DATA_DIR` spins or is an SSD. The poller finds that drive in `/proc/self/mountinfo` (see
+`data-formats.md`); when it cannot tell (a user share that can live on the array, an unknown device), it falls
+back to "any HDD spins". The `who` lines are not held back the same way: an access on one HDD is written at
+once, even if `DATA_DIR` sits on another, sleeping HDD. Holding them could take days on a quiet system, would
+grow without bound in memory and would lose them on a crash; keep appdata on an SSD (README, Tips).

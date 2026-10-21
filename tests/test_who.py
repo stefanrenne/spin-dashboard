@@ -234,7 +234,15 @@ def test_handle_shfs_is_resolved_later(sd, monkeypatch):
     assert later == [("1", "77", "geopend", "/mnt/trunk/Media/a.mkv")]
 
 
+def share_on(sd, ini='["Media"]\nuseCache="only"\ncachePool="trunk"\n', devices=None, states=None):
+    """shares.ini and what the poller saw, so a lookup through /mnt/user is allowed (or not)."""
+    (sd._tmp / "emhttp" / "shares.ini").write_text(ini)
+    sd.known_devices.update(devices or {"sdd": ("trunk", True)})
+    sd.drive_states.update(states or {"sdd": "active"})
+
+
 def test_via_user_share_finds_real_opener(sd):
+    share_on(sd)
     t = sd._tmp
     f = t / "user" / "Media" / "a.mkv"
     f.parent.mkdir(parents=True)
@@ -276,6 +284,7 @@ def test_ignore_active_is_cached_and_reads_command_lines(sd):
 
 def test_via_user_share_reuses_one_fd_scan_within_a_second(sd, monkeypatch):
     """A scan through /mnt/user gives thousands of shfs events; /proc/*/fd is read only once per second."""
+    share_on(sd)
     t = sd._tmp
     for name in ("a.mkv", "b.mkv"):
         f = t / "user" / "Media" / name
@@ -324,3 +333,89 @@ def test_docker_storage_opens_are_skipped_and_layer_writes_collapse(sd, monkeypa
         ("1", "container", "sonarr", "10", "geschreven", "/mnt/frunk/appdata/sonarr/sonarr.db-wal"),
         ("1", "container", "plex", "11", "geopend", "/mnt/frunk/appdata/docker-compose/plex.yml"),
     ]
+
+
+def opener(sd, share="Media"):
+    """A file in /mnt/user/<share>/ that Plex has open."""
+    f = sd._tmp / "user" / share / "a.mkv"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("x")
+    p = make_proc(sd._tmp, 300, "Plex Media Serv")
+    (p / "fd" / "5").symlink_to(f)
+
+
+ARRAY = {"sdb": ("parity", True), "sdc": ("disk1", True), "sde": ("disk2", True), "nvme0n1": ("cache", False)}
+
+
+def test_user_share_lookup_never_risks_a_sleeping_disk(sd, monkeypatch):
+    """Rule 1: shfs may look on every disk of the share; with one of them asleep there is no lookup at all."""
+    opener(sd)
+    share_on(sd, '["Media"]\nuseCache="no"\n', ARRAY, {"sdb": "standby", "sdc": "standby", "sde": "active"})
+    stats = []
+    real = sd.os.stat
+    monkeypatch.setattr(sd.os, "stat", lambda p, *a, **k: stats.append(str(p)) or real(p, *a, **k))
+    assert sd.via_user_share("/mnt/disk2/Media/a.mkv") is None        # disk1 sleeps
+    assert not any("/user/" in p for p in stats)
+    sd.drive_states["sdc"] = "active"                                 # every disk of the share spins
+    assert sd.via_user_share("/mnt/disk2/Media/a.mkv") == ("300", "Plex Media Serv")
+
+
+def test_user_share_lookup_follows_the_share_settings(sd):
+    opener(sd)
+    states = {"sdb": "standby", "sdc": "standby", "sde": "active"}
+    # only on disk2 (include): the sleeping disk1 is never asked
+    share_on(sd, '["Media"]\nuseCache="no"\ninclude="disk2"\n', ARRAY, states)
+    assert sd.user_share_lookup_safe("/mnt/disk2/Media/a.mkv") is True
+    sd._shares_cache.update(body=None)
+    # also excluded works
+    share_on(sd, '["Media"]\nuseCache="no"\nexclude="disk1"\n', ARRAY, states)
+    assert sd.user_share_lookup_safe("/mnt/disk2/Media/a.mkv") is True
+    sd._shares_cache.update(body=None)
+    # pool first, then the array: an event on the SSD pool still has the sleeping disk1 to worry about
+    share_on(sd, '["Media"]\nuseCache="yes"\ncachePool="cache"\n', ARRAY, states)
+    assert sd.user_share_lookup_safe("/mnt/cache/Media/a.mkv") is False
+    sd._shares_cache.update(body=None)
+    # a pool share on an SSD pool: nothing can sleep
+    share_on(sd, '["Media"]\nuseCache="only"\ncachePool="cache"\n', ARRAY, states)
+    assert sd.user_share_lookup_safe("/mnt/cache/Media/a.mkv") is True
+
+
+def test_user_share_lookup_is_not_safe_when_unknown(sd):
+    opener(sd)
+    share_on(sd, '["Other"]\nuseCache="only"\ncachePool="trunk"\n')        # no settings for Media
+    assert sd.via_user_share("/mnt/trunk/Media/a.mkv") is None
+    sd._shares_cache.update(body=None)
+    share_on(sd, '["Media"]\nuseCache="something new"\n')                   # storage unknown
+    assert sd.user_share_lookup_safe("/mnt/trunk/Media/a.mkv") is False
+    sd._shares_cache.update(body=None)
+    share_on(sd)
+    sd.drive_states.clear()                                                 # the poller has not seen trunk
+    assert sd.user_share_lookup_safe("/mnt/trunk2x/Media/a.mkv") is False
+    sd.known_devices.clear()                                                # nothing polled yet
+    assert sd.user_share_lookup_safe("/mnt/trunk/Media/a.mkv") is False
+
+
+def test_own_child_processes_are_never_logged(sd, monkeypatch):
+    """hdparm, smartctl and fatrace are started by us (rule 3)."""
+    calls = []
+    monkeypatch.setattr(sd, "write_who", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(sd, "classify", lambda pid, comm: ("unraid", comm))
+    sd.own_pid(4321)
+    sd.handle("1.0 hdparm(4321): O   /mnt/trunk/x\n")
+    sd.own_pid(4321, running=False)                  # just ended: its events may still be in the queue
+    sd.handle("1.0 hdparm(4321): O   /mnt/trunk/y\n")
+    sd.handle("1.0 plex(55): O   /mnt/trunk/z\n")
+    assert [c[5] for c in calls] == ["/mnt/trunk/z"]
+
+
+def test_run_own_registers_the_pid_and_behaves_like_run(sd):
+    import subprocess, sys
+    r = sd.run_own([sys.executable, "-c", "print('ok')"], timeout=10)
+    assert (r.returncode, r.stdout) == (0, "ok\n")
+    assert len(sd.own_pids) == 1 and list(sd.own_pids.values())[0] is not None     # ended, still remembered
+    import pytest
+    with pytest.raises(subprocess.TimeoutExpired):
+        sd.run_own([sys.executable, "-c", "import time; time.sleep(5)"], timeout=0.2)
+    sd.own_pids.update({k: 0.0 for k in sd.own_pids})                               # long ago
+    sd.own_pid(1)
+    assert list(sd.own_pids) == ["1"]                                               # old ones are forgotten
