@@ -31,12 +31,13 @@ Tip: keep the appdata path on an SSD/cache pool, otherwise the dashboard itself 
 
   <Config Name="Unraid disk info (read-only)" Target="/emhttp" Default="/var/local/emhttp" Mode="ro" Description="Unraid's disk state (disks.ini), used for names like parity, disk1 and pool members." Type="Path" Display="advanced" Required="true" Mask="false">/var/local/emhttp</Config>
 
-  <Config Name="Docker socket (read-only)" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="ro" Description="Read-only use of the Docker API: container names for the processes that open files, container start/stop events, and the paths each container maps (shown in Settings)." Type="Path" Display="advanced" Required="false" Mask="false">/var/run/docker.sock</Config>
+  <Config Name="Docker socket (read-only)" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="ro" Description="Read-only use of the Docker API: container names for the processes that open files, container start/stop/health events, and the paths and volumes each container maps (shown in Settings and the overview)." Type="Path" Display="advanced" Required="false" Mask="false">/var/run/docker.sock</Config>
 
   <Config Name="Poll interval" Target="POLL_INTERVAL" Default="60" Mode="" Description="Seconds between drive state checks." Type="Variable" Display="advanced" Required="false" Mask="false">60</Config>
 
   <Config Name="Retention (days)" Target="RETENTION_DAYS" Default="30" Mode="" Description="How many days of history to keep." Type="Variable" Display="advanced" Required="false" Mask="false">30</Config>
 
   <Config Name="Watch override" Target="WATCH" Default="" Mode="" Description="Optional, space separated. Leave empty to watch all HDD-backed disks and pools automatically, e.g. /mnt/disk1 /mnt/tank" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Same access only once per (s)" Target="DEDUP_SECONDS" Default="600" Mode="" Description="The same file, source and action (read, write, ...) is logged at most once in this many seconds. Lower gives more detail and bigger day files." Type="Variable" Display="advanced" Required="false" Mask="false">600</Config>
   <Config Name="Ignore processes" Target="IGNORE_PROCS" Default="cache_dirs" Mode="" Description="Space separated process names whose file access is not logged, including their child processes. Default skips the Cache Dirs plugin, which constantly scans all folders." Type="Variable" Display="advanced" Required="false" Mask="false">cache_dirs</Config>
 </Container>

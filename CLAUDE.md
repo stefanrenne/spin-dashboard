@@ -24,7 +24,7 @@ Unraid server spin up and **why**: which file was opened and by which process
 
 ```bash
 python -m pytest -q          # backend tests
-npm install && npm test      # frontend tests
+npm ci && npm test           # frontend tests (package-lock.json is committed)
 docker build -t spin-dashboard .
 # running locally without Unraid: see docs/development.md
 ```

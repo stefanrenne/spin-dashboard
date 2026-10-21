@@ -41,7 +41,15 @@ function load(files, url = 'http://dash/?lang=nl', languages = ['en-US'], stored
       };
     },
   });
-  return new Promise((resolve) => setTimeout(() => resolve(dom), 300));
+  return whenReady(dom, files.READY === false);
+}
+// The page sets data-ready on <html> after its first load; a test that holds the load up on purpose
+// (files.READY === false) gets the page after a short fixed wait instead
+async function whenReady(dom, fixed = false) {
+  if (fixed) { await new Promise((r) => setTimeout(r, 300)); return dom; }
+  const html = dom.window.document.documentElement;
+  for (const end = Date.now() + 3000; !html.hasAttribute('data-ready') && Date.now() < end;) await new Promise((r) => setTimeout(r, 5));
+  return dom;
 }
 const text = (el) => el.textContent.replace(/\s+/g, ' ').trim();
 // wait until something holds (a period switch is asynchronous); at most 2 s, then the assert decides
@@ -464,7 +472,7 @@ function loadWithStream(files) {
       w.__push = (line) => handler && handler({ data: line });
     },
   });
-  return new Promise((resolve) => setTimeout(() => resolve(dom), 300));
+  return whenReady(dom);
 }
 
 test('a streamed who line appears in the feed immediately', async () => {
@@ -493,6 +501,7 @@ test('first load shows a loading panel with progress, then the dashboard', async
   files['days.json'] = JSON.stringify({ days: ['2026-10-08', '2026-10-09'], bytes: 2 * 1048576 });
   const day2 = [`${ep(120)},spin,sdd,active`, `${ep(60)},spin,sdd,standby`].join('\n') + '\n';
   files['days/2026-10-09.csv'] = slow.then(() => day2);              // the second day arrives later
+  files.READY = false;                                               // the page cannot be ready yet
   const dom = await load(files);
   const d = dom.window.document;
   const bar = d.getElementById('loaderBar');

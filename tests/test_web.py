@@ -265,3 +265,20 @@ def test_spins_includes_waiting_io_lines_and_changes_its_etag(server, sd):
     status, body, h2 = fetch(server + "/data/spins.csv", **{"If-None-Match": h["ETag"]})
     assert status == 200 and h2["ETag"] != h["ETag"]
     assert body.decode().splitlines()[-1] == "1791496860,io,nvme0n1,4,8,1,2"
+
+
+def test_a_closed_stream_is_forgotten(sd, server):
+    """A browser that closes the page: its queue disappears with the next line that cannot be sent."""
+    import socket, time
+    s = socket.create_connection(("127.0.0.1", int(server.rsplit(":", 1)[1])), timeout=5)
+    s.sendall(b"GET /data/stream HTTP/1.1\r\nHost: dash\r\n\r\n")
+    assert s.recv(100).startswith(b"HTTP/1.0 200")
+    end = time.time() + 5
+    while not sd.streams and time.time() < end:
+        time.sleep(0.01)
+    assert len(sd.streams) == 1
+    s.close()
+    while sd.streams and time.time() < end:
+        sd.broadcast("1791496800,who,container,plex,1,geopend,/mnt/trunk/a.mkv")
+        time.sleep(0.05)
+    assert sd.streams == []

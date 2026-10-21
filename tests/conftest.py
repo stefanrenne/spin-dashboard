@@ -39,6 +39,8 @@ def sd(tmp_path, monkeypatch):
     monkeypatch.setattr(spindash, "MOUNTS_FILE", str(tmp_path / "mounts"))
     monkeypatch.setattr(spindash, "MOUNTINFO", str(tmp_path / "mountinfo"))
     monkeypatch.setattr(spindash, "own_pids", {})
+    monkeypatch.setattr(spindash, "procs", [])
+    monkeypatch.setattr(spindash, "streams", [])
     monkeypatch.setattr(spindash, "drive_states", {})
     monkeypatch.setattr(spindash, "known_devices", {})
     monkeypatch.setattr(spindash, "names_failed", {})

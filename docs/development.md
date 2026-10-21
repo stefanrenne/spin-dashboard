@@ -6,7 +6,7 @@
 pip install -r requirements-dev.txt
 python -m pytest -q
 
-npm install
+npm ci          # the versions in package-lock.json, like CI
 npm test
 ```
 

@@ -6,6 +6,10 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+  # weekly rebuild of latest, so security fixes of the base image and Debian packages
+  # (fatrace, hdparm, smartmontools) reach the image without a code change
+  schedule:
+    - cron: "17 4 * * 1"
 
 permissions:
   contents: read
@@ -26,7 +30,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - run: npm install --no-audit --no-fund
+          cache: npm
+      - run: npm ci --no-audit --no-fund
       - run: npm test
 
   image:
@@ -53,6 +58,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
+          pull: true
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

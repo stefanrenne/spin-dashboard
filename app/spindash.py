@@ -1173,25 +1173,31 @@ def start_fatrace(mp):
     threading.Thread(target=pump_err, daemon=True).start()
 
 
+def watch_once(current):
+    """One round of the watcher: (re)start every fatrace when the mounts changed or one of them stopped.
+    Returns the mounts that are watched now."""
+    mounts = target_mounts()
+    dead = any(p.poll() is not None for p in procs)
+    if mounts != current or dead:
+        for p in procs:
+            p.terminate()
+        procs.clear()
+        if mounts:
+            log("Watching:", " ".join(mounts))
+            for mp in mounts:
+                start_fatrace(mp)
+        else:
+            log("No HDD mounts found under /mnt; retrying in a minute")
+        health["mounts"] = list(mounts)
+    return mounts
+
+
 def watcher():
     threading.Thread(target=consumer, daemon=True).start()
     current, beat = None, 0
     while True:
         try:
-            mounts = target_mounts()
-            dead = any(p.poll() is not None for p in procs)
-            if mounts != current or dead:
-                for p in procs:
-                    p.terminate()
-                procs.clear()
-                if mounts:
-                    log("Watching:", " ".join(mounts))
-                    for mp in mounts:
-                        start_fatrace(mp)
-                else:
-                    log("No HDD mounts found under /mnt; retrying in a minute")
-                current = mounts
-                health["mounts"] = list(mounts)
+            current = watch_once(current)
         except Exception as e:
             log("watcher error:", repr(e))
         beat += 1

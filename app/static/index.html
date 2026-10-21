@@ -3461,8 +3461,11 @@ async function tick(){
   if (result !== 'ok') showStatus(result);
 }
 
+// data-ready on <html> once the first load is done (data shown or a status message): tests and the
+// screenshot script wait for it instead of a fixed time
+const ready = () => document.documentElement.setAttribute('data-ready', '');
 (async () => {
-  if (new URLSearchParams(location.search).has('demo')){ containers = demoContainers(); load(demoLog(), 'voorbeeld', true); return; }
+  if (new URLSearchParams(location.search).has('demo')){ containers = demoContainers(); load(demoLog(), 'voorbeeld', true); ready(); return; }
   loading(true);
   await loadHideServer();
   await tick();
@@ -3470,6 +3473,7 @@ async function tick(){
   // the feed shows relative times ("2 min ago"); refresh those more often than the data itself
   setInterval(() => { if (!document.hidden && data) renderFeed(); }, 30000);
   streamLive();
+  ready();
 })();
 
 /* ---------- live stream (Server-Sent Events) ---------- */

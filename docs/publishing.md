@@ -3,7 +3,10 @@
 ## Image
 
 On every push to `main` (`latest`) and on tags `v*` (`1.2.3`), CI builds an image to
-`ghcr.io/<owner>/spin-dashboard`. After the first build: *GitHub → Packages → spin-dashboard →
+`ghcr.io/<owner>/spin-dashboard`. Every Monday it also rebuilds `latest` from `main` with a freshly pulled base
+image, so security fixes of Python's Debian base and of `fatrace`, `hdparm` and `smartmontools` reach the image
+without a code change. Dependabot (`.github/dependabot.yml`) opens weekly PRs for the actions, the test tools
+and the base image; CI tests them, and only a merge builds an image. After the first build: *GitHub → Packages → spin-dashboard →
 Package settings → Change visibility → Public*, otherwise Unraid cannot pull the image.
 
 The image is built for `linux/amd64` only. Unraid runs on x86-64, so a multi-arch image (arm64)

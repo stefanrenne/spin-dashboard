@@ -6,13 +6,16 @@
 │  poller ── hdparm -C / smartctl -n standby ──► days/<day>.csv  (spin, state)       │
 │     ├── /emhttp/disks.ini + /sys/block/*/rotational ──► days/<day>.csv  (disk)     │
 │     ├── /sys/block/*/stat (every drive, SSDs too) ──► io_pending ──► (io)          │
-│     └── smartctl -n standby -j -A (SSDs only, hourly) ──► io_pending ──► (wear)    │
+│     ├── smartctl -n standby -j -A (SSDs only, hourly) ──► io_pending ──► (wear)    │
+│     └── io_pending is written while the drive of DATA_DIR spins or is an SSD       │
 │                                                                                    │
-│  watcher ── fatrace -c per HDD mount   ──► queue ──► handle() ──► days/<day>.csv   │
-│             (+ SSD pools in ssd_watch)                                             │
-│                                         classify(pid): /proc/<pid>/cgroup, stat     │
+│  watcher ── fatrace -c per filesystem ──► queue ──► handle() ──► days/<day>.csv    │
+│             (HDD mounts, + SSD pools in ssd_watch; own PIDs and Docker's storage   │
+│              skipped)                                                              │
+│                                         classify(pid): /proc/<pid>/cgroup, stat    │
 │                                         container_name(): docker.sock              │
-│                                         shfs → via_user_share(): /proc/*/fd       │
+│                                         shfs → via_user_share(): /proc/*/fd,       │
+│                                           only when no sleeping drive is touched   │
 │                                                                                    │
 │  docker ── /events (start, die, health) ──► days/<day>.csv  (ctr)                  │
 │     └── /containers/json + /emhttp/shares.ini ──► /data/containers.json            │
@@ -22,11 +25,12 @@
 │                                                                                    │
 │  web ── ThreadingHTTPServer :8089 ── /  → static/index.html                        │
 │                                      /data/days.json, /data/days/<day>.csv         │
-│                                      /data/stream  (SSE: elke who-regel live)      │
-│                                      /data/spins.csv (spin-regels van alle dagen)  │
+│                                      /data/stream  (SSE: every who line, live)     │
+│                                      /data/spins.csv (summary of all days)         │
 │                                      /data/containers.json (mounts per container)  │
-│                                      /data/settings.json (GET/POST: instellingen)  │
-│                                      /health (poller, watcher, docker; HEALTHCHECK)│
+│                                      /data/settings.json (GET/POST: settings)      │
+│                                      /data/notify-test (POST: test the webhook)    │
+│                                      /health (poller, watcher, docker)             │
 └────────────────────────────────────────────────────────────────────────────────────┘
           ▲ /mnt (ro,slave)   ▲ /var/local/emhttp (ro)   ▲ docker.sock (ro)   ▼ /data (rw)
 ```

@@ -2,6 +2,14 @@
 
 Newest first.
 
+## 2026-10-21: development chores from the review
+- `docs/architecture.md`: the diagram is English again, with the newer parts (io buffer, SMART, one fatrace per filesystem, the guarded shfs lookup, `/data/notify-test`) and straight borders
+- README › Permissions: what the Docker socket is used for and when `smartctl` runs; `DEDUP_SECONDS` in the README and the CA template
+- `package-lock.json` is committed; CI uses `npm ci` with the npm cache
+- Dependabot for actions, npm, pip and the Docker base image; CI rebuilds `latest` every Monday with a freshly pulled base image (`docs/publishing.md`)
+- Tests: the watcher loop body is `watch_once()` and tested (restart on a mount change or a stopped fatrace); a closed SSE connection is forgotten. The SSE endpoint and `fd_snapshot()` turned out to be covered already. The test fixture now also resets `procs` and `streams`, which made a stream test depend on the one before it
+- The page sets `data-ready` on `<html>` after its first load; the frontend tests and the screenshot script wait for it instead of a fixed time (frontend tests ~50 s → ~32 s; the rest is jsdom building the page per test)
+
 ## 2026-10-21: the bugs from the review
 - "Per day" counts from the first measurement (the first `io` line of any drive), so periods that start before the update no longer divide by days that were never measured; at least an hour
 - Our own tools are never logged: `run_own()` registers the PIDs of `hdparm` and `smartctl`, and `fatrace` registers its own (rule 3)

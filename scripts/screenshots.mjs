@@ -23,7 +23,7 @@ for (const scheme of ['light', 'dark']) {
   const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 }, deviceScaleFactor: 2, colorScheme: scheme, locale: 'en-US' });
   const page = await ctx.newPage();
   await page.goto(url);
-  await page.waitForSelector('#dash:not([hidden])');
+  await page.waitForSelector('html[data-ready]');
   await page.click('[data-range="7"]');
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(1200);           // entrance animation and font

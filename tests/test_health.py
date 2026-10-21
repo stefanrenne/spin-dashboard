@@ -67,3 +67,36 @@ def test_dockerfile_healthcheck_uses_the_health_endpoint():
     import os
     df = open(os.path.join(os.path.dirname(__file__), "..", "Dockerfile")).read()
     assert "/health'" in df and ".read()" in df
+
+
+class FakeProc:
+    def __init__(self, mp):
+        self.mp, self.code, self.terminated = mp, None, False
+
+    def poll(self):
+        return self.code
+
+    def terminate(self):
+        self.terminated = True
+
+
+def test_watch_once_restarts_fatrace_only_when_needed(sd, monkeypatch):
+    mounts, started = [["/mnt/trunk", "/mnt/frunk"]], []
+
+    def start(mp):
+        p = FakeProc(mp)
+        sd.procs.append(p)
+        started.append(mp)
+    monkeypatch.setattr(sd, "target_mounts", lambda: mounts[0])
+    monkeypatch.setattr(sd, "start_fatrace", start)
+    current = sd.watch_once(None)                                   # first round: start all
+    assert started == ["/mnt/trunk", "/mnt/frunk"] and sd.health["mounts"] == current
+    assert sd.watch_once(current) == current and len(started) == 2   # nothing changed: nothing restarts
+    old = list(sd.procs)
+    old[1].code = 1                                                  # one fatrace stopped: all restart
+    sd.watch_once(current)
+    assert all(p.terminated for p in old) and len(started) == 4 and len(sd.procs) == 2
+    mounts[0] = ["/mnt/trunk"]                                       # a pool went away
+    assert sd.watch_once(current) == ["/mnt/trunk"] and started[-1] == "/mnt/trunk" and len(sd.procs) == 1
+    mounts[0] = []
+    assert sd.watch_once(["/mnt/trunk"]) == [] and sd.procs == [] and sd.health["mounts"] == []

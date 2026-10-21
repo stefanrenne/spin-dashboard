@@ -85,6 +85,7 @@ services:
       RETENTION_DAYS: "30"    # days of history to keep
       # WATCH: "/mnt/disk1 /mnt/tank"  # optional, overrides automatic mount detection
       # IGNORE_PROCS: "cache_dirs"     # processes (and their children) that are not logged
+      # DEDUP_SECONDS: "600"           # the same file, source and action only once per this many seconds
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8089/health', timeout=4).read()"]
       interval: 60s
@@ -121,11 +122,11 @@ Open the WebUI on port 8089. The first drive check runs within a minute; file so
 
 | Setting | Why |
 |---|---|
-| Privileged | fanotify on whole filesystems needs `CAP_SYS_ADMIN`; `hdparm` needs raw access to `/dev/sdX`. |
+| Privileged | fanotify on whole filesystems needs `CAP_SYS_ADMIN`; `hdparm` and `smartctl` need raw access to the drives. `smartctl` is only used with `-n standby` (never wakes a drive): as a fallback for the spin state of HDDs, and once an hour for the wear of SSDs. |
 | `--pid=host` | To see which process (and which container) opened a file. |
 | `/mnt` read-only, slave | To trace file access on the array and pools. Nothing is ever written there. |
 | `/var/local/emhttp` read-only | Drive names and pool membership. |
-| Docker socket read-only | Only to translate container IDs into names. |
+| Docker socket read-only | Container names for the processes that open files, start/stop/health events of containers, and the folders and volumes each container maps (Settings and the overview). Never used to change anything. |
 
 ## Tips
 
@@ -148,7 +149,7 @@ Open the WebUI on port 8089. The first drive check runs within a minute; file so
 
 ```
 python -m pytest -q      # backend tests
-npm install && npm test  # frontend tests
+npm ci && npm test       # frontend tests
 docker build -t spin-dashboard .
 ```
 
