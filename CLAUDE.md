@@ -19,6 +19,7 @@ Unraid server spin up and **why**: which file was opened and by which process
 | `scripts/screenshots.mjs` | Recreates the README screenshots from the sample data (Playwright, not in `package.json`). |
 | `docs/` | Architecture, data formats, development, publishing, design decisions. |
 | `todo.md` / `completed.md` | Open and finished work. Update them when you pick something up or finish it. |
+| `CHANGELOG.md` | What changed per version, for users. A user-visible change gets a line under `## [Unreleased]`; a release turns that into a version (see `docs/publishing.md`). |
 
 ## Commands
 

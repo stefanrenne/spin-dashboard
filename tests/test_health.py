@@ -20,7 +20,7 @@ def test_healthy_after_start_and_while_the_poller_keeps_succeeding(sd):
     sd.health.update(poll=1500, mounts=["/mnt/trunk"], docker="connected")
     ok, body = sd.health_status(now=1560)
     assert ok
-    assert body == {"ok": True, "uptime": 560, "poller": {"last_success": 60, "error": None},
+    assert body == {"ok": True, "version": sd.VERSION, "uptime": 560, "poller": {"last_success": 60, "error": None},
                     "watcher": {"mounts": ["/mnt/trunk"], "fatrace": 0, "running": {"/mnt/trunk": False}}, "docker": "connected",
                     "threads": {"poller": True, "watcher": True, "housekeeping": True, "docker_events": True}}
 
@@ -123,3 +123,8 @@ def test_a_fanotify_limit_gets_a_hint_in_the_log(sd, monkeypatch):
     assert "max_user_groups" in logged[1]
     sd.fatrace_stderr("/mnt/x", "some other error\n")
     assert len(logged) == 3
+
+
+def test_health_names_the_version(sd, monkeypatch):
+    monkeypatch.setattr(sd, "VERSION", "0.9.0")
+    assert sd.health_status(now=sd.health["started"] + 1)[1]["version"] == "0.9.0"

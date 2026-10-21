@@ -8,7 +8,10 @@ RUN apt-get update \
 
 COPY app/ /app/
 
-ENV PORT=8089 \
+# set by CI: 1.2.3 for a release tag, main-<sha> for a build of main
+ARG VERSION=dev
+ENV SPINDASH_VERSION=${VERSION} \
+    PORT=8089 \
     DATA_DIR=/data \
     EMHTTP_DIR=/emhttp \
     POLL_INTERVAL=60 \

@@ -15,9 +15,17 @@ would only add build time; `fatrace` and the host paths are the same either way.
 
 Release:
 
+1. In `CHANGELOG.md`, turn `## [Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD` and start a new empty
+   `## [Unreleased]` above it.
+2. Commit, then tag and push:
+
 ```bash
-git tag v1.0.0 && git push --tags
+git tag vX.Y.Z && git push origin main vX.Y.Z
 ```
+
+CI builds `ghcr.io/<owner>/spin-dashboard:X.Y.Z` with `SPINDASH_VERSION=X.Y.Z` in it (a build of `main` gets
+`main-<short sha>`). The version is in `/health` (`"version"`), in the start log line and at the bottom of
+the page, with a link to the changelog. `latest` keeps following `main`.
 
 ## Community Applications
 
@@ -34,6 +42,6 @@ git tag v1.0.0 && git push --tags
 ## Checklist per release
 
 - [ ] Tests green in CI
-- [ ] `completed.md` updated
+- [ ] `completed.md` updated, `CHANGELOG.md` has the version and its date
 - [ ] Template changes tested via *Add Container*
 - [ ] Tag set, image built, package public

@@ -41,6 +41,7 @@ from datetime import datetime
 from functools import partial
 
 # ---------- settings ----------
+VERSION = os.environ.get("SPINDASH_VERSION", "dev")     # set in the image by CI (see Dockerfile)
 PORT = int(os.environ.get("PORT", "8089"))
 DATA = os.environ.get("DATA_DIR", "/data")
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -2112,6 +2113,7 @@ def health_status(now=None):
     ok = not stale and all(v for name, v in alive.items() if name != "docker_events")
     return ok, {
         "ok": ok,
+        "version": VERSION,
         "uptime": int(now - health["started"]),
         "poller": {"last_success": None if health["poll"] is None else int(now - health["poll"]),
                    "error": health["poll_error"]},
@@ -2163,7 +2165,7 @@ def main():
         migrate()
     except Exception as e:
         log("migration failed, old files left in place:", repr(e))
-    log(f"Spin Dashboard starting (data: {DATA}, polling every {POLL_INTERVAL}s, "
+    log(f"Spin Dashboard {VERSION} starting (data: {DATA}, polling every {POLL_INTERVAL}s, "
         f"keeping {RETENTION_DAYS} days, fatrace: {fatrace_version()})")
     relabel_existing()
     devs = all_devices()

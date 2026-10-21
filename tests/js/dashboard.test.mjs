@@ -2188,6 +2188,20 @@ test('reads and writes in the quiet hours and the wear message are set in Settin
   assert.equal(box.checked, false);
   box.checked = true; box.dispatchEvent(new w.Event('change'));
   await until(() => w.__posts.length > 1);
+  await new Promise((r) => setTimeout(r, 20));                           // the reply of the save
   assert.deepEqual(w.__posts[1].body, { wear_notify: true });
   dom.window.close();
+});
+
+test('the footer names the version of the server and links to the changelog', async () => {
+  const dom = await load({ ...POOL, health: JSON.stringify({ ok: true, version: '0.9.0' }) });
+  const d = dom.window.document;
+  await until(() => !d.getElementById('foot').hidden);
+  assert.equal(d.getElementById('version').textContent, '0.9.0');
+  assert.match(d.querySelector('#foot a').href, /CHANGELOG\.md$/);
+  assert.equal(text(d.querySelector('#foot a')), 'Wijzigingen');
+  dom.window.close();
+  const old = await load(POOL);                                               // an older server: no footer
+  assert.equal(old.window.document.getElementById('foot').hidden, true);
+  old.window.close();
 });
