@@ -7,6 +7,6 @@
     "test": "node --test --test-force-exit tests/js/*.test.mjs"
   },
   "devDependencies": {
-    "jsdom": "^24.1.0"
+    "jsdom": "^30.1.3"
   }
 }
