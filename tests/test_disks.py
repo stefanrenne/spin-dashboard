@@ -177,3 +177,47 @@ def test_watch_override_outside_mnt_and_on_tmpfs(sd, monkeypatch):
     (sd._tmp / "mounts").write_text("tmpfs /tmp tmpfs rw 0 0\noverlay /tmp/c/merged overlay rw 0 0\n"
                                     "tmpfs /run tmpfs rw 0 0\n")
     assert sd.target_mounts() == ["/tmp"]
+
+
+UD_MOUNTS = ("trunk /mnt/trunk zfs rw 0 0\n"
+             "tmpfs /mnt/disks tmpfs ro 0 0\n"                         # Unraid's own placeholder: no drive
+             "/dev/sdf1 /mnt/disks/backup xfs rw 0 0\n"                 # an HDD of Unassigned Devices
+             "/dev/nvme2n1p1 /mnt/disks/scratch btrfs rw 0 0\n"         # an SSD of Unassigned Devices
+             "//nas/media /mnt/remotes/nas_media cifs rw 0 0\n"         # a network share: no drive
+             "/dev/sdd1 /mnt/disks/oops xfs rw 0 0\n")                  # already in disks.ini: not again
+
+
+def ud_setup(sd):
+    (sd._tmp / "emhttp" / "disks.ini").write_text('["trunk"]\ndevice="sdd"\n')
+    make_disk(sd._tmp, "sdd")
+    make_disk(sd._tmp, "sdf")
+    make_disk(sd._tmp, "nvme2n1", rotational=False)
+    (sd._tmp / "mounts").write_text(UD_MOUNTS)
+
+
+def test_unassigned_devices_are_found_from_the_mounts(sd):
+    ud_setup(sd)
+    assert sd.all_devices() == {"sdd": ("trunk", True), "sdf": ("disks/backup", True), "nvme2n1": ("disks/scratch", False)}
+    assert sd.hdd_devices() == {"sdd": "trunk", "sdf": "disks/backup"}
+
+
+def test_unassigned_devices_are_their_own_lane_and_mount(sd):
+    assert sd.mount_base("disks/backup2") == "disks/backup2"           # never a pool member
+    assert sd.lane_key("disks/backup2") == "disks/backup2"
+    assert sd.mount_key("/mnt/disks/backup/a/b.mkv") == "disks/backup"
+    assert sd.mount_key("/mnt/trunk/a.mkv") == "trunk"
+    assert sd.clean_quiet({"from": "23:00", "to": "07:00", "drives": ["disks/backup"]})["drives"] == ["disks/backup"]
+
+
+def test_unassigned_hdds_are_watched(sd):
+    ud_setup(sd)
+    assert sd.target_mounts() == ["/mnt/disks/backup", "/mnt/trunk"]      # the SSD only when chosen
+    sd.save_settings({"ssd_watch": ["disks/scratch"]})
+    assert "/mnt/disks/scratch" in sd.target_mounts()
+
+
+def test_paths_on_unassigned_devices_and_remotes(sd):
+    shares, bases = {}, {"trunk", "disks/backup"}
+    assert sd.locate("/mnt/disks/backup/photos", shares, bases) == {"kind": "pool", "name": "disks/backup", "hdd": True}
+    assert sd.locate("/mnt/disks/scratch", shares, bases) == {"kind": "pool", "name": "disks/scratch", "hdd": False}
+    assert sd.locate("/mnt/remotes/nas_media/films", shares, bases) == {"kind": "remote", "name": "nas_media", "hdd": False}

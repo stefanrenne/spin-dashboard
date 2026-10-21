@@ -2241,3 +2241,47 @@ test('with one pool there is nothing to filter', async () => {
   assert.equal(dom.window.document.getElementById('feedFilter').hidden, true);
   dom.window.close();
 });
+
+// ---------- Unassigned Devices ----------
+test('a drive of Unassigned Devices is its own lane, card and drive page, by its label', async () => {
+  const UD = served({ [today]: [
+    `${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},disk,sdf,disks/backup,hdd`, `${ep(300)},disk,sdg,disks/backup2,hdd`,
+    `${ep(300)},state,sdd,standby`, `${ep(300)},state,sdf,standby`, `${ep(300)},state,sdg,standby`,
+    `${ep(121)},who,container,duplicati,7,geopend,/mnt/disks/backup/sets/week42.zip`,
+    `${ep(120)},spin,sdf,active`, `${ep(60)},spin,sdf,standby`,
+  ] });
+  const dom = await load(UD);
+  const d = dom.window.document;
+  assert.deepEqual(cardOrder(d).slice(1, 4), ['lanes:disks/backup', 'lanes:disks/backup2', 'lanes:trunk']);   // not merged into one pool
+  const card = d.querySelector('#dash > [data-card="lanes:disks/backup"]');
+  assert.equal(text(card.querySelector('h2')), 'Tijdlijn per schijf · backup');
+  assert.match(card.querySelector('.trace').getAttribute('aria-label'), /^backup: 1 spin-ups/);
+  const up = rows(d).find((x) => /Opgespind/.test(x));
+  assert.match(up, /week42\.zip/);                                          // the cause is found on that drive
+  assert.match(up, /duplicati/);
+  card.querySelector('.drvbtn').click();
+  assert.match(text(d.getElementById('profileTitle')), /^backup sdf/);
+  dom.window.close();
+});
+
+// ---------- bytes per container ----------
+test('bytes per container show in its profile and on the drive page', async () => {
+  const CIO = served({ [today]: [
+    `${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},disk,nvme0n1,cache,ssd`, `${ep(300)},state,sdd,standby`,
+    `${ep(121)},who,container,plex,7,geopend,/mnt/trunk/Media/a.mkv`,
+    `${ep(120)},spin,sdd,active`, `${ep(60)},spin,sdd,standby`,
+    `${ep(110)},cio,plex,sdd,2097152,0`, `${ep(100)},cio,plex,nvme0n1,1024,51200`, `${ep(100)},cio,sonarr,sdd,0,3072`,
+  ] });
+  const dom = await load(CIO);
+  const d = dom.window.document;
+  d.querySelector('#sources .srcbtn[data-src="container|plex"]').click();
+  const tiles = [...d.querySelectorAll('#profileBody .kpi')].map((k) => `${text(k.querySelector('.k-label'))} ${text(k.querySelector('.k-val'))}`);
+  assert.deepEqual(tiles.slice(-2), ['Gelezen van schijven 2 GB', 'Geschreven naar schijven 50 MB']);
+  const rows = [...d.querySelectorAll('#profileBody .cio-drives .cause-row')].map(text);
+  assert.deepEqual(rows, ['trunk 2 GB', 'cache 51 MB']);                         // the biggest first
+  assert.match(text(d.querySelector('#profileBody .cio-drives')), /telt hier niet mee/);
+  d.getElementById('profileDone').click();
+  d.querySelector('#dash > [data-card="lanes:trunk"] .drvbtn').click();
+  assert.deepEqual([...d.querySelectorAll('#profileBody .cio-ctrs .cause-row')].map(text), ['plex 2 GB', 'sonarr 3 MB']);
+  dom.window.close();
+});

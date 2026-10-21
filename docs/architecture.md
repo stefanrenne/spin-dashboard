@@ -50,6 +50,10 @@ not make the dashboard wake that drive every minute; the web server adds the
 waiting lines to the day file it sends. See `io` in `data-formats.md`. Once an hour (and on the first poll
 of a day) it asks every SSD, never an HDD, for its SMART wear (`wear` lines), which wait in the same way.
 
+Drives of Unassigned Devices (`/mnt/disks/<label>`, from the mount table) are followed like pools. Every
+minute it also reads `io.stat` of every container cgroup of the host and writes the bytes per container and
+drive every 10 minutes (`cio` lines).
+
 The poller keeps what it last saw (`drive_states`, `known_devices`) for the watcher, so the watcher never
 has to ask a drive itself. Our own tools (`hdparm`, `smartctl`, `fatrace`) run through `run_own()`, which
 registers their PIDs so the watcher never logs them (rule 3).

@@ -38,6 +38,7 @@ def sd(tmp_path, monkeypatch):
     monkeypatch.setattr(spindash, "PROC", str(tmp_path / "proc"))
     monkeypatch.setattr(spindash, "MOUNTS_FILE", str(tmp_path / "mounts"))
     monkeypatch.setattr(spindash, "MOUNTINFO", str(tmp_path / "mountinfo"))
+    monkeypatch.setattr(spindash, "HOST_CGROUP", str(tmp_path / "cgroup"))
     monkeypatch.setattr(spindash, "own_pids", {})
     monkeypatch.setattr(spindash, "procs", [])
     monkeypatch.setattr(spindash, "streams", [])

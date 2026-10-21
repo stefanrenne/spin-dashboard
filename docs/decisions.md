@@ -117,15 +117,18 @@ by time per path, with a separate index for SMB/NFS lines, and `nearestWho` uses
 Profile with a realistic data set (`node --cpu-prof` on the page in jsdom works well) before
 assuming the network is the bottleneck.
 
-## No bytes per container (yet)
-It is tempting to show how much data each container read and wrote, not only how often. Two things
-stand in the way. The container runs in its own cgroup namespace, so it cannot read other containers'
-`io.stat`; Docker's stats API (`/containers/<id>/stats?one-shot=true`) works, but costs a call per
-container per poll. More importantly, access through `/mnt/user` goes through `shfs` (FUSE): the disk
-I/O is charged to `shfs`, not to the container. With the usual Unraid setup (everything via
-`/mnt/user`) the numbers would be close to zero for exactly the containers that matter. Only
-containers that map `/mnt/diskN` or a pool directly would get real numbers. Until there is a way to
-attribute `shfs` I/O, counts of accesses (after dedup) are the honest measure.
+## Bytes per container, through the host's cgroups
+It is tempting to show how much data each container read and wrote, not only how often. The container
+runs in its own cgroup namespace and cannot see other containers' `io.stat` in its own `/sys/fs/cgroup`,
+but with `--pid=host` pid 1 is the host's init, and `/proc/1/root/sys/fs/cgroup` is the host's cgroup v2
+tree: every container's `io.stat` (bytes read and written per drive, by major:minor) can be read there,
+without an extra mount and without a Docker API call per container per poll. The poller adds the
+increases up and writes them every 10 minutes (`cio` lines), which keeps the day files small.
+
+The limit stays: access through `/mnt/user` goes through `shfs` (FUSE), so its disk I/O is charged to
+`shfs`, not to the container. Containers that map `/mnt/diskN` or a pool directly get real numbers;
+for the usual "everything through `/mnt/user`" setup the numbers stay low. The dashboard says so next to
+the numbers, and the counts of accesses (after dedup) remain the measure for those containers.
 
 ## Quiet hours notify through a webhook, not Unraid's notifications
 Unraid's own notifications are sent by a script on the host (`/usr/local/emhttp/webGui/scripts/notify`).

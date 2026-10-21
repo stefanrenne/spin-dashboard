@@ -7,6 +7,8 @@ What changed per version, for people who run Spin Dashboard. The detailed log of
 
 ### Added
 - Live activity can be filtered per pool (and the array) with checkboxes; the choice is kept per browser.
+- Unassigned Devices: drives mounted by the plugin at `/mnt/disks/<label>` are followed like pools, each as its own lane.
+- Bytes per container: what each container read and wrote per drive, in its profile and on the drive pages.
 
 ## [0.9.0] - 2026-10-21
 

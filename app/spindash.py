@@ -14,7 +14,7 @@ One process with these parts:
   web      serves the dashboard and the CSV files, and stores the settings (hidden paths, quiet hours).
 
 Everything lives in DATA_DIR/days: one CSV per day (YYYY-MM-DD.csv, local date) with lines
-`epoch,type,...` (disk, state, spin, io, wear, proc, who, activity, ctr). Older separate files (spin.csv, disks.csv,
+`epoch,type,...` (disk, state, spin, io, wear, cio, proc, who, activity, ctr). Older separate files (spin.csv, disks.csv,
 who.csv, activity.csv) are migrated to day files once at start.
 """
 import gzip
@@ -66,6 +66,7 @@ MOUNTS_FILE = "/proc/self/mounts"
 MOUNTINFO = "/proc/self/mountinfo"
 USER_SHARES = "/mnt/user"
 DOCKER_SOCK = "/var/run/docker.sock"
+HOST_CGROUP = "/proc/1/root/sys/fs/cgroup"     # the host's cgroup v2 tree: pid 1 is the host's init (--pid=host)
 
 DAYS = os.path.join(DATA, "days")
 LEGACY = os.path.join(DATA, "legacy")
@@ -79,7 +80,7 @@ SETTINGS = os.path.join(DATA, "spindash-settings.json")
 OWN_FILES = {"spin.csv", "disks.csv", "who.csv", "activity.csv",
              "spindash-settings.json", "spindash-settings.json.tmp"}
 DAY_FILE = re.compile(r"^\d{4}-\d{2}-\d{2}\.csv(?:\.tmp)?$")
-TYPES = ("disk", "state", "spin", "io", "wear", "proc", "who", "activity", "ctr")   # order within the same second
+TYPES = ("disk", "state", "spin", "io", "wear", "cio", "proc", "who", "activity", "ctr")   # order within the same second
 
 write_lock = threading.Lock()
 # health for /health: when the poller last succeeded, what the watcher watches, whether
@@ -267,18 +268,45 @@ def is_rotational(dev):
 
 
 def mount_base(name):
-    """disk1 -> disk1, trunk2 -> trunk (pool members), parity -> None."""
+    """disk1 -> disk1, trunk2 -> trunk (pool members), parity -> None, disks/backup -> disks/backup
+    (a drive of Unassigned Devices: its own mount, /mnt/disks/<label>, never a pool member)."""
     if name.startswith("parity"):
         return None
-    return name if re.fullmatch(r"disk\d+", name) else re.sub(r"\d+$", "", name)
+    if name.startswith(UD_PREFIX) or re.fullmatch(r"disk\d+", name):
+        return name
+    return re.sub(r"\d+$", "", name)
 
 
 BLOCK_NAME = re.compile(r"^(sd[a-z]+|nvme\d+n\d+)$")     # whole drives, no partitions, loop or md
+# Drives of the Unassigned Devices plugin: not in disks.ini, mounted at /mnt/disks/<label>. Named
+# "disks/<label>" (their mount below /mnt). Network shares of the plugin (/mnt/remotes) are no drives.
+UD_PREFIX = "disks/"
+UD_MOUNT = re.compile(r"^/mnt/disks/([^/]+)$")
+UD_SOURCE = re.compile(r"^/dev/(sd[a-z]+|nvme\d+n\d+)(?:p?\d+)?$")
+
+
+def ud_devices(known=()):
+    """{device: (name, hdd)} for the drives mounted by Unassigned Devices, from the mount table only (never
+    touching a drive). Drives that are already in `known` (disks.ini) are left out."""
+    out = {}
+    try:
+        mounts = mounted()
+    except OSError:
+        return out
+    for src, mp, fs in mounts:
+        m, d = UD_MOUNT.match(mp), UD_SOURCE.match(src)
+        if not m or not d or fs in SKIP_FSTYPES or d.group(1) in known or d.group(1) in out:
+            continue
+        r = rotational(d.group(1))
+        if r is not None:
+            out[d.group(1)] = (UD_PREFIX + m.group(1), r)
+    return out
 
 
 def all_devices():
     """{device: (name, hdd)} for every drive Unraid knows (disks.ini), SSDs and NVMe included.
-    Without disks.ini: every sdX and nvmeXnY in /sys/block, named after the device.
+    Plus the drives of Unassigned Devices (ud_devices). Without disks.ini: every sdX and nvmeXnY in
+    /sys/block, named after the device.
     Devices the kernel does not know (no /sys/block entry) are left out."""
     out = {}
     for d, n in read_disks_ini():
@@ -286,6 +314,7 @@ def all_devices():
         if r is not None:
             out[d] = (n, r)
     if out:
+        out.update(ud_devices(out))
         return out
     try:
         names = sorted(os.listdir(SYS_BLOCK))
@@ -548,6 +577,81 @@ def data_dir_devices(devs=None):
     return None
 
 
+# Bytes per container: what each container read and wrote per drive, from io.stat of its cgroup (kernel
+# counters, wakes nothing). Added up and written every CIO_INTERVAL as `cio` lines. Only I/O the container
+# itself does counts: access through /mnt/user is done by shfs and counts for no container.
+CIO_INTERVAL = 600
+CGROUP_NAME = re.compile(r"^(?:docker-)?([0-9a-f]{64})(?:\.scope)?$")
+
+
+def container_io():
+    """{container id: {"major:minor": (bytes read, bytes written)}} from io.stat of every container cgroup
+    (cgroupfs: docker/<id>, systemd: system.slice/docker-<id>.scope)."""
+    out = {}
+    for parent in ("docker", "system.slice"):
+        base = os.path.join(HOST_CGROUP, parent)
+        try:
+            names = os.listdir(base)
+        except OSError:
+            continue
+        for n in names:
+            m = CGROUP_NAME.match(n)
+            if not m:
+                continue
+            try:
+                text = open(os.path.join(base, n, "io.stat")).read()
+            except OSError:
+                continue
+            per = {}
+            for line in text.splitlines():
+                f = line.split()
+                kv = dict(x.split("=", 1) for x in f[1:] if "=" in x)
+                try:
+                    per[f[0]] = (int(kv.get("rbytes", 0)), int(kv.get("wbytes", 0)))
+                except (ValueError, IndexError):
+                    continue
+            out[m.group(1)] = per
+    return out
+
+
+def device_numbers(devs):
+    """{"major:minor": device} of the drives, from /sys/block/<dev>/dev."""
+    out = {}
+    for d in devs:
+        try:
+            out[open(f"{SYS_BLOCK}/{d}/dev").read().strip()] = d
+        except OSError:
+            pass
+    return out
+
+
+def container_io_lines(now, last, devs):
+    """`cio` lines (container, device, KiB read, KiB written) every CIO_INTERVAL. The first poll only takes the
+    counters; after that a container that is new since the previous poll counts in full (it started since)."""
+    st = last.setdefault("cio", {"prev": None, "acc": {}, "since": now})
+    cur, nums = container_io(), device_numbers(devs)
+    if st["prev"] is not None:
+        for cid, per in cur.items():
+            old = st["prev"].get(cid, {})
+            for mm, (r, w) in per.items():
+                dev = nums.get(mm)
+                r0, w0 = old.get(mm, (0, 0))
+                if not dev or r < r0 or w < w0 or (r == r0 and w == w0):
+                    continue
+                acc = st["acc"].setdefault((cid, dev), [0, 0])
+                acc[0] += r - r0
+                acc[1] += w - w0
+    st["prev"] = cur
+    if now - st["since"] < CIO_INTERVAL:
+        return []
+    lines = []
+    for (cid, dev), (r, w) in sorted(st["acc"].items()):
+        if r >= 1024 or w >= 1024:
+            lines.append(f"{now},cio,{container_name(cid).replace(',', ' ')},{dev},{r // 1024},{w // 1024}")
+    st["acc"], st["since"] = {}, now
+    return lines
+
+
 def poll_once(last, now=None):
     """One poll. Writes to the day file:
     - `disk` lines (device, name, hdd/ssd) on the first poll of a day or when the drives change;
@@ -607,6 +711,10 @@ def poll_once(last, now=None):
         pct, kib = ssd_wear(dev)
         if pct is not None or kib is not None:
             io.append(f"{now},wear,{dev},{'' if pct is None else pct},{'' if kib is None else kib}")
+    try:
+        io += container_io_lines(now, last, alld)
+    except Exception as e:                      # bytes per container must never break the poll
+        log("container io failed:", repr(e))
     last["day"], last["disks"], last["all"] = day, dict(devs), dict(alld)
     drive_states.clear()
     drive_states.update(known)
@@ -646,8 +754,19 @@ notified = {}
 
 
 def lane_key(name):
-    """Lane key as in the frontend: parity and diskN belong to the array, pool members to their pool."""
+    """Lane key as in the frontend: parity and diskN belong to the array, pool members to their pool, a drive
+    of Unassigned Devices (disks/<label>) is its own lane."""
+    if name.startswith(UD_PREFIX):
+        return name
     return "array" if re.fullmatch(r"parity\d*|disk\d+", name) else re.sub(r"\d+$", "", name)
+
+
+def mount_key(path):
+    """The mount (below /mnt) an event path is on: trunk, disk1, or disks/<label> for Unassigned Devices."""
+    p = path.split("/")
+    if len(p) > 3 and p[2] == "disks":
+        return UD_PREFIX + p[3]
+    return p[2] if len(p) > 2 else ""
 
 
 def in_quiet(ts, quiet):
@@ -1220,7 +1339,7 @@ def handle(line):
     op = next((label for c, label in OPS if c in types), None)
     if not op:
         return
-    if op == "geopend" and path.split("/")[2:3] and path.split("/")[2] in writes_only:
+    if op == "geopend" and mount_key(path) in writes_only:
         return                               # a read on an SSD pool that only logs writes
     store = docker_store_path(path, op)
     if store is None:
@@ -1450,6 +1569,11 @@ def locate(src, shares, hdd_bases):
         return None
     array_hdd = any(re.fullmatch(r"disk\d+", b) for b in hdd_bases)
     top = p[1]
+    if top == "remotes":                                   # a network share of Unassigned Devices: no drive
+        return {"kind": "remote", "name": p[2] if len(p) > 2 else "", "hdd": False}
+    if top == "disks" and len(p) > 2:                       # a drive of Unassigned Devices
+        name = UD_PREFIX + p[2]
+        return {"kind": "pool", "name": name, "hdd": name in hdd_bases}
     if top in ("user", "user0"):
         if len(p) < 3:
             return {"kind": "user", "hdd": array_hdd or bool(hdd_bases)}
@@ -1714,7 +1838,7 @@ def clean_hide(value):
 
 
 HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
-LANE_NAME = re.compile(r"^[\w.-]{1,64}$")
+LANE_NAME = re.compile(r"^(disks/)?[\w.-]{1,64}$")     # a pool, array, or disks/<label> (Unassigned Devices)
 
 
 def clean_quiet(value):

@@ -295,3 +295,54 @@ def test_drives_are_asked_at_the_same_time(sd, monkeypatch):
         return "standby"
     monkeypatch.setattr(sd, "drive_state", state)
     assert sd.poll_once({}, now=T) == 4
+
+
+def test_an_unassigned_hdd_gets_its_spin_state(sd, monkeypatch):
+    (sd._tmp / "emhttp" / "disks.ini").write_text('["trunk"]\ndevice="sdd"\n')
+    make_disk(sd._tmp, "sdd")
+    make_disk(sd._tmp, "sdf")
+    (sd._tmp / "mounts").write_text("/dev/sdf1 /mnt/disks/backup xfs rw 0 0\n")
+    monkeypatch.setattr(sd, "drive_state", lambda dev: "standby")
+    sd.poll_once({}, now=T)
+    lines = open(sd.day_path("2026-10-09")).read().splitlines()
+    assert f"{T},disk,sdf,disks/backup,hdd" in lines and f"{T},state,sdf,standby" in lines
+
+
+PLEX = "a" * 64
+SONARR = "b" * 64
+
+
+def cgroup(sd, cid, stats, parent="docker", name=None):
+    """io.stat of a container cgroup: {"major:minor": (rbytes, wbytes)}."""
+    d = sd._tmp / "cgroup" / parent / (name or cid)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "io.stat").write_text("".join(f"{mm} rbytes={r} wbytes={w} rios=1 wios=1 dbytes=0 dios=0\n" for mm, (r, w) in stats.items()))
+
+
+def test_bytes_per_container_are_added_up_and_written_every_ten_minutes(sd, monkeypatch):
+    states, _ = setup_mixed(sd, monkeypatch)
+    states["sdd"] = "active"                                        # so the lines are written right away
+    (sd._tmp / "sys" / "sdd" / "dev").write_text("8:48\n")
+    (sd._tmp / "sys" / "nvme0n1" / "dev").write_text("259:5\n")
+    sd.names.update({PLEX: "plex", SONARR: "sonarr"})
+    cgroup(sd, PLEX, {"8:48": (10 * 2**20, 0), "7:0": (999, 0)})     # loop0 (docker.img): not a drive
+    last = {}
+    sd.poll_once(last, now=T)                                         # first poll: only the counters
+    cgroup(sd, PLEX, {"8:48": (30 * 2**20, 2**20), "7:0": (5000, 0)})
+    cgroup(sd, SONARR, {"259:5": (0, 4 * 2**20)}, parent="system.slice", name=f"docker-{SONARR}.scope")   # started since
+    sd.poll_once(last, now=T + 60)
+    sd.poll_once(last, now=T + 300)
+    lines = lambda: [ln for ln in open(sd.day_path("2026-10-09")).read().splitlines() if ",cio," in ln]
+    assert lines() == []                                              # not yet ten minutes
+    cgroup(sd, PLEX, {"8:48": (40 * 2**20, 2**20)})
+    sd.poll_once(last, now=T + 600)
+    assert lines() == [f"{T + 600},cio,plex,sdd,30720,1024", f"{T + 600},cio,sonarr,nvme0n1,0,4096"]
+    sd.poll_once(last, now=T + 1260)                                  # nothing new: no lines
+    assert len(lines()) == 2
+
+
+def test_container_io_reads_both_cgroup_layouts(sd):
+    cgroup(sd, PLEX, {"8:48": (1, 2)})
+    cgroup(sd, SONARR, {"259:5": (3, 4)}, parent="system.slice", name=f"docker-{SONARR}.scope")
+    (sd._tmp / "cgroup" / "docker" / "not-a-container").mkdir()
+    assert sd.container_io() == {PLEX: {"8:48": (1, 2)}, SONARR: {"259:5": (3, 4)}}

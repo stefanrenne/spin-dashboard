@@ -32,6 +32,7 @@ Every line starts with epoch seconds and a type, followed by fields per type.
 | `who` | kind, name, pid, action, path | Access to a file or folder (fatrace). See below. |
 | `activity` | disk, event, path | Old inotify data (`OPEN+ISDIR`, `MODIFY`, …). Only written by the migration. |
 | `proc` | pid, process name | The process behind a container PID, as fatrace names it (`Plex Media Scan`, `Plex Transcoder`; at most 15 characters, commas replaced by spaces). Written right before the first `who` line of that PID and name on a day. See below. |
+| `cio` | container, device, KiB read, KiB written | What a container read and wrote on one drive since the previous `cio` line, from `io.stat` of its cgroup; written every 10 minutes, only when not zero. See below. |
 | `ctr` | name, event[, exit code] | Container lifecycle from Docker's event stream: `start`, `die` (with the exit code when Docker gives one), `healthy`, `unhealthy`, `oom` (killed for lack of memory, followed by a `die`). See below. |
 
 Thanks to the `disk` and `state` lines at the top, every day file can be read on its own: the
@@ -90,6 +91,21 @@ hard rule 1); `-n standby` is a second guard. NVMe: `percentage_used` and `data_
 512 000 bytes). SATA: the life left from the first known attribute of 177 (Samsung), 231, 233 (Intel), 202
 (Crucial/Micron) and 169 (WD), as 100 minus its normalised value, and the written blocks from 241 or 246 times
 the logical block size. A drive that reports neither gets no line. Wear lines wait in memory like `io` lines.
+
+### cio
+
+The poller reads `io.stat` of every container cgroup of the host (`/proc/1/root/sys/fs/cgroup`, `docker/<id>`
+or `system.slice/docker-<id>.scope`), maps major:minor to the drives it knows and adds the increases up per
+container and drive; every 10 minutes the totals become `cio` lines (container name as Docker names it), which
+wait in memory like `io` lines. The first poll after a start only takes the counters. Only what the container
+itself reads and writes counts: access through `/mnt/user` is done by `shfs` (see `decisions.md`).
+
+### Unassigned Devices
+
+A drive mounted by the Unassigned Devices plugin at `/mnt/disks/<label>` (found in the mount table, never by
+touching the drive) gets the name `disks/<label>` in `disk` lines and is its own lane (`disks/<label>` as lane
+key, also in `quiet.drives` and `ssd_watch`); its spin state and file access are followed like those of a pool.
+Network shares under `/mnt/remotes` are no drives: `containers.json` gives them `"kind": "remote"`.
 
 ### ctr
 
@@ -211,6 +227,7 @@ and counted in the log; they stay in `legacy/`.
 | 2026-10-20 | `disk` lines get a third field `hdd`/`ssd` and also name SSDs; new line type `io` | None needed: purely additive. An older `disk` line has two fields and only ever named an HDD, so a missing kind reads as `hdd`; older frontends take the first two fields and ignore the rest. Older day files have no `io` lines, so the dashboard shows no reads or writes for that time; they cannot be filled in afterwards. Older frontends ignore unknown line types. Tested by `test_old_disk_lines_without_kind_still_load` and the frontend tests that load `disk` lines without a kind. |
 | 2026-10-20 | New line type `wear`; `/data/spins.csv` also carries `wear` lines and hourly `io` totals | None needed: purely additive. Older day files have no `wear` lines, so the dashboard shows no SMART wear for that time; it cannot be filled in afterwards. `spins.csv` is computed from the day files on every request, nothing stored changes. Older frontends ignore the unknown line types. Tested by `test_spins_adds_up_io_per_drive_per_hour_and_keeps_wear` and `test_old_disk_lines_without_kind_still_load`. |
 | 2026-10-20 | New key `wear_warn` in `spindash-settings.json` | None needed: purely additive. An older settings file has no `wear_warn`, which reads as the default of 100 GB per day. Older versions ignore the key. Tested by `test_wear_warn_setting_is_checked`. |
+| 2026-10-21 | New line type `cio`; drives of Unassigned Devices in `disk` lines as `disks/<label>`; `containers.json` kind `remote` | None needed: purely additive. Older day files have no `cio` lines and no Unassigned Devices drives (they were not followed), so those simply show nothing for that time. Older frontends ignore `cio` and show a `disks/<label>` drive as a pool of that name. Lane keys with `disks/` are new values in `quiet.drives` and `ssd_watch`; older settings files have none. Tested by `test_unassigned_devices_are_found_from_the_mounts`, `test_bytes_per_container_are_added_up_and_written_every_ten_minutes` and the frontend tests for both. |
 | 2026-10-21 | New optional field `io_mb` in `quiet`, new key `wear_notify` in `spindash-settings.json` | None needed: purely additive. An older settings file has neither, which reads as "no I/O message, no wear message", what older versions did. Older versions drop the unknown field (they rebuild `quiet` from `from`, `to` and `drives`) and ignore the key. Tested by `test_quiet_io_mb_is_checked` and the notification tests. |
 | 2026-10-21 | New `ctr` event `oom` | None needed: purely additive, a new value in an existing field. Older day files simply have none; older frontends show the event without a translated label. Tested by `test_ctr_line_for_an_oom_kill` and the frontend test for an OOM kill. |
 | 2026-10-21 | New key `ssd_reads` in `spindash-settings.json` | None needed: purely additive. An older settings file has no `ssd_reads`, which reads as "only writes on every SSD pool". That is a deliberate change of what is recorded from now on: reads on SSD pools were logged before and are not anymore unless the pool is chosen; lines already in the day files stay. Older versions ignore the key. Tested by `test_ssd_pools_log_only_writes_unless_reads_are_chosen` and `test_ssd_reads_setting_is_checked`. |

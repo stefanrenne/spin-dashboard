@@ -10,6 +10,9 @@ Open work, roughly by priority. Move finished items to `completed.md`.
 - [ ] Support thread on the Unraid forum and submission to Community Applications
 
 ## Features
-- [ ] Unassigned Devices: HDDs mounted by the Unassigned Devices plugin (`/mnt/disks/<name>`) are not in `disks.ini`, so they are neither polled nor watched, and Settings › Paths per container shows `/mnt/disks` and `/mnt/remotes` as a pool called "disks" or "remotes". Find where the plugin keeps device and mount point (without touching the drives) and treat them like pools; network mounts under `/mnt/remotes` stay out
-- [ ] Test SAS drives and HBAs; validate the `smartctl -n standby` fallback
-- [ ] Bytes per container: only possible for direct `/mnt/diskN` or pool mappings, see `docs/decisions.md`
+- [ ] Test SAS drives and HBAs (needs the hardware). Plan:
+  - With a SAS drive (or SATA behind an HBA) in standby: run `hdparm -C /dev/sdX`; if it says `unknown` or fails, `drive_state()` falls back to `smartctl -n standby -i`. Check that the fallback returns `standby` (output contains `STANDBY`, exit code 2) and `active` (exit code 0) correctly, and that neither call spins the drive up (watch the spin-up count in SMART, attribute 4, before and after)
+  - Check the exit codes: `smartctl` sets bit flags (for example bit 2 when a SMART command failed) even when the drive answered; if a drive returns non-zero while active, accept "no STANDBY in the output" as `active` and add a test with that output
+  - SAS drives report standby through SCSI power conditions: confirm `smartctl -n standby` sees them, and try `sdparm --command=sense` as an alternative if not
+  - Check `/sys/block/sdX/stat` counts I/O behind the HBA (the `io` lines) and that `rotational` is right for SAS SSDs
+  - Record the findings in `docs/decisions.md` and add tests with the real `hdparm`/`smartctl` output

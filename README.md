@@ -31,6 +31,8 @@ See when your hard drives spin up and down, and **why**.
 - Hide noisy paths with wildcards under Settings › Hidden paths (for example `/mnt/user/appdata/*`); they no longer count anywhere in the dashboard. The list is stored on the server, so it is the same in every browser. The data on disk stays complete.
 - Works with the array and with HDD pools (XFS, Btrfs, ZFS). SSD/NVMe pools show how much they read and write (from the kernel's counters, which never wake a drive); which file is written by whom (and optionally read) can be switched on per SSD pool under Settings › File access on SSD pools.
 - **Reads per drive** and **Writes per drive** also cover an SSD pool once its file access is switched on.
+- **Bytes per container**: how much each container read and wrote per drive, from the host's cgroup counters, in its profile and on the drive pages. Only what the container does itself counts: access through `/mnt/user` goes through Unraid (shfs).
+- **Unassigned Devices**: drives mounted by the Unassigned Devices plugin (`/mnt/disks/<label>`) are followed like pools, each as its own lane.
 - **SSD wear**: what the SSDs write per day (a key figure, compared with the previous period), and per SSD the wear and total written from SMART. An SSD that writes more than a limit you set (100 GB per day by default) is marked, and can send a message through the webhook. The SSD page shows how the wear went in the period and, at the current pace, in how many years the rated endurance is reached.
 
 <picture>
@@ -124,7 +126,7 @@ Open the WebUI on port 8089. The first drive check runs within a minute; file so
 | Setting | Why |
 |---|---|
 | Privileged | fanotify on whole filesystems needs `CAP_SYS_ADMIN`; `hdparm` and `smartctl` need raw access to the drives. `smartctl` is only used with `-n standby` (never wakes a drive): as a fallback for the spin state of HDDs, and once an hour for the wear of SSDs. |
-| `--pid=host` | To see which process (and which container) opened a file. |
+| `--pid=host` | To see which process (and which container) opened a file, and to read the host's cgroup counters (bytes per container) through `/proc/1/root/sys/fs/cgroup`. |
 | `/mnt` read-only, slave | To trace file access on the array and pools. Nothing is ever written there. |
 | `/var/local/emhttp` read-only | Drive names and pool membership. |
 | Docker socket read-only | Container names for the processes that open files, start/stop/health events of containers, and the folders and volumes each container maps (Settings and the overview). Never used to change anything. |

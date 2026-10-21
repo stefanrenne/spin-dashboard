@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-10-21: Unassigned Devices and bytes per container
+- Drives mounted by Unassigned Devices at `/mnt/disks/<label>` are found in the mount table, named `disks/<label>`, and followed like pools: spin state, file access, their own lane and card, drive page; `/mnt/remotes` shows as a network share in Paths per container. Not seen on the own server (no such drives there), tested with mount tables
+- Bytes per container from the host's cgroup v2 `io.stat` (`/proc/1/root/sys/fs/cgroup`), added up and written every 10 minutes as `cio` lines; shown in the container profile (read/written, per drive) and on the drive pages (per container). Checked on the own server that `io.stat` is readable there
+- SAS testing stays in `todo.md`, now with a concrete test plan
+
 ## 2026-10-21: Live activity per pool
 - Checkboxes above Live activity, one per pool (and the array) with activity, choose which pools the feed shows (also for streamed lines); kept per browser in `spindash.feedHide`; hidden when there is only one
 
