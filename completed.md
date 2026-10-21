@@ -2,6 +2,9 @@
 
 Newest first.
 
+## 2026-10-21: `docker stop` writes the waiting lines (checked on the server)
+- Checked on real hardware that `stop()` (SIGTERM) works: the containers with the handler stopped with exit code 0 within Docker's timeout (the version without it: 143), and an `io` line that only existed in memory at the stop (17:50:55 on 2026-10-20, all HDDs asleep) is in the day file
+
 ## 2026-10-20: one fatrace per filesystem
 - With file access on for an SSD pool that holds Docker's data-root, the watcher also followed the container overlay mounts (health checks and binaries as noise) and Docker volumes that bind a folder of the pool (every event twice, under two paths). `target_mounts()` now skips overlay, tmpfs and other non-drive filesystems and keeps one mount per source: the shortest under `/mnt`
 - fatrace still saw Docker's storage through the real filesystem (some 25,000 opens of binaries and libraries a minute). Opens in Docker's storage are no longer logged, writes to a layer become one line per layer folder, the container logs stay as they are
