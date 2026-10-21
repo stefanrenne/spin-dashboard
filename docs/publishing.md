@@ -6,7 +6,7 @@ On every push to `main` (`latest`) and on tags `v*` (`1.2.3`), CI builds an imag
 `ghcr.io/<owner>/spin-dashboard`. Every Monday it also rebuilds `latest` from `main` with a freshly pulled base
 image, so security fixes of Python's Debian base and of `fatrace`, `hdparm` and `smartmontools` reach the image
 without a code change. Dependabot (`.github/dependabot.yml`) opens weekly PRs for the actions, the test tools
-and the base image. On a PR, CI runs the tests and builds the image without pushing it; when that passes,
+and the base image, one PR per ecosystem (grouped). On a PR, CI runs the tests and builds the image without pushing it; when that passes,
 `.github/workflows/dependabot-automerge.yml` merges the PR (squash, only the commit CI tested) and starts CI
 on `main`, which builds and pushes `latest`. A PR whose tests or image build fail stays open for a look. After the first build: *GitHub → Packages → spin-dashboard →
 Package settings → Change visibility → Public*, otherwise Unraid cannot pull the image.

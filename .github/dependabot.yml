@@ -1,20 +1,33 @@
-# Weekly update PRs for the CI actions, the test tools and the Docker base image.
-# CI runs the tests on every PR; the image is only built after a merge to main.
+# Weekly update PRs for the CI actions, the test tools and the Docker base image, one PR per ecosystem
+# (grouped), so a week's updates do not keep putting each other behind main.
+# CI runs the tests and an image build on every PR; dependabot-automerge.yml merges it when that passes.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    groups:
+      npm:
+        patterns: ["*"]
   - package-ecosystem: pip
     directory: /
     schedule:
       interval: weekly
+    groups:
+      pip:
+        patterns: ["*"]
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    groups:
+      docker:
+        patterns: ["*"]
