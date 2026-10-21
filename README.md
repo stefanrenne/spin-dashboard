@@ -21,7 +21,7 @@ See when your hard drives spin up and down, and **why**.
 - **Reads per drive** and **Writes per drive**: per drive the top sources and files over the selected period — answers "why is this drive never idle", even when there were no spin-ups.
 - **Quiet hours**: set a window in which the drives should sleep (for example 23:00–07:00, for all drives or chosen pools). Spin-ups inside it are marked, and can be sent to a webhook (ntfy, Gotify, Discord, Slack, Home Assistant); optionally also when a drive or SSD pool reads and writes more than a number of MB inside the window.
 - **CSV export** of the selected period: spin-ups, file access with source and process, container events, reads and writes per drive per hour and the SMART wear, ready for a spreadsheet.
-- **Live activity feed**: the most recent file events stream in as they happen (over Server-Sent Events), newest first, with an R/W marker, source and relative time.
+- **Live activity feed**: the most recent file events stream in as they happen (over Server-Sent Events), newest first, with an R/W marker, source and relative time; checkboxes per pool (and the array) choose which ones it shows.
 - Click a spin-up to see every file that was opened during that session, with time and source.
 - Rankings of what wakes your drives, by folder and by source.
 - Browse back and forward through history: the last hour, a day at a time in the 24-hour view, a week in the 7-day view, a month (30 days) in the 30-day view.
@@ -35,7 +35,7 @@ See when your hard drives spin up and down, and **why**.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/active-drives-live-activity.png">
-  <img alt="Reads per drive and writes per drive with the top processes and files, spin time and rest per drive, and a live activity feed of the most recent file events" src="docs/images/active-drives-live-activity-light.png">
+  <img alt="Reads per drive and writes per drive with the top processes and files, spin time and rest per drive, and a live activity feed of the most recent file events with a checkbox per pool" src="docs/images/active-drives-live-activity-light.png">
 </picture>
 
 ## Install

@@ -35,7 +35,7 @@ keeps working. Old-format files (`spin.csv`, `who.csv`, …) placed in `DATA_DIR
 start, which is a quick way to try the dashboard on real data. For the frontend only: open
 `http://localhost:8089/?demo`. Force a language with `?lang=de` (en, nl, fr, de, es); otherwise the
 UI follows the browser language or the last chosen language (`localStorage`, key `spindash.lang`).
-The card layout from Settings is stored per browser under `spindash.cards`: a JSON list of
+The pools left out of Live activity are stored per browser under `spindash.feedHide` (a JSON list of lane keys). The card layout from Settings is stored per browser under `spindash.cards`: a JSON list of
 `{id, hidden, size}` in display order (`size` is `half` or `full`; missing or unknown means the card's default,
 from `data-half` in the HTML) (ids `kpi`, `lanes:<pool>`, `days`, `hist`, `causes`, `src`, `actR`, `actW`, `rest`, `feed`, `events`); unknown ids are
 ignored and missing cards are added at the end. The old id `act` (one Active drives card, before the split) is read as

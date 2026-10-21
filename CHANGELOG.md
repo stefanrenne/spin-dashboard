@@ -5,6 +5,9 @@ What changed per version, for people who run Spin Dashboard. The detailed log of
 
 ## [Unreleased]
 
+### Added
+- Live activity can be filtered per pool (and the array) with checkboxes; the choice is kept per browser.
+
 ## [0.9.0] - 2026-10-21
 
 The first tagged version: everything up to now. Feature complete for a first release; the tests on a

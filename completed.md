@@ -2,6 +2,9 @@
 
 Newest first.
 
+## 2026-10-21: Live activity per pool
+- Checkboxes above Live activity, one per pool (and the array) with activity, choose which pools the feed shows (also for streamed lines); kept per browser in `spindash.feedHide`; hidden when there is only one
+
 ## 2026-10-21: Dependabot PRs merge themselves
 - Dependabot groups a week's updates into one PR per ecosystem (actions, npm, pip, docker), so they do not keep putting each other behind `main`; a PR that is behind is merged as it is, unless it changes a workflow file: that one needs a rebase, which Dependabot only takes from a user with push access (so from `AUTOMERGE_TOKEN`, or by hand)
 - CI builds the image on pull requests too (without pushing), so updates of the build actions and the base image are tested before they land

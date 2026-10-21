@@ -2205,3 +2205,39 @@ test('the footer names the version of the server and links to the changelog', as
   assert.equal(old.window.document.getElementById('foot').hidden, true);
   old.window.close();
 });
+
+test('live activity can be filtered per pool, and the choice is remembered', async () => {
+  const MIX = served({ [today]: [
+    `${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},disk,sdc,disk1,hdd`, `${ep(300)},disk,nvme0n1,frunk,ssd`, `${ep(300)},state,sdd,standby`, `${ep(300)},state,sdc,standby`,
+    `${ep(30)},who,container,plex,7,geopend,/mnt/trunk/Media/a.mkv`,
+    `${ep(20)},who,container,sonarr,8,geschreven,/mnt/frunk/appdata/sonarr/sonarr.db`,
+    `${ep(10)},who,gebruiker,shell (ssh),9,geopend,/mnt/disk1/Documents/b.pdf`,
+  ] });
+  const dom = await load(MIX);
+  const d = dom.window.document, w = dom.window;
+  const box = d.getElementById('feedFilter');
+  assert.equal(box.hidden, false);
+  assert.deepEqual([...box.querySelectorAll('label')].map(text), ['Array', 'frunk', 'trunk']);
+  assert.equal(box.getAttribute('aria-label'), 'Pools tonen');
+  const feed = () => text(d.getElementById('feed'));
+  assert.match(feed(), /a\.mkv/); assert.match(feed(), /sonarr\.db/); assert.match(feed(), /b\.pdf/);
+  const frunk = box.querySelector('input[value="frunk"]');
+  frunk.checked = false; frunk.dispatchEvent(new w.Event('change', { bubbles: true }));
+  assert.doesNotMatch(feed(), /sonarr\.db/);
+  assert.match(feed(), /a\.mkv/);
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.feedHide')), ['frunk']);
+  dom.window.close();
+  // a new page keeps the choice
+  const again = await load(MIX, 'http://dash/?lang=nl', ['en-US'], null, (w2) => w2.localStorage.setItem('spindash.feedHide', '["frunk","array"]'));
+  const d2 = again.window.document;
+  assert.equal(d2.querySelector('#feedFilter input[value="frunk"]').checked, false);
+  assert.doesNotMatch(text(d2.getElementById('feed')), /sonarr\.db|b\.pdf/);
+  assert.match(text(d2.getElementById('feed')), /a\.mkv/);
+  again.window.close();
+});
+
+test('with one pool there is nothing to filter', async () => {
+  const dom = await load(POOL);
+  assert.equal(dom.window.document.getElementById('feedFilter').hidden, true);
+  dom.window.close();
+});
