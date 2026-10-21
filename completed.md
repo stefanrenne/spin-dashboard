@@ -2,6 +2,10 @@
 
 Newest first.
 
+## 2026-10-21: Dependabot PRs merge themselves
+- CI builds the image on pull requests too (without pushing), so updates of the build actions and the base image are tested before they land
+- `dependabot-automerge.yml`: when CI passed on a Dependabot PR, it is squash-merged (only the tested commit) and CI is started on `main` to build `latest`; failing PRs stay open. No repository setting or branch protection needed, so pushing to `main` directly keeps working
+
 ## 2026-10-21: version and changelog
 - `CHANGELOG.md` for users, with 0.9.0 as the first version (everything up to now); `docs/publishing.md` says how a release is made
 - CI puts the version in the image (`SPINDASH_VERSION`: `X.Y.Z` for a tag `vX.Y.Z`, `main-<sha>` otherwise); it is in `/health`, the start log and at the bottom of the page with a link to the changelog

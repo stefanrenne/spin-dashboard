@@ -1,0 +1,40 @@
+name: Dependabot auto-merge
+
+# When CI passed on a Dependabot pull request (the tests and an image build), merge it and build main.
+# Runs as workflow_run, in the context of main: it never checks out the PR's code.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: dependabot-automerge
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge the pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # only the open Dependabot PR of that branch, and only the commit CI tested
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number,author,headRefOid \
+                 --jq ".[] | select(.author.login == \"app/dependabot\" and .headRefOid == \"$SHA\") | .number")
+          if [ -z "$pr" ]; then echo "No open Dependabot PR for $BRANCH at $SHA"; exit 0; fi
+          gh pr merge "$pr" --repo "$REPO" --squash --delete-branch --match-head-commit "$SHA"
+          # a merge with GITHUB_TOKEN does not start the push workflow: build main (and latest) explicitly
+          gh workflow run ci.yml --repo "$REPO" --ref main
