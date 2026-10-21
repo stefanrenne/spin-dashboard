@@ -985,7 +985,7 @@ test('key figures show the period and compare with the previous one', async () =
   assert.match(text(kpi(d, 'kpiHours').querySelector('.k-cmp')), /Vorige dag: 3,5 u$/);
   assert.equal(text(kpi(d, 'kpiRest').querySelector('.k-val')), '96%');
   assert.match(text(kpi(d, 'kpiRest').querySelector('.k-cmp')), /^▲ \+10 procentpunt \(beter\) · Vorige dag: 85%$/);
-  assert.equal(text(kpi(d, 'kpiLongest').querySelector('.k-val')), '15 u 40 min');
+  assert.match(text(kpi(d, 'kpiLongest').querySelector('.k-val')), /^15 u 4\d min$/);   // runs until now: grows while the suite runs
   assert.equal(d.getElementById('kpiNote').textContent, '');
   dom.window.close();
 });
@@ -1917,7 +1917,7 @@ test('file access on an SSD pool shows in reads and writes per drive and in the 
 const WEAR = served({ [today]: [
   `${ep(300)},disk,nvme0n1,cache,ssd`, `${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},state,sdd,standby`,
   `${ep(200)},wear,nvme0n1,2,1000000000`, `${ep(100)},wear,nvme0n1,3,1073741824`,
-  `${ep(1439)},io,nvme0n1,1,0,1,0`,                                         // measured for a whole day
+  `${ep(23 * 60)},io,nvme0n1,1,0,1,0`,                                      // measured for 23 hours (a margin for slow runs)
   `${ep(30)},io,nvme0n1,0,52428800,0,300`,                                   // 50 GB written
 ] });
 
@@ -1927,7 +1927,7 @@ test('key figures get a tile for what the SSDs write per day, and no tile withou
   assert.ok(d.getElementById('kpis').classList.contains('five'));
   const tile = d.querySelector('#kpis [data-kpi="kpiSsdWrite"]');
   assert.equal(text(tile.querySelector('.k-label')), 'Geschreven op SSD’s');
-  assert.equal(text(tile.querySelector('.k-val')), '50 GB/dag');
+  assert.equal(text(tile.querySelector('.k-val')), '52 GB/dag');           // 50 GB in 23 hours
   assert.ok(!tile.classList.contains('over'));                              // below the default of 100 GB
   assert.ok(!tile.querySelector('.k-cmp'));                                // no io lines in the previous period
   dom.window.close();
@@ -1944,7 +1944,7 @@ test('SMART wear shows on the SSD page and in the overview', async () => {
   assert.deepEqual(tilesOf(d).slice(-2), ['Slijtage (SMART) 3%', 'Geschreven sinds nieuw 1 TB']);   // the latest wear line
   d.getElementById('profileDone').click();
   d.getElementById('openInfo').click();
-  assert.match(text(d.querySelector('#profileBody .ov-group[data-group="cache"] .ov-row')), /50 GB\/dag · 3% versleten$/);
+  assert.match(text(d.querySelector('#profileBody .ov-group[data-group="cache"] .ov-row')), /52 GB\/dag · 3% versleten$/);
   dom.window.close();
 });
 
@@ -2156,7 +2156,7 @@ test('the SSD page shows how the wear went and when the endurance is reached at 
   d.querySelector('#dash > [data-card="lanes:cache"] .drvbtn').click();
   const note = text(d.querySelector('#profileBody .wear-trend'));
   assert.match(note, /^Slijtage in deze periode: 2% → 3%, 70 GB geschreven\./);
-  assert.match(note, /over ongeveer 1,8 jaar bereikt\.$/);                // 1 TB at 3%, 50 GB a day
+  assert.match(note, /over ongeveer 1,7 jaar bereikt\.$/);                // 1 TB at 3%, 52 GB a day
   dom.window.close();
 });
 
