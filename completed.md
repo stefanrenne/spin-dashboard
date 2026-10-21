@@ -2,6 +2,9 @@
 
 Newest first.
 
+## 2026-10-21: "All" measured again, no summary endpoint
+- With SSD pools logging only writes, the own server's day files grow ~75 KB an hour (~1.8 MB a day, against ~6 MB with the reads of `frunk` and 0.3–0.5 MB with HDDs only): "All" over 30 days is ~54 MB, ~7 MB gzipped, and since live days are fetched in parts every day is downloaded and parsed only once. A per-day summary endpoint would mean rebuilding most cards on summaries; not worth it at this size, so not built
+
 ## 2026-10-21: features
 - Refresh right away when a hidden tab becomes visible again
 - CSV export: reads and writes per drive per hour (`io`) and the SMART wear (`wear`), in four new columns at the end

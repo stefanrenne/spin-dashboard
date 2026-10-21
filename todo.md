@@ -10,9 +10,6 @@ Open work, roughly by priority. Move finished items to `completed.md`.
 - [ ] Support thread on the Unraid forum and submission to Community Applications
 - [ ] Version and changelog: no `v*` tag exists yet. A changelog section per version (from `completed.md`) and the version in the page footer and `/health`
 
-## Performance
-- [ ] Large downloads with "All": day files are ~6 MB a day on a busy server (mostly `who` lines), so 30 days is ~180 MB. Measure again now that SSD pools log only writes and live days are fetched in parts; only if it is still too much: a per-day summary endpoint (like `spins.csv`) for the cards that do not need single lines, or filtering `who` lines on the server by the window
-
 ## Features
 - [ ] Unassigned Devices: HDDs mounted by the Unassigned Devices plugin (`/mnt/disks/<name>`) are not in `disks.ini`, so they are neither polled nor watched, and Settings › Paths per container shows `/mnt/disks` and `/mnt/remotes` as a pool called "disks" or "remotes". Find where the plugin keeps device and mount point (without touching the drives) and treat them like pools; network mounts under `/mnt/remotes` stay out
 - [ ] Test SAS drives and HBAs; validate the `smartctl -n standby` fallback
