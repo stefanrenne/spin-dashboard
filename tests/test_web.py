@@ -340,3 +340,35 @@ def test_spins_keeps_the_file_summary_and_only_adds_the_waiting_lines(server, sd
     body = get(server + "/data/spins.csv")[1].splitlines()
     assert "1791496920,io,nvme0n1,2,4,2,2" in body                               # file and waiting lines in one hour
     assert reads == [1]                                                          # only the waiting line was read
+
+
+def test_the_webhook_never_leaves_the_server_in_full(server, sd):
+    """The URL often holds a secret (an ntfy topic, a Discord token): browsers only see scheme and host."""
+    url = "https://user:pw@discord.com/api/webhooks/123/SECRET"
+    assert post(server + "/data/settings.json", {"webhook": url})[1] == {"webhook": "https://discord.com/…"}
+    assert json.loads(get(server + "/data/settings.json")[1]) == {"webhook": "https://discord.com/…"}
+    assert sd.read_settings()["webhook"] == url
+    # the masked form sent back (as the browser does when the quiet hours change) keeps the real URL
+    post(server + "/data/settings.json", {"webhook": "https://discord.com/…", "quiet": None})
+    assert sd.read_settings()["webhook"] == url
+    post(server + "/data/settings.json", {"webhook": ""})                       # clearing it still works
+    assert sd.read_settings()["webhook"] == ""
+
+
+def test_a_settings_token_is_needed_when_one_is_set(server, sd, monkeypatch):
+    monkeypatch.setattr(sd, "SETTINGS_TOKEN", "s3cret")
+    assert json.loads(get(server + "/data/settings.json")[1]) == {"locked": True}
+    status, err = post(server + "/data/settings.json", {"hide": ["a"]})
+    assert status == 401 and "token" in err["error"]
+    assert post(server + "/data/notify-test", {})[0] == 401                      # the webhook test as well
+    data = json.dumps({"hide": ["a"]}).encode()
+    for token, want in (("wrong", 401), ("s3cret", 200)):
+        req = urllib.request.Request(server + "/data/settings.json", data=data, method="POST",
+                                     headers={"Content-Type": "application/json", "X-Settings-Token": token})
+        try:
+            status = urllib.request.urlopen(req, timeout=5).status
+        except urllib.error.HTTPError as e:
+            status = e.code
+        assert status == want
+    assert sd.read_settings() == {"hide": ["a"]}
+    assert json.loads(get(server + "/data/settings.json")[1]) == {"hide": ["a"], "locked": True}

@@ -29,8 +29,12 @@ function load(files, url = 'http://dash/?lang=nl', languages = ['en-US'], stored
       w.fetch = (u, opts = {}) => {
         w.__fetched.push(u);
         if (opts.method === 'POST') {     // saving: recorded; files.POST = false makes it fail
-          w.__posts.push({ url: u, type: opts.headers['Content-Type'], body: JSON.parse(opts.body) });
+          w.__posts.push({ url: u, type: opts.headers['Content-Type'], body: JSON.parse(opts.body),
+                         ...(opts.headers['X-Settings-Token'] ? { token: opts.headers['X-Settings-Token'] } : {}) });
           if (files.POST === false) return Promise.reject(new Error('offline'));
+          if (typeof files.POST === 'function' && !files.POST(opts)) {     // a server that wants a token
+            return Promise.resolve({ ok: false, status: 401, json: () => Promise.resolve({ error: 'settings token required' }) });
+          }
           const reply = Object.entries(files.POSTREPLY || {}).find(([k]) => u.includes(k));
           return Promise.resolve({ ok: true, json: () => Promise.resolve(reply ? reply[1] : {}) });
         }
@@ -2065,5 +2069,36 @@ test('the live day is fetched in parts: only the bytes added since, and the wait
   await until(() => /^trunk: 0 spin-ups/.test(label()));
   assert.equal(asked[asked.length - 1], 0);
   assert.match(label(), /^trunk: 0 spin-ups/);
+  dom.window.close();
+});
+
+// ---------- security ----------
+test('a server with a settings token asks for it once, and the browser sends it with every save', async () => {
+  const dom = await load({ ...SSD, 'settings.json': JSON.stringify({ hide: [], locked: true }),
+                           POST: (opts) => opts.headers['X-Settings-Token'] === 's3cret' });
+  const d = dom.window.document, w = dom.window;
+  d.getElementById('openSettings').click();
+  assert.equal(d.getElementById('tokenBox').hidden, false);                 // locked: the field is shown
+  const warn = d.getElementById('wearWarn');
+  warn.value = '50'; warn.dispatchEvent(new w.Event('change'));
+  await until(() => d.getElementById('ssdStatus').textContent);
+  assert.match(d.getElementById('ssdStatus').textContent, /verkeerd of geen token/);
+  assert.equal(warn.value, '100');                                          // not saved: back to what it was
+  const tok = d.getElementById('settingsToken');
+  tok.value = 's3cret'; tok.dispatchEvent(new w.Event('change'));
+  assert.equal(w.localStorage.getItem('spindash.token'), 's3cret');
+  warn.value = '50'; warn.dispatchEvent(new w.Event('change'));
+  await until(() => w.__posts.length > 1);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(w.__posts[1].token, 's3cret');
+  assert.equal(d.getElementById('ssdStatus').textContent, '');
+  dom.window.close();
+});
+
+test('without a token the field stays hidden', async () => {
+  const dom = await load({ ...SSD, 'settings.json': JSON.stringify({ hide: [] }) });
+  const d = dom.window.document;
+  d.getElementById('openSettings').click();
+  assert.equal(d.getElementById('tokenBox').hidden, true);
   dom.window.close();
 });

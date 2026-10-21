@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-10-21: security
+- Optional `SETTINGS_TOKEN`: saving settings and testing the webhook need it in the `X-Settings-Token` header; the settings answer then says `"locked": true` and each browser asks for the token once (kept in `localStorage`)
+- The webhook URL never leaves the server in full: browsers get scheme and host only, and that masked value sent back keeps the stored URL
+- README › Security and the CA template say the dashboard has no login and shows every accessed path: keep it on the LAN or behind a reverse proxy with a login
+
 ## 2026-10-21: performance
 - The live days are fetched in parts: `/data/days/<day>.csv?from=N&file=ID` sends only the bytes added since (whole lines), and the waiting `io`/`wear` lines come from `/data/pending.csv`. The browser keeps every day as parsed lines and only parses what is new, instead of downloading today's file and parsing every loaded day again every minute. Older servers and frontends keep working as before
 - `/data/spins.csv` keeps the summary of each day file and only adds the waiting lines

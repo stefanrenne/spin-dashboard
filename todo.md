@@ -10,11 +10,6 @@ Open work, roughly by priority. Move finished items to `completed.md`.
 - [ ] Support thread on the Unraid forum and submission to Community Applications
 - [ ] Version and changelog: no `v*` tag exists yet. A changelog section per version (from `completed.md`) and the version in the page footer and `/health`
 
-## Security
-- [ ] The settings have no authentication: anyone on the LAN can `POST /data/settings.json`, including the webhook URL that the server then POSTs to. Options: an optional token through an environment variable, and/or only allow private addresses for the webhook when explicitly enabled. Document putting the dashboard behind a reverse proxy with authentication in the README
-- [ ] `GET /data/settings.json` returns the webhook URL, which often holds a secret (an ntfy topic, a Discord or Slack token). Return only whether one is set, or a masked form, and keep the full URL on the server
-- [ ] The whole dashboard (every file path, container and share name) is readable without authentication. Say so in the README and the CA template, and advise against exposing it to the internet without a login in front
-
 ## Performance
 - [ ] Large downloads with "All": day files are ~6 MB a day on a busy server (mostly `who` lines), so 30 days is ~180 MB. Measure again now that SSD pools log only writes and live days are fetched in parts; only if it is still too much: a per-day summary endpoint (like `spins.csv`) for the cards that do not need single lines, or filtering `who` lines on the server by the window
 

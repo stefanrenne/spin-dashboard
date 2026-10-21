@@ -19,6 +19,7 @@ who.csv, activity.csv) are migrated to day files once at start.
 """
 import gzip
 import hashlib
+import hmac
 import http.client
 import http.server
 import json
@@ -50,6 +51,8 @@ DEDUP_S = int(os.environ.get("DEDUP_SECONDS", "600"))   # same path + source onl
 WATCH_OVERRIDE = os.environ.get("WATCH", "").split()   # optional: fixed list of mounts
 # processes (and their children) that are not logged; cache_dirs keeps opening every folder
 IGNORE_PROCS = set(os.environ.get("IGNORE_PROCS", "cache_dirs").split())
+# optional: changing settings (and testing the webhook) needs this token in the X-Settings-Token header
+SETTINGS_TOKEN = os.environ.get("SETTINGS_TOKEN", "")
 SHFS_DELAY = 0.4
 PID_TTL = 30          # remember the result of classify() per PID this long
 IGNORE_TTL = 300      # this long after an ignored process, also ignore the same name without a source
@@ -1661,13 +1664,39 @@ SETTINGS_KEYS = {"hide": clean_hide, "quiet": clean_quiet, "webhook": clean_webh
                  "wear_warn": clean_wear_warn}
 
 
+def mask_url(url):
+    """The webhook as browsers get to see it: scheme and host only. The rest often holds a secret
+    (an ntfy topic, a Discord or Slack token); the full URL never leaves the server."""
+    if not url:
+        return ""
+    p = urllib.parse.urlsplit(url)
+    return f"{p.scheme}://{p.netloc.rsplit('@', 1)[-1]}/…"
+
+
+def public_settings():
+    """/data/settings.json: the settings with the webhook masked, and "locked" when saving needs a token."""
+    s = read_settings()
+    if s.get("webhook"):
+        s["webhook"] = mask_url(s["webhook"])
+    if SETTINGS_TOKEN:
+        s["locked"] = True
+    return s
+
+
+def token_ok(given):
+    return not SETTINGS_TOKEN or hmac.compare_digest((given or "").encode(), SETTINGS_TOKEN.encode())
+
+
 def save_settings(new):
     """Check the known keys of `new` and write them atomically (only in DATA_DIR).
-    Returns the saved settings; ValueError on invalid input."""
+    Returns the saved settings; ValueError on invalid input. The masked webhook that browsers get
+    back (public_settings) means "unchanged"."""
     if not isinstance(new, dict):
         raise ValueError("settings must be a JSON object")
     with settings_lock:
         s = read_settings()
+        if s.get("webhook") and new.get("webhook") == mask_url(s["webhook"]):
+            new = {k: v for k, v in new.items() if k != "webhook"}
         cleaned = {k: clean(new[k]) for k, clean in SETTINGS_KEYS.items() if k in new}   # check everything first
         s.update(cleaned)
         tmp = SETTINGS + ".tmp"
@@ -1690,7 +1719,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_json(days_index())
             return
         if clean == "/data/settings.json":
-            self.send_json(read_settings())
+            self.send_json(public_settings())
             return
         if clean == "/data/spins.csv":
             self.send_spins()
@@ -1736,12 +1765,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not 0 <= size <= SETTINGS_BODY_MAX:
             self.send_error(413)
             return
+        if not token_ok(self.headers.get("X-Settings-Token")):
+            self.rfile.read(size)
+            self.send_json({"error": "settings token required"}, 401)
+            return
         if route == "/data/notify-test":
             self.rfile.read(size)
             self.notify_test()
             return
         try:
-            saved = save_settings(json.loads(self.rfile.read(size) or b"null"))
+            save_settings(json.loads(self.rfile.read(size) or b"null"))
         except ValueError as e:      # also unreadable JSON
             self.send_json({"error": str(e)}, 400)
             return
@@ -1749,7 +1782,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             log("could not save settings:", repr(e))
             self.send_json({"error": "could not save settings"}, 500)
             return
-        self.send_json(saved)
+        self.send_json(public_settings())
 
     def notify_test(self):
         """Test message to the saved webhook (never to an address from the request)."""

@@ -11,7 +11,8 @@
   <Project>https://github.com/stefanrenne/spin-dashboard</Project>
   <Overview>Shows when your hard drives spin up and down, and why. A timeline per disk with every spin-up, the file that woke the drive, and which process opened it: a Docker container (Plex, Sonarr, Bazarr, ...), Unraid itself (mover, cron, webGUI) or a user (SMB share, shell). Works with the array and with HDD pools (XFS, Btrfs, ZFS); SSD/NVMe pools show how much they read and write.[br][br]
 How it works: drive state is polled with hdparm -C, which never wakes a sleeping drive. File access is traced with fanotify (fatrace). Because of that the container needs privileged mode, the host PID namespace, read-only access to /mnt and the Docker socket (to show container names). It never writes to your shares.[br][br]
-Tip: keep the appdata path on an SSD/cache pool, otherwise the dashboard itself keeps a drive awake.</Overview>
+Tip: keep the appdata path on an SSD/cache pool, otherwise the dashboard itself keeps a drive awake.[br][br]
+Security: the dashboard has no login and shows every accessed file path; keep it on your LAN or behind a reverse proxy with a login. Set a settings token to keep others from changing the settings.</Overview>
   <Category>Tools: Status:Stable</Category>
   <WebUI>http://[IP]:[PORT:8089]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/stefanrenne/spin-dashboard/main/unraid/spin-dashboard.xml</TemplateURL>
@@ -39,5 +40,6 @@ Tip: keep the appdata path on an SSD/cache pool, otherwise the dashboard itself 
 
   <Config Name="Watch override" Target="WATCH" Default="" Mode="" Description="Optional, space separated. Leave empty to watch all HDD-backed disks and pools automatically, e.g. /mnt/disk1 /mnt/tank" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Same access only once per (s)" Target="DEDUP_SECONDS" Default="600" Mode="" Description="The same file, source and action (read, write, ...) is logged at most once in this many seconds. Lower gives more detail and bigger day files." Type="Variable" Display="advanced" Required="false" Mask="false">600</Config>
+  <Config Name="Settings token" Target="SETTINGS_TOKEN" Default="" Mode="" Description="Optional. When set, changing the settings (and testing the webhook) needs this token; each browser asks for it once in Settings. Empty: anyone who can open the dashboard can change them." Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="Ignore processes" Target="IGNORE_PROCS" Default="cache_dirs" Mode="" Description="Space separated process names whose file access is not logged, including their child processes. Default skips the Cache Dirs plugin, which constantly scans all folders." Type="Variable" Display="advanced" Required="false" Mask="false">cache_dirs</Config>
 </Container>

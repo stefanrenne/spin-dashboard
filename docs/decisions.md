@@ -170,3 +170,12 @@ holds `DATA_DIR` spins or is an SSD. The poller finds that drive in `/proc/self/
 back to "any HDD spins". The `who` lines are not held back the same way: an access on one HDD is written at
 once, even if `DATA_DIR` sits on another, sleeping HDD. Holding them could take days on a quiet system, would
 grow without bound in memory and would lose them on a crash; keep appdata on an SSD (README, Tips).
+
+## A settings token instead of a login
+
+The dashboard is meant for the LAN, and a login would mean users, passwords and sessions in a container that
+should stay small. What can do harm through the dashboard is changing its settings, above all the webhook URL
+the server then POSTs to; reading is covered by keeping it on the LAN or behind a reverse proxy with a login
+(README, Security). So one optional token (`SETTINGS_TOKEN`) guards every change, and the webhook URL itself is
+never sent to a browser in full: only scheme and host, and that masked form sent back means "unchanged", so a
+browser that saves the quiet hours does not have to know the real URL.

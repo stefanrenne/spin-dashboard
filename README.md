@@ -86,6 +86,7 @@ services:
       # WATCH: "/mnt/disk1 /mnt/tank"  # optional, overrides automatic mount detection
       # IGNORE_PROCS: "cache_dirs"     # processes (and their children) that are not logged
       # DEDUP_SECONDS: "600"           # the same file, source and action only once per this many seconds
+      # SETTINGS_TOKEN: "..."          # optional: changing settings needs this token (see Security)
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8089/health', timeout=4).read()"]
       interval: 60s
@@ -127,6 +128,17 @@ Open the WebUI on port 8089. The first drive check runs within a minute; file so
 | `/mnt` read-only, slave | To trace file access on the array and pools. Nothing is ever written there. |
 | `/var/local/emhttp` read-only | Drive names and pool membership. |
 | Docker socket read-only | Container names for the processes that open files, start/stop/health events of containers, and the folders and volumes each container maps (Settings and the overview). Never used to change anything. |
+
+## Security
+
+The dashboard has no login. Everyone who can open it sees every file path, share and container name that
+was accessed on your drives, so keep it on your LAN, or put it behind a reverse proxy with a login
+(SWAG, Nginx Proxy Manager, Authelia, …) before you expose it to the internet.
+
+Settings are stored on the server and shared by every browser. To keep others on the LAN from changing
+them (including the webhook the server sends to), set `SETTINGS_TOKEN`: saving then needs that token,
+which each browser asks for once in Settings. The webhook URL is never sent to the browser in full, only
+its scheme and host, because the rest often holds a secret (an ntfy topic, a Discord or Slack token).
 
 ## Tips
 
