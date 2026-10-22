@@ -402,6 +402,8 @@ HOST_MOUNTS = """51 44 0:44 / /mnt/frunk rw,noatime shared:6 - btrfs /dev/nvme1n
 53 1 0:44 /appdata/docker /var/lib/docker rw,noatime shared:6 - btrfs /dev/nvme1n1p4 rw,ssd
 88 53 0:54 / /var/lib/docker/overlay2/84b9/merged rw,relatime shared:10 - overlay overlay rw
 60 44 0:60 / /mnt/user rw shared:9 - fuse.shfs shfs rw
+61 53 0:44 /appdata /var/lib/docker/volumes/appdata/_data rw shared:6 - btrfs /dev/nvme1n1p4 rw
+62 51 0:44 /appdata /mnt/frunk/appdata/docker/volumes/appdata/_data rw shared:6 - btrfs /dev/nvme1n1p4 rw
 """
 
 

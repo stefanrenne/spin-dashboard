@@ -1768,7 +1768,9 @@ def host_path(path, mounts=None, depth=0):
     same = [m for m in mounts if m[0] == dev and m[2].startswith("/mnt/")
             and (inner == m[1] or inner.startswith(m[1].rstrip("/") + "/"))]
     if same:
-        m = max(same, key=lambda x: len(x[1]))
+        # the pool's own mount (/mnt/frunk), not a bind of one of its folders that shows up deeper under /mnt
+        # again (a Docker volume binding /appdata appears as /mnt/frunk/appdata/docker/volumes/appdata/_data)
+        m = min(same, key=lambda x: (x[2].count("/"), -len(x[1])))
         return m[2].rstrip("/") + inner[len(m[1].rstrip("/")):]
     if fstype == "zfs":
         return f"/mnt/{src.split('/')[0]}/"
