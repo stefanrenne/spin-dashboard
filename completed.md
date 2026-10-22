@@ -2,6 +2,13 @@
 
 Newest first.
 
+## 2026-10-22: where Docker keeps the containers; Events always filterable
+- wud, dockerproxy and autoheal map no folder under /mnt, so "Stored on" said "–", while their logs and config were written in `appdata/docker` on frunk. On the own server Docker's data-root `/var/lib/docker` is the folder `/appdata/docker` of frunk's btrfs filesystem (same device `0:44` as `/mnt/frunk` in the host's mountinfo). `containers.json` now gives `docker_root` (from `DockerRootDir` and `/proc/1/mountinfo`; ZFS datasets by their pool, `docker.img` through the loop device's backing file), and every container shows "frunk · Docker" in the overview and under Paths; the pool page says Docker keeps every container there
+- Events always shows the pool checkboxes, every pool and the array (also SSD pools without spin-ups), also when there is only one
+
+## 2026-10-22: layers of Timeline per source
+- The legend of Timeline per source became checkboxes (a drive spins, reads, writes, container start, container stop/unhealthy/out of memory); unchecking one hides that layer in every row through a class on the card, without redrawing. Kept in `spindash.srcLanesLayers`
+
 ## 2026-10-22: container icons on every card
 - One helper (`whoIcon` for a who line, `srcIcon` for a source, `ctrIcon` for a name) puts the icon before every container name: Activity, Kept awake, Rhythm and Timeline per source (instead of the kind dot; other sources keep their dot), Reads and Writes per drive, Live activity, the Events session list and the restart note ("Restart of radarr 3 min before"), the drive page (sources, bytes per container, containers that map the pool) and the members of a Compose project on its page
 

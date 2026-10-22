@@ -789,7 +789,7 @@ test('a pool shows as one lane and one event row by default', async () => {
   const r = rows(d);
   assert.ok(r.some((x) => /^\S+ \S+ \S+, \S+ trunk Opgespind/.test(x)), r.join('\n'));
   assert.ok(r.every((x) => !/trunk2/.test(x)));
-  assert.equal(d.getElementById('eventsFilter').hidden, true);          // one pool: nothing to filter
+  assert.deepEqual([...d.querySelectorAll('#eventsFilter label')].map(text), ['trunk']);   // Events: always, also with one pool
   assert.equal(d.getElementById('groupDrives').checked, true);
   dom.window.close();
 });
@@ -1290,6 +1290,37 @@ test('every card that names a container shows its icon', async () => {
   assert.ok(icons('.files').includes('plex'));
   d.querySelector('#dash .drvbtn').click();
   assert.ok(icons('#profileBody').length > 0);
+  dom.window.close();
+});
+
+test('Events offers every pool, also an SSD pool without spin-ups', async () => {
+  const dom = await load(POOLS3);
+  assert.deepEqual([...dom.window.document.querySelectorAll('#eventsFilter label')].map(text), ['Array', 'frunk', 'trunk']);
+  dom.window.close();
+});
+
+test('where Docker keeps the containers shows for every container, on its page and on the pool page', async () => {
+  const containers = { docker: true, docker_root: { path: '/mnt/frunk/appdata/docker', where: { kind: 'pool', name: 'frunk', hdd: false } },
+    containers: [
+      { name: 'wud', state: 'running', icon: '', mounts: [] },
+      { name: 'plex', state: 'running', icon: '', mounts: [
+        { source: '/mnt/trunk/Media', target: '/media', rw: false, where: { kind: 'pool', name: 'trunk', hdd: true } }] },
+    ] };
+  const dom = await load({ ...POOLS3, 'containers.json': JSON.stringify(containers) });
+  const d = dom.window.document;
+  d.getElementById('openInfo').click();
+  const store = (n) => [...d.querySelectorAll(`#profileBody tr[data-ctr="${n}"] td:nth-child(3) .loc`)].map(text);
+  assert.deepEqual(store('wud'), ['frunk · Docker']);                         // no "–" any more
+  assert.deepEqual(store('plex'), ['trunk', 'frunk · Docker']);
+  const tag = d.querySelector('#profileBody tr[data-ctr="wud"] .loc');
+  assert.match(tag.getAttribute('title'), /Docker bewaart hier elke container.*\/mnt\/frunk\/appdata\/docker/);
+  // the container page lists it under Paths
+  d.querySelector('#profileBody tr[data-ctr="wud"] .srcbtn').click();
+  assert.match(text(d.querySelector('#profileBody .prof-paths')), /\/mnt\/frunk\/appdata\/docker frunk · Docker/);
+  // the pool page says so
+  d.getElementById('profileBack').click();
+  d.querySelector('#profileBody tr[data-ctr="wud"] .loc').click();
+  assert.match(text(d.getElementById('profileBody')), /Docker bewaart hier elke container/);
   dom.window.close();
 });
 
@@ -2441,6 +2472,29 @@ test('the same access within 2 seconds counts once, also across the activity and
   const files = [...d.querySelectorAll('#feed li')].map(text).map((x) => (x.match(/[ab]\.mkv|s\.db/) || [''])[0]);
   assert.deepEqual(files.filter(Boolean), ['b.mkv', 's.db', 'a.mkv']);
   dom.window.close();
+});
+
+test('the legend of Timeline per source switches its layers, and the choice is remembered', async () => {
+  const dom = await load(DOCK);
+  const d = dom.window.document, w = dom.window;
+  const card = d.querySelector('[data-card="srcLanes"]'), box = d.getElementById('srcLayers');
+  assert.deepEqual([...box.querySelectorAll('label')].map(text),
+    ['Een schijf draait', 'Lezen', 'Schrijven', 'Container gestart', 'Container gestopt, ongezond of geheugen vol']);
+  assert.ok([...box.querySelectorAll('input')].every((i) => i.checked));
+  assert.ok(d.querySelector('#srcLaneList .strace .tr'));
+  for (const v of ['r', 'cd']) {
+    const i = box.querySelector(`input[value="${v}"]`);
+    i.checked = false; i.dispatchEvent(new w.Event('change', { bubbles: true }));
+  }
+  assert.ok(card.classList.contains('hide-r') && card.classList.contains('hide-cd'));
+  assert.ok(!card.classList.contains('hide-w'));
+  assert.deepEqual(JSON.parse(w.localStorage.getItem('spindash.srcLanesLayers')), ['r', 'cd']);
+  dom.window.close();
+  const again = await load(DOCK, 'http://dash/?lang=nl', ['en-US'], null, (w2) => w2.localStorage.setItem('spindash.srcLanesLayers', '["band"]'));
+  const d2 = again.window.document;
+  assert.ok(d2.querySelector('[data-card="srcLanes"]').classList.contains('hide-band'));
+  assert.equal(d2.querySelector('#srcLayers input[value="band"]').checked, false);
+  again.window.close();
 });
 
 test('activity, rhythm and timeline per source each have their own pool filter', async () => {

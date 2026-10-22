@@ -15,6 +15,11 @@ What changed per version, for people who run Spin Dashboard. The detailed log of
 
 - Events has a Process column: the container that caused a spin-up, the process inside it and its Unraid icon
   (based on PR #2 by RuudPuts). Container names are looked up in one Docker call for all containers.
+- The overview, the container page and the pool page show where Docker keeps every container (its image, own
+  files and logs), for example "frunk · Docker"; containers without mapped folders no longer show "–".
+- Events always has checkboxes per pool, also with one pool and for SSD pools.
+- The legend of Timeline per source is a filter: checkboxes show or hide the spinning band, reads, writes, container
+  starts and container stops; kept per browser.
 - Container icons everywhere a container is named: the source cards (activity, kept awake, rhythm, timeline), reads
   and writes per drive, live activity, events and their sessions, the container and drive pages and the overview.
   A container whose icon Unraid has not stored yet gets the one from its `net.unraid.docker.icon` label, fetched by

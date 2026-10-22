@@ -140,7 +140,8 @@ get a `proc` line with their fatrace name, so the feed, the profile and the *Pro
 "plex › Plex Media Scan". That column, the container's page and the overview also show the container's icon: Unraid keeps one per
 container under `/emhttp/plugins/dynamix.docker.manager/images` (tmpfs); for a container without that file the
 server fetches the URL in its `net.unraid.docker.icon` label. `containers.json` points to them and `/data/icons/`
-serves them.
+serves them. `containers.json` also says where Docker keeps every container (its data-root, mapped to a pool
+through the host's mount table), shown as "frunk · Docker" next to the folders a container maps.
 
 Below the spin-up analysis, *Reads per drive* and *Writes per drive* show per drive the top
 sources and files in that direction over the period (also without spin-ups), and a *Live activity* feed lists the most recent file

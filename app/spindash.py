@@ -64,6 +64,7 @@ PROC = "/proc"
 SYS_BLOCK = "/sys/block"
 MOUNTS_FILE = "/proc/self/mounts"
 MOUNTINFO = "/proc/self/mountinfo"
+HOST_MOUNTINFO = "/proc/1/mountinfo"          # the host's mount table (pid 1 is the host's init, --pid=host)
 USER_SHARES = "/mnt/user"
 DOCKER_SOCK = "/var/run/docker.sock"
 DOCKER_ICONS = os.path.join(EMHTTP, "plugins", "dynamix.docker.manager", "images")   # <name>-icon.png per container
@@ -1732,6 +1733,63 @@ def icon_bytes(name):
     return label_icon(label) if label else None
 
 
+def parse_mountinfo(path):
+    """[(major:minor, root within the filesystem, mount point, type, source)] of a mountinfo file; [] if unreadable."""
+    out = []
+    try:
+        for line in open(path):
+            pre, _, post = line.partition(" - ")
+            f, g = pre.split(), post.split()
+            if len(f) >= 5 and len(g) >= 2:
+                out.append((f[2], f[3].replace("\\040", " "), f[4].replace("\\040", " "), g[0], g[1].replace("\\040", " ")))
+    except OSError:
+        pass
+    return out
+
+
+def host_path(path, mounts=None, depth=0):
+    """The same place as `path` (a host path such as Docker's /var/lib/docker), seen under /mnt: the folder of a pool
+    that is also mounted there, the pool of a ZFS dataset, or for a loop device (Unraid's docker.img) the image
+    file. Only the mount table and /sys: nothing on a drive is touched. None when it is not under /mnt."""
+    if path.startswith("/mnt/"):
+        return path
+    mounts = parse_mountinfo(HOST_MOUNTINFO) if mounts is None else mounts
+    best = None
+    for m in mounts:
+        mp = m[2]
+        if (path == mp or path.startswith(mp.rstrip("/") + "/")) and (best is None or len(mp) > len(best[2])):
+            best = m
+    if not best or depth > 2:
+        return None
+    dev, root, mp, fstype, src = best
+    if mp.startswith("/mnt/"):
+        return path
+    inner = root.rstrip("/") + path[len(mp.rstrip("/")):]          # the path within that filesystem
+    same = [m for m in mounts if m[0] == dev and m[2].startswith("/mnt/")
+            and (inner == m[1] or inner.startswith(m[1].rstrip("/") + "/"))]
+    if same:
+        m = max(same, key=lambda x: len(x[1]))
+        return m[2].rstrip("/") + inner[len(m[1].rstrip("/")):]
+    if fstype == "zfs":
+        return f"/mnt/{src.split('/')[0]}/"
+    loop = re.fullmatch(r"/dev/(loop\d+)", src)
+    if loop:
+        try:
+            backing = open(f"{SYS_BLOCK}/{loop.group(1)}/loop/backing_file").read().strip()
+        except OSError:
+            return None
+        return backing if backing.startswith("/mnt/") else host_path(backing, mounts, depth + 1)
+    return None
+
+
+def docker_root(shares, hdd_bases):
+    """Where Docker keeps every container's image, own files (writable layer) and logs: {"path", "where"}, or None."""
+    root = (docker_get("/info") or {}).get("DockerRootDir")
+    path = host_path(root) if root else None
+    where = locate(path, shares, hdd_bases) if path else None
+    return {"path": path, "where": where} if where else None
+
+
 _containers_cache = {"t": 0.0, "body": None}
 
 
@@ -1765,7 +1823,8 @@ def containers_info(now=None):
         out.append({"name": name, "id": c.get("Id") or "", "state": c.get("State") or "",
                     "project": labels.get("com.docker.compose.project") or "",
                     "icon": icon_url(name, icon_labels[name]), "mounts": mounts})
-    body = {"docker": os.path.exists(DOCKER_SOCK), "containers": sorted(out, key=lambda x: x["name"].lower())}
+    body = {"docker": os.path.exists(DOCKER_SOCK), "containers": sorted(out, key=lambda x: x["name"].lower()),
+            "docker_root": docker_root(shares, hdd_bases) if out else None}
     _containers_cache.update(t=now, body=body)
     return body
 

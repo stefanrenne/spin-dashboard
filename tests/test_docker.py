@@ -160,7 +160,7 @@ def test_containers_info_lists_mounts_under_mnt(unraid, monkeypatch):
         monkeypatch.setattr(unraid, "DOCKER_SOCK", fake.path)
         body = unraid.containers_info(now=1000)
         assert unraid.containers_info(now=1010) is body              # cached for 30 s
-        assert sorted(r.split('?')[0] for r in fake.requests) == ['/containers/json', '/volumes']   # one refresh
+        assert sorted(r.split('?')[0] for r in fake.requests) == ['/containers/json', '/info', '/volumes']   # one refresh
     finally:
         fake.close()
     assert body["docker"] is True
@@ -181,7 +181,7 @@ def test_containers_json_endpoint_without_docker(sd):
         body = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{srv.server_address[1]}/data/containers.json", timeout=5).read())
     finally:
         srv.shutdown()
-    assert body == {"docker": False, "containers": []}
+    assert body == {"docker": False, "containers": [], "docker_root": None}
 
 
 # ---------- old data stays valid ----------
@@ -395,6 +395,47 @@ def test_a_container_with_only_an_icon_label_gets_the_image_through_the_server(u
         assert unraid.icon_bytes("sab") == SVG                                                # Unraid's file comes first
     finally:
         fake.close()
+
+
+# the host's mount table on the own server: /var/lib/docker is the folder appdata/docker of the btrfs pool frunk
+HOST_MOUNTS = """51 44 0:44 / /mnt/frunk rw,noatime shared:6 - btrfs /dev/nvme1n1p4 rw,ssd
+53 1 0:44 /appdata/docker /var/lib/docker rw,noatime shared:6 - btrfs /dev/nvme1n1p4 rw,ssd
+88 53 0:54 / /var/lib/docker/overlay2/84b9/merged rw,relatime shared:10 - overlay overlay rw
+60 44 0:60 / /mnt/user rw shared:9 - fuse.shfs shfs rw
+"""
+
+
+def test_docker_root_seen_under_mnt(sd, monkeypatch):
+    (sd._tmp / "mountinfo-host").write_text(HOST_MOUNTS)
+    monkeypatch.setattr(sd, "HOST_MOUNTINFO", str(sd._tmp / "mountinfo-host"))
+    assert sd.host_path("/var/lib/docker") == "/mnt/frunk/appdata/docker"
+    assert sd.host_path("/var/lib/docker/containers") == "/mnt/frunk/appdata/docker/containers"
+    assert sd.host_path("/mnt/trunk/x") == "/mnt/trunk/x"
+    assert sd.host_path("/etc") is None
+
+
+def test_docker_root_in_a_docker_img_or_a_zfs_dataset(sd, monkeypatch):
+    host = sd._tmp / "mountinfo-host"
+    monkeypatch.setattr(sd, "HOST_MOUNTINFO", str(host))
+    host.write_text("70 1 7:2 / /var/lib/docker rw - btrfs /dev/loop2 rw\n")
+    os.makedirs(sd._tmp / "sys" / "loop2" / "loop")
+    (sd._tmp / "sys" / "loop2" / "loop" / "backing_file").write_text("/mnt/cache/system/docker/docker.img\n")
+    assert sd.host_path("/var/lib/docker") == "/mnt/cache/system/docker/docker.img"
+    host.write_text("71 1 0:80 / /var/lib/docker rw - zfs fast/docker rw\n")
+    assert sd.host_path("/var/lib/docker") == "/mnt/fast/"
+
+
+def test_containers_json_says_where_docker_keeps_the_containers(unraid, monkeypatch):
+    (unraid._tmp / "mountinfo-host").write_text(HOST_MOUNTS.replace("frunk", "cache"))
+    monkeypatch.setattr(unraid, "HOST_MOUNTINFO", str(unraid._tmp / "mountinfo-host"))
+    fake = FakeDocker({"/containers/json": [{"Names": ["/wud"], "State": "running", "Labels": {}, "Mounts": []}],
+                       "/info": {"DockerRootDir": "/var/lib/docker"}})
+    try:
+        monkeypatch.setattr(unraid, "DOCKER_SOCK", fake.path)
+        body = unraid.containers_info(now=1000)
+    finally:
+        fake.close()
+    assert body["docker_root"] == {"path": "/mnt/cache/appdata/docker", "where": {"kind": "pool", "name": "cache", "hdd": False}}
 
 
 def test_ctr_line_for_an_oom_kill():
