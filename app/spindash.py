@@ -1653,6 +1653,50 @@ ICON_NAME = re.compile(r"[\w.-]{1,128}")
 ICON_MAX = 1 << 20
 
 
+# The type of an icon from its first bytes: Unraid stores every icon as .png, also when it is an SVG
+ICON_MAGIC = ((b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jpeg"), (b"GIF8", "image/gif"))
+LABEL_ICON_RETRY = 600
+icon_labels = {}       # container name -> the URL in its net.unraid.docker.icon label (filled by containers_info)
+_label_icons = {}      # URL -> (time fetched, image or None)
+
+
+def icon_type(body):
+    """Content type of an image we are willing to serve, or None."""
+    for magic, ctype in ICON_MAGIC:
+        if body.startswith(magic):
+            return ctype
+    if body[:4] == b"RIFF" and body[8:12] == b"WEBP":
+        return "image/webp"
+    head = body[:4096].lstrip().lower()
+    if (head.startswith(b"<?xml") or head.startswith(b"<svg")) and b"<svg" in head:
+        return "image/svg+xml"
+    return None
+
+
+def label_icon(url, now=None):
+    """The image a container's icon label points to, fetched by the server (so the page loads nothing from other
+    sites) and kept in memory; for a container Unraid has no icon file for yet. A failure is tried again after
+    LABEL_ICON_RETRY. Only http(s), at most ICON_MAX, and only an image."""
+    now = time.time() if now is None else now
+    hit = _label_icons.get(url)
+    if hit and (hit[1] is not None or now - hit[0] < LABEL_ICON_RETRY):
+        return hit[1]
+    body = None
+    try:
+        if urllib.parse.urlsplit(url).scheme in ("http", "https"):
+            req = urllib.request.Request(url, headers={"User-Agent": f"spin-dashboard/{VERSION}"})
+            with urllib.request.urlopen(req, timeout=5) as r:
+                data = r.read(ICON_MAX + 1)
+            if len(data) <= ICON_MAX and icon_type(data):
+                body = data
+    except (OSError, ValueError, http.client.HTTPException):
+        pass
+    if len(_label_icons) > 500:
+        _label_icons.clear()
+    _label_icons[url] = (now, body)
+    return body
+
+
 def icon_path(name):
     """Path of the Unraid icon of a container, or None for a name that is not a plain file name."""
     if not ICON_NAME.fullmatch(name) or name.startswith("."):
@@ -1660,10 +1704,32 @@ def icon_path(name):
     return os.path.join(DOCKER_ICONS, name + "-icon.png")
 
 
-def icon_url(name):
-    """URL of the container's icon for containers.json, relative to the page; "" when Unraid has none."""
+def icon_url(name, label=""):
+    """URL of the container's icon for containers.json, relative to the page; "" when there is none: no file from
+    Unraid and no http(s) URL in the container's icon label."""
     p = icon_path(name)
-    return f"data/icons/{name}.png" if p and os.path.isfile(p) else ""
+    if not p:
+        return ""
+    if os.path.isfile(p) or urllib.parse.urlsplit(label or "").scheme in ("http", "https"):
+        return f"data/icons/{name}.png"
+    return ""
+
+
+def icon_bytes(name):
+    """The icon of a container: Unraid's file, otherwise the image of its icon label; None when there is none."""
+    p = icon_path(name)
+    if not p:
+        return None
+    try:
+        if os.path.getsize(p) <= ICON_MAX:
+            with open(p, "rb") as f:
+                return f.read()
+    except OSError:
+        pass
+    if name not in icon_labels:
+        containers_info()                        # fills icon_labels (cached for 30 s)
+    label = icon_labels.get(name)
+    return label_icon(label) if label else None
 
 
 _containers_cache = {"t": 0.0, "body": None}
@@ -1694,9 +1760,11 @@ def containers_info(now=None):
                 if m.get("Type") == "volume":
                     entry["volume"] = m.get("Name")
                 mounts.append(entry)
+        labels = c.get("Labels") or {}
+        icon_labels[name] = labels.get("net.unraid.docker.icon") or ""
         out.append({"name": name, "id": c.get("Id") or "", "state": c.get("State") or "",
-                    "project": (c.get("Labels") or {}).get("com.docker.compose.project") or "",
-                    "icon": icon_url(name), "mounts": mounts})
+                    "project": labels.get("com.docker.compose.project") or "",
+                    "icon": icon_url(name, icon_labels[name]), "mounts": mounts})
     body = {"docker": os.path.exists(DOCKER_SOCK), "containers": sorted(out, key=lambda x: x["name"].lower())}
     _containers_cache.update(t=now, body=body)
     return body
@@ -2126,18 +2194,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(body)
 
     def send_icon(self, name):
-        """A container's icon from Unraid (PNG), cached by the browser for a day; 404 when there is none."""
-        p = icon_path(name)
-        try:
-            if not p or os.path.getsize(p) > ICON_MAX:
-                raise OSError
-            with open(p, "rb") as f:
-                body = f.read()
-        except OSError:
+        """A container's icon, with the type its content has, cached by the browser for a day; 404 when there is
+        none. An SVG opened directly runs nothing: the CSP forbids scripts and sandboxes it."""
+        body = icon_bytes(name)
+        ctype = icon_type(body) if body else None
+        if not ctype:
             self.send_error(404)
             return
         self.send_response(200)
-        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Type", ctype)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "max-age=86400")
         self.end_headers()

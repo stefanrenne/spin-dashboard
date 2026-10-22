@@ -187,7 +187,8 @@ dialog.settings::backdrop{background:rgba(10,15,20,.45)}
 .cause-row b{text-align:right;font-weight:600}
 td.cause{max-width:360px;overflow:hidden;text-overflow:ellipsis}
 td.proc{max-width:220px}
-.proc-ic{width:16px;height:16px;border-radius:3px;vertical-align:-3px;margin-right:5px;object-fit:contain}
+.ctr-ic{width:16px;height:16px;border-radius:3px;vertical-align:-3px;margin-right:5px;object-fit:contain}
+.ctr-ic.big{width:24px;height:24px;border-radius:5px;vertical-align:-4px;margin-right:4px}
 td.disks{white-space:normal;min-width:6rem;max-width:14rem}
 tr.has-sess{cursor:pointer}
 tr.has-sess:hover td{background:var(--bg)}
@@ -1528,12 +1529,16 @@ function iconFor(name){
   const c = containers && !containers.failed && (containers.containers || []).find(x => x.name === name);
   return c && c.icon ? c.icon : '';
 }
+// the icon of a container as an image, or ''; one that does not load is removed (see the error listener)
+function ctrIcon(name, big = false){
+  const icon = iconFor(name);
+  return icon ? `<img class="ctr-ic${big ? ' big' : ''}" src="${esc(icon)}" alt="" loading="lazy">` : '';
+}
 function procCell(first){
   if (!first) return `<span class="muted">—</span>`;
   const w = whoFor(first);
   if (!w) return `<span class="who none">${esc(t('kind_none'))}</span>`;
-  const icon = w.kind === 'container' ? iconFor(w.name) : '';
-  const img = icon ? `<img class="proc-ic" src="${esc(icon)}" alt="" loading="lazy">` : '';
+  const img = w.kind === 'container' ? ctrIcon(w.name) : '';
   const label = whoLabel(w) + procSuffix(w), title = `${t('kind_' + w.kind)}, pid ${w.pid}`;
   return srcLink(w, img + esc(label), `who ${w.kind}`, title)
     || `<span class="who ${esc(w.kind)}" title="${esc(title)}">${img}${esc(label)}</span>`;
@@ -2378,7 +2383,9 @@ function sourceFor(k){
 function renderSourceView(k){
   const s = sourceFor(k);
   if (!s){ $('profileTitle').textContent = k.split('|')[1] || k; $('profileBody').innerHTML = `<p class="muted">${esc(t('actNone'))}</p>`; return; }
-  $('profileTitle').innerHTML = `<span class="kind-dot ${esc(s.kind)}"></span> ${esc(s.label)}${s.project ? ` <span class="stack-tag">${esc(t('stackTag'))}</span>` : ''}`;
+  // a container with an icon in Unraid shows that instead of the dot; a Compose project the icon of its first member that has one
+  const icon = s.kind !== 'container' ? '' : s.project ? [...s.members].sort().map(n => ctrIcon(n, true)).find(Boolean) || '' : ctrIcon(s.label, true);
+  $('profileTitle').innerHTML = `${icon || `<span class="kind-dot ${esc(s.kind)}"></span>`} ${esc(s.label)}${s.project ? ` <span class="stack-tag">${esc(t('stackTag'))}</span>` : ''}`;
   $('profileBody').innerHTML = profileHtml(s);
 }
 function closeProfile(){
@@ -2500,7 +2507,7 @@ function containersOverview(){
     containers.containers.map(c => {
       const k = sourceKey({kind: 'container', name: c.name}, pm), s = srcIdx.list.find(x => x.k === k);
       const locs = [...new Map(c.mounts.flatMap(m => locsOf(m.where).map(n => [String(n), [n, m.where]]))).values()];
-      return `<tr data-ctr="${esc(c.name)}"><td><button type="button" class="srcbtn" data-src="${esc(k)}">${esc(c.name)}</button>${c.project ? ` <span class="stack-tag">${esc(c.project)}</span>` : ''}</td>
+      return `<tr data-ctr="${esc(c.name)}"><td><button type="button" class="srcbtn" data-src="${esc(k)}">${ctrIcon(c.name)}${esc(c.name)}</button>${c.project ? ` <span class="stack-tag">${esc(c.project)}</span>` : ''}</td>
         <td class="muted">${esc(t(c.state === 'running' ? 'ctrRunning' : 'ctrStopped'))}</td>
         <td>${locs.map(([n, w]) => locTag(n, w, color)).join(' ') || '<span class="muted">–</span>'}</td>
         <td class="muted">${s ? esc(t('srcLine', {r: s.r, w: s.w})) : '–'}</td></tr>`;
@@ -2971,7 +2978,7 @@ function sessionRow(files, t0){
   const note = !shown.length ? `<p class="muted">${esc(t('onlyDirs'))}</p>` : '';
   return `<tr class="sess-row"><td colspan="${$('events').dataset.cols || 5}">${note}<ol class="files">${rows}</ol>${more}</td></tr>`;
 }
-$('events').addEventListener('error', e => { if (e.target.classList && e.target.classList.contains('proc-ic')) e.target.remove(); }, true);
+document.addEventListener('error', e => { if (e.target.classList && e.target.classList.contains('ctr-ic')) e.target.remove(); }, true);
 $('events').addEventListener('click', e => {
   const tr = e.target.closest('tr.has-sess'); if (!tr) return;
   const k = tr.dataset.key;

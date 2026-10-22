@@ -15,6 +15,8 @@ What changed per version, for people who run Spin Dashboard. The detailed log of
 
 - Events has a Process column: the container that caused a spin-up, the process inside it and its Unraid icon
   (based on PR #2 by RuudPuts). Container names are looked up in one Docker call for all containers.
+- Container icons also on the container's page and in the overview; a container whose icon Unraid has not
+  stored yet gets the one from its `net.unraid.docker.icon` label, fetched by the server.
 
 ### Fixed
 - Unchecking every pool in a source card left some activity in it: files fatrace could not resolve were logged
@@ -25,6 +27,7 @@ What changed per version, for people who run Spin Dashboard. The detailed log of
 - The spin state through `smartctl` (SAS, some controllers) read an active drive with errors in its SMART log
   as unknown, and a drive in SLEEP mode as not asleep.
 - Shares with a second pool as secondary storage (Unraid 7, `cachePool2`) counted as array shares.
+- An SVG icon (Unraid stores those as `.png` too) did not show: icons are now sent with the type of their content.
 
 ### Changed
 - Faster with a lot of file activity: on a month of real data, loading 30 days takes about a third less time and

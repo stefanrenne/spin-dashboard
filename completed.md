@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-10-22: container icons on the detail page and from labels
+- The icon replaces the kind dot in the title of a container's page (a Compose project: the first member with an icon) and stands before the name in the overview
+- Every container on the own server with a `net.unraid.docker.icon` label already had a file in Unraid's icon folder (Unraid stores label icons too, once its Docker page has shown them); for one that has none yet the server fetches the label's URL itself (http(s), at most 1 MiB, only images, in memory)
+- Unraid stores SVG icons as `<name>-icon.png` too (music-assistant-server); we sent those as `image/png` and the browser showed nothing. The type now comes from the content, with `nosniff` and a sandboxing CSP for SVGs
+
 ## 2026-10-22: share storage, smartctl exit codes, short container IDs, "/" paths
 - `shares.ini` checked against Unraid's webGUI source (github.com/unraid/webgui): 6.12 (tags 6.12.0–6.12.15) and 7.x both use `useCache` and `cachePool`; `cachePool2` exists from 7.0. The 7.0 mover moves between `cachePool` and `cachePool2` instead of the array when `cachePool2` is set, so such a share is now `pool>pool2` / `pool2>pool` with `pool2` (both pools in Paths per container and in the shfs safety check, not the array disks); only `cachePool2` set makes that pool the primary, as the share editor does
 - `smartctl -n standby -i` as fallback: exit status read as bit flags (an active drive with errors in its log exits with 64 and was "unknown"), SLEEP counts as asleep; tests with the output per case

@@ -271,7 +271,11 @@ def test_a_container_being_created_gets_its_name_within_seconds(sd, monkeypatch)
     assert sd.container_name(cid, now=1004) == "plex"
 
 
-def icon_file(sd, name, data=b"\x89PNG fake"):
+PNG = b"\x89PNG\r\n\x1a\n fake"
+SVG = b'<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+
+
+def icon_file(sd, name, data=PNG):
     os.makedirs(sd.DOCKER_ICONS, exist_ok=True)
     with open(os.path.join(sd.DOCKER_ICONS, name + "-icon.png"), "wb") as f:
         f.write(data)
@@ -317,12 +321,80 @@ def test_icons_are_served_from_the_unraid_folder_only(sd):
         except urllib.error.HTTPError as e:
             return e.code, b"", None
     try:
-        assert status("plex.png") == (200, b"\x89PNG fake", "image/png")
+        assert status("plex.png") == (200, PNG, "image/png")
         assert status("radarr.png")[0] == 404
         for evil in ("..%2F..%2Fshares.ini%00.png", "%2E%2E.png", "..%2Fx.png", ".hidden.png"):
             assert status(evil)[0] == 404, evil
     finally:
         srv.shutdown()
+
+
+def icon_server(sd):
+    import threading
+    from functools import partial
+    srv = sd.http.server.ThreadingHTTPServer(("127.0.0.1", 0), partial(sd.Handler, directory=str(sd._tmp)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, f"http://127.0.0.1:{srv.server_address[1]}/data/icons/"
+
+
+def test_an_svg_saved_as_png_is_served_as_svg_that_runs_nothing(sd):
+    """Unraid stores every icon as <name>-icon.png, also an SVG (seen: music-assistant-server)."""
+    import urllib.request
+    icon_file(sd, "music", SVG)
+    icon_file(sd, "junk", b"not an image")
+    srv, base = icon_server(sd)
+    try:
+        r = urllib.request.urlopen(base + "music.png", timeout=5)
+        assert r.headers["Content-Type"] == "image/svg+xml"
+        assert r.headers["X-Content-Type-Options"] == "nosniff"
+        assert "sandbox" in r.headers["Content-Security-Policy"] and "default-src 'none'" in r.headers["Content-Security-Policy"]
+        with pytest.raises(urllib.error.HTTPError):
+            urllib.request.urlopen(base + "junk.png", timeout=5)          # not an image: not served
+    finally:
+        srv.shutdown()
+
+
+def test_icon_type_from_the_content(sd):
+    T = sd.icon_type
+    assert T(PNG) == "image/png" and T(b"\xff\xd8\xff\xe0") == "image/jpeg" and T(b"GIF89a") == "image/gif"
+    assert T(b"RIFF\0\0\0\0WEBPVP8 ") == "image/webp"
+    assert T(SVG) == "image/svg+xml" and T(b"  <svg/>") == "image/svg+xml"
+    assert T(b"<html><body>") is None and T(b"") is None
+
+
+def test_a_container_with_only_an_icon_label_gets_the_image_through_the_server(unraid, monkeypatch):
+    fetched = []
+
+    class Resp:
+        def __init__(self, data): self.data = data
+        def read(self, n): return self.data[:n]
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+
+    def urlopen(req, timeout):
+        fetched.append(req.full_url)
+        if "broken" in req.full_url:
+            raise OSError("down")
+        return Resp(PNG)
+    monkeypatch.setattr(unraid.urllib.request, "urlopen", urlopen)
+    fake = FakeDocker({"/containers/json": [
+        {"Names": ["/sab"], "State": "running", "Labels": {"net.unraid.docker.icon": "https://cdn.example/sab.png"}, "Mounts": []},
+        {"Names": ["/odd"], "State": "running", "Labels": {"net.unraid.docker.icon": "file:///etc/passwd"}, "Mounts": []},
+        {"Names": ["/down"], "State": "running", "Labels": {"net.unraid.docker.icon": "https://broken.example/x.png"}, "Mounts": []}]})
+    try:
+        monkeypatch.setattr(unraid, "DOCKER_SOCK", fake.path)
+        icons = {c["name"]: c["icon"] for c in unraid.containers_info(now=1000)["containers"]}
+        assert icons == {"down": "data/icons/down.png", "odd": "", "sab": "data/icons/sab.png"}
+        assert unraid.icon_bytes("sab") == PNG
+        assert unraid.icon_bytes("sab") == PNG and fetched == ["https://cdn.example/sab.png"]   # kept in memory
+        assert unraid.icon_bytes("odd") is None                                               # only http(s)
+        assert unraid.icon_bytes("down") is None
+        unraid.icon_bytes("down")
+        assert fetched.count("https://broken.example/x.png") == 1                              # not again right away
+        icon_file(unraid, "sab", SVG)
+        assert unraid.icon_bytes("sab") == SVG                                                # Unraid's file comes first
+    finally:
+        fake.close()
 
 
 def test_ctr_line_for_an_oom_kill():

@@ -1250,6 +1250,28 @@ test('with every pool unchecked the source cards are empty', async () => {
   dom.window.close();
 });
 
+test('the icon of a container shows on its page and in the overview, the dot without one', async () => {
+  const containers = { docker: true, containers: [
+    { name: 'plex', state: 'running', icon: 'data/icons/plex.png', mounts: [] },
+    { name: 'sonarr', state: 'running', icon: '', mounts: [] },
+  ] };
+  const dom = await load({ ...DOCK, 'containers.json': JSON.stringify(containers) });
+  const d = dom.window.document;
+  d.getElementById('openInfo').click();
+  const row = (n) => d.querySelector(`#profileBody tr[data-ctr="${n}"]`);
+  assert.equal(row('plex').querySelector('.srcbtn img.ctr-ic').getAttribute('src'), 'data/icons/plex.png');
+  assert.equal(row('sonarr').querySelector('img.ctr-ic'), null);
+  row('plex').querySelector('.srcbtn').click();
+  const title = d.getElementById('profileTitle');
+  assert.equal(title.querySelector('img.ctr-ic.big').getAttribute('src'), 'data/icons/plex.png');
+  assert.equal(title.querySelector('.kind-dot'), null);
+  assert.equal(text(title), 'plex');
+  d.getElementById('profileBack').click();
+  row('sonarr').querySelector('.srcbtn').click();
+  assert.ok(title.querySelector('.kind-dot.container'));                   // no icon: the dot as before
+  dom.window.close();
+});
+
 test('Events has a Process column with the process inside the container and its Unraid icon', async () => {
   const containers = { docker: true, containers: [
     { name: 'plex', state: 'running', icon: 'data/icons/plex.png', mounts: [] },
@@ -1261,19 +1283,19 @@ test('Events has a Process column with the process inside the container and its 
   assert.equal(text(d.getElementById('procHead')), 'Proces');
   const row = [...d.querySelectorAll('#events tr')].find((tr) => /b\.mkv/.test(text(tr)));
   assert.equal(text(row.querySelector('td.proc')), 'plex › Plex Media Scan');
-  assert.equal(row.querySelector('td.proc img.proc-ic').getAttribute('src'), 'data/icons/plex.png');
+  assert.equal(row.querySelector('td.proc img.ctr-ic').getAttribute('src'), 'data/icons/plex.png');
   assert.doesNotMatch(text(row.querySelector('td.cause')), /plex/);                 // not twice
   const standby = [...d.querySelectorAll('#events tr')].filter((tr) => /Naar standby/.test(text(tr)));
   assert.ok(standby.length && standby.every((tr) => text(tr.querySelector('td.proc')) === ''));
   // an icon that does not load is removed, the name stays
-  const img = row.querySelector('img.proc-ic');
+  const img = row.querySelector('img.ctr-ic');
   img.dispatchEvent(new dom.window.Event('error'));
-  assert.equal(row.querySelector('img.proc-ic'), null);
+  assert.equal(row.querySelector('img.ctr-ic'), null);
   assert.equal(text(row.querySelector('td.proc')), 'plex › Plex Media Scan');
   dom.window.close();
   // without containers.json (older server): the name without an icon
   const plain = await load(DOCK);
-  assert.equal(plain.window.document.querySelectorAll('#events .proc-ic').length, 0);
+  assert.equal(plain.window.document.querySelectorAll('#events .ctr-ic').length, 0);
   const prow = [...plain.window.document.querySelectorAll('#events tr')].find((tr) => /b\.mkv/.test(text(tr)));
   assert.equal(text(prow.querySelector('td.proc')), 'plex › Plex Media Scan');
   plain.window.close();
