@@ -16,6 +16,16 @@ What changed per version, for people who run Spin Dashboard. The detailed log of
 - Events has a Process column: the container that caused a spin-up, the process inside it and its Unraid icon
   (based on PR #2 by RuudPuts). Container names are looked up in one Docker call for all containers.
 
+### Fixed
+- Unchecking every pool in a source card left some activity in it: files fatrace could not resolve were logged
+  as `/` (no drive). They are no longer logged, and older lines like that are skipped.
+- A container that was just created or updated (Compose, auto-updaters) could show up for a while as its short
+  ID, such as `058f5760bb62`: the name is now asked again after seconds instead of a minute, and lines already
+  logged that way show the container's name.
+- The spin state through `smartctl` (SAS, some controllers) read an active drive with errors in its SMART log
+  as unknown, and a drive in SLEEP mode as not asleep.
+- Shares with a second pool as secondary storage (Unraid 7, `cachePool2`) counted as array shares.
+
 ### Changed
 - Faster with a lot of file activity: on a month of real data, loading 30 days takes about a third less time and
   every redraw about a quarter less.

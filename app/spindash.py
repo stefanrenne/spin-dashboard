@@ -431,6 +431,24 @@ def run_own(cmd, timeout):
     return subprocess.CompletedProcess(cmd, p.returncode, out, err)
 
 
+# smartctl's exit status is a bit mask (smartctl(8), EXIT STATUS). Bit 0: the command line did not parse; bit 1:
+# the device could not be opened, gave no identity, or is in a low-power mode (with -n standby it is then not
+# asked). Bits 2-7 report on what the drive answered (a failed SMART command, errors in its log, a failing
+# attribute): it answered, so it is awake. An active drive with old errors in its log exits with 64, for example.
+SMARTCTL_NO_ANSWER = 0b11
+# "Device is in STANDBY mode", "... in SLEEP mode", SCSI: "... in STANDBY BY COMMAND mode"
+SMARTCTL_ASLEEP = re.compile(r"\bin (STANDBY|SLEEP)\b", re.I)
+
+
+def smartctl_state(r):
+    """'standby', 'active' or None from a `smartctl -n standby -i` run."""
+    if SMARTCTL_ASLEEP.search(r.stdout or ""):
+        return "standby"
+    if r.returncode is not None and r.returncode >= 0 and not r.returncode & SMARTCTL_NO_ANSWER and (r.stdout or "").strip():
+        return "active"
+    return None
+
+
 def drive_state(dev):
     """'active', 'standby' or None. hdparm does not wake the drive; neither does smartctl -n standby."""
     try:
@@ -441,11 +459,7 @@ def drive_state(dev):
     except (OSError, subprocess.TimeoutExpired):
         pass
     try:   # SAS and controllers where hdparm says nothing
-        r = run_own(["smartctl", "-n", "standby", "-i", f"/dev/{dev}"], timeout=15)
-        if "STANDBY" in r.stdout.upper():
-            return "standby"
-        if r.returncode == 0:
-            return "active"
+        return smartctl_state(run_own(["smartctl", "-n", "standby", "-i", f"/dev/{dev}"], timeout=15))
     except (OSError, subprocess.TimeoutExpired):
         pass
     return None
@@ -566,7 +580,7 @@ def data_dir_devices(devs=None):
     if fstype == "fuse.shfs":
         inner = root.rstrip("/") + DATA[len(mp.rstrip("/")):]       # the path below /mnt/user
         share = inner.strip("/").split("/")[0]
-        st, pool = share_storage(shares_ini().get(share, {}))
+        st, pool, _ = share_storage(shares_ini().get(share, {}))
         return (mount_devices(pool, devs) or None) if st == "pool" else None
     m = re.fullmatch(r"/dev/(?:mapper/)?md(\d+)(?:p\d+)?", src)
     if m:
@@ -1042,12 +1056,15 @@ def docker_get(path, timeout=2):
 
 names_failed = {}      # container id -> when Docker last gave no name; asked again after NAME_RETRY
 NAME_RETRY = 60
+NAME_SOON = 3
 
 
 def container_names():
-    """{container id: name} of every container, running or not, in one Docker API call; {} without an answer."""
+    """{container id: name} of every container, running or not, in one Docker API call; None without an answer."""
     out, found = {}, docker_get("/containers/json?all=1")
-    for c in found if isinstance(found, list) else []:
+    if not isinstance(found, list):
+        return None
+    for c in found:
         if not isinstance(c, dict):
             continue
         cid, name = c.get("Id") or "", ((c.get("Names") or [""])[0]).lstrip("/")
@@ -1063,11 +1080,14 @@ def container_name(cid, now=None):
     if cid in names:
         return names[cid]
     now = time.time() if now is None else now
-    if now - names_failed.get(cid, -NAME_RETRY) < NAME_RETRY:
+    if now < names_failed.get(cid, 0):
         return cid[:12]
-    names.update(container_names())
+    found = container_names()
+    names.update(found or {})
     if cid not in names:
-        names_failed[cid] = now
+        # Docker did not answer: wait NAME_RETRY. It answered without this ID: a container being created
+        # (Compose, an update), whose name follows within seconds; every event before that keeps the short ID.
+        names_failed[cid] = now + (NAME_RETRY if found is None else NAME_SOON)
         return cid[:12]
     names_failed.pop(cid, None)
     return names[cid]
@@ -1180,15 +1200,15 @@ def share_locations(share, shares=None):
     sh = (shares_ini() if shares is None else shares).get(share)
     if not sh:
         return None
-    st, pool = share_storage(sh)
+    st, pool, pool2 = share_storage(sh)
     if st == "unknown":
         return None
-    pools = [p for p in dict.fromkeys((pool, sh.get("cachePool2"))) if p]
+    pools = [p for p in (pool, pool2) if p]
     inc = [x for x in (sh.get("include") or "").split(",") if x]
     exc = {x for x in (sh.get("exclude") or "").split(",") if x}
     disks = sorted({n for n, _ in known_devices.values() if re.fullmatch(r"disk\d+", n)
                     and (not inc or n in inc) and n not in exc}, key=lambda n: int(n[4:]))
-    return {"pool": pools, "array": disks}.get(st, pools + disks)
+    return {"pool": pools, "array": disks, "pool>pool2": pools, "pool2>pool": pools}.get(st, pools + disks)
 
 
 def user_share_lookup_safe(path):
@@ -1347,6 +1367,8 @@ def handle(line):
     ts, comm, pid, types, path = m.groups()
     if path.endswith(" (deleted)"):            # fatrace marks files that were already removed
         path = path[:-10]
+    if path in ("", "/"):
+        return                               # fatrace could not resolve the file (often a deleted temp file): no file, no drive
     if pid == MY_PID or pid in own_pids or is_own_file(path):
         return                               # do not log ourselves (rule 3)
     op = next((label for c, label in OPS if c in types), None)
@@ -1566,12 +1588,21 @@ def read_shares_ini():
 
 
 def share_storage(sh):
-    """(storage, pool) according to the share settings. Storage: pool (pool only), array (array only),
+    """(storage, pool, pool2) according to the share settings. Storage: pool (pool only), array (array only),
     pool>array (first the pool, the mover moves it to the array), array>pool (the mover moves it to
-    the pool) or unknown. The field names differ per Unraid version; unknown means unknown."""
+    the pool), pool>pool2 and pool2>pool (Unraid 7: a second pool as secondary storage instead of the array,
+    `cachePool2`; the mover moves between the two as with the array) or unknown. Unraid 6.12 and 7.x use
+    `useCache` and `cachePool` (6.12 has no `cachePool2`); the `share...` names are those of the share's
+    .cfg file. Unknown means unknown."""
     use = (sh.get("useCache") or sh.get("shareUseCache") or "").lower()
-    pool = sh.get("cachePool") or sh.get("shareCachePool") or "cache"
-    return {"only": "pool", "no": "array", "yes": "pool>array", "prefer": "array>pool"}.get(use, "unknown"), pool
+    pool = sh.get("cachePool") or sh.get("shareCachePool") or ""
+    pool2 = sh.get("cachePool2") or sh.get("shareCachePool2") or ""
+    if not pool and pool2:          # Unraid's share editor: only cachePool2 set means that pool is the primary
+        pool, pool2 = pool2, ""
+    pool = pool or "cache"
+    if pool2 and use in ("yes", "prefer"):
+        return ("pool>pool2" if use == "yes" else "pool2>pool"), pool, pool2
+    return {"only": "pool", "no": "array", "yes": "pool>array", "prefer": "array>pool"}.get(use, "unknown"), pool, ""
 
 
 def locate(src, shares, hdd_bases):
@@ -1590,12 +1621,16 @@ def locate(src, shares, hdd_bases):
     if top in ("user", "user0"):
         if len(p) < 3:
             return {"kind": "user", "hdd": array_hdd or bool(hdd_bases)}
-        st, pool = share_storage(shares.get(p[2], {}))
+        st, pool, pool2 = share_storage(shares.get(p[2], {}))
         if top == "user0":
             st = "array"
         hdd = {"pool": pool in hdd_bases, "array": array_hdd, "pool>array": array_hdd,
-               "array>pool": pool in hdd_bases}.get(st)
-        return {"kind": "share", "share": p[2], "storage": st, "pool": pool, "hdd": hdd}
+               "array>pool": pool in hdd_bases, "pool>pool2": pool in hdd_bases or pool2 in hdd_bases,
+               "pool2>pool": pool in hdd_bases or pool2 in hdd_bases}.get(st)
+        out = {"kind": "share", "share": p[2], "storage": st, "pool": pool, "hdd": hdd}
+        if st in ("pool>pool2", "pool2>pool"):
+            out["pool2"] = pool2
+        return out
     kind = "disk" if re.fullmatch(r"disk\d+", top) else "pool"
     return {"kind": kind, "name": top, "hdd": top in hdd_bases}
 
@@ -1659,7 +1694,7 @@ def containers_info(now=None):
                 if m.get("Type") == "volume":
                     entry["volume"] = m.get("Name")
                 mounts.append(entry)
-        out.append({"name": name, "state": c.get("State") or "",
+        out.append({"name": name, "id": c.get("Id") or "", "state": c.get("State") or "",
                     "project": (c.get("Labels") or {}).get("com.docker.compose.project") or "",
                     "icon": icon_url(name), "mounts": mounts})
     body = {"docker": os.path.exists(DOCKER_SOCK), "containers": sorted(out, key=lambda x: x["name"].lower())}

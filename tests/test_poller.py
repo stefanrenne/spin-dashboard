@@ -1,3 +1,4 @@
+import pytest
 import spindash
 from conftest import make_disk, set_io
 
@@ -346,3 +347,42 @@ def test_container_io_reads_both_cgroup_layouts(sd):
     cgroup(sd, SONARR, {"259:5": (3, 4)}, parent="system.slice", name=f"docker-{SONARR}.scope")
     (sd._tmp / "cgroup" / "docker" / "not-a-container").mkdir()
     assert sd.container_io() == {PLEX: {"8:48": (1, 2)}, SONARR: {"259:5": (3, 4)}}
+
+
+# ---------- spin state through smartctl, when hdparm says nothing (SAS, some controllers) ----------
+def smartctl_run(sd, monkeypatch, out, code, hdparm=" drive state is:  unknown\n"):
+    import subprocess
+    calls = []
+
+    def fake(cmd, timeout):
+        calls.append(cmd[0])
+        if cmd[0] == "hdparm":
+            return subprocess.CompletedProcess(cmd, 0, f"\n/dev/sdb:\n{hdparm}", "")
+        return subprocess.CompletedProcess(cmd, code, out, "")
+    monkeypatch.setattr(sd, "run_own", fake)
+    return sd.drive_state("sdb"), calls
+
+
+IDENTITY = "=== START OF INFORMATION SECTION ===\nDevice Model:     WDC WD80EFAX\nSerial Number:    X\n"
+
+
+@pytest.mark.parametrize("out,code,state", [
+    ("Device is in STANDBY mode, exit(2)\n", 2, "standby"),
+    ("Device is in SLEEP mode, exit(2)\n", 2, "standby"),
+    ("Device is in STANDBY BY COMMAND mode, exit(2)\n", 2, "standby"),     # SCSI wording
+    (IDENTITY, 0, "active"),
+    (IDENTITY, 64, "active"),        # errors in the drive's log: it answered, so it is awake
+    (IDENTITY, 4, "active"),         # a SMART command failed after the identity: it answered
+    (IDENTITY, 2, None),             # bit 1: not opened or no identity
+    ("", 0, None),                   # no output at all: say nothing
+    ("smartctl: unknown option\n", 1, None),
+])
+def test_smartctl_fallback_reads_the_exit_status_as_bit_flags(sd, monkeypatch, out, code, state):
+    got, calls = smartctl_run(sd, monkeypatch, out, code)
+    assert got == state
+    assert calls == ["hdparm", "smartctl"]
+
+
+def test_hdparm_answer_wins_without_smartctl(sd, monkeypatch):
+    got, calls = smartctl_run(sd, monkeypatch, "", 0, hdparm=" drive state is:  standby\n")
+    assert (got, calls) == ("standby", ["hdparm"])

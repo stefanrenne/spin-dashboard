@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-10-22: share storage, smartctl exit codes, short container IDs, "/" paths
+- `shares.ini` checked against Unraid's webGUI source (github.com/unraid/webgui): 6.12 (tags 6.12.0–6.12.15) and 7.x both use `useCache` and `cachePool`; `cachePool2` exists from 7.0. The 7.0 mover moves between `cachePool` and `cachePool2` instead of the array when `cachePool2` is set, so such a share is now `pool>pool2` / `pool2>pool` with `pool2` (both pools in Paths per container and in the shfs safety check, not the array disks); only `cachePool2` set makes that pool the primary, as the share editor does
+- `smartctl -n standby -i` as fallback: exit status read as bit flags (an active drive with errors in its log exits with 64 and was "unknown"), SLEEP counts as asleep; tests with the output per case
+- A recreated container (plex, by Compose at 07:01) had a minute of events logged with its short ID because a failed name lookup waited 60 s; Docker answering without the ID now retries after 3 s, and `containers.json` gives the full ID so the frontend shows the name for lines already logged that way
+- fatrace sometimes reports a file it cannot resolve as `/` (233 lines in 25 days, mostly SQLite temp files of the *arr containers); they belonged to no pool, so unchecking every pool in a source card still showed them. No longer logged, older ones skipped
+
 ## 2026-10-22: PR #2, Process column in Events (RuudPuts)
 - Built on the current `main` instead of merging the branch (it was based on 18 October and conflicted): the Process column (left of Cause) with the container, the process inside it and its icon; the source label moved there from the cause cell, so it is not shown twice. Hidden without who lines
 - Icons: `docker_icons.xml` from the PR does not exist on the own server; Unraid keeps every icon as `<name>-icon.png` under `/emhttp/plugins/dynamix.docker.manager/images` (tmpfs), so `containers.json` points to `data/icons/<name>.png` and the backend serves them, and the page loads no images from other sites. An icon that fails to load is removed

@@ -184,3 +184,22 @@ the server then POSTs to; reading is covered by keeping it on the LAN or behind 
 (README, Security). So one optional token (`SETTINGS_TOKEN`) guards every change, and the webhook URL itself is
 never sent to a browser in full: only scheme and host, and that masked form sent back means "unchanged", so a
 browser that saves the quiet hours does not have to know the real URL.
+
+## Container names right after a container is created
+
+Compose and auto-updaters recreate containers; the new container's processes start before Docker lists it
+under its name. Seen on the own server: plex was recreated and for a minute its events were logged with the
+short ID `058f5760bb62`, because after a failed lookup we waited 60 s before asking again, and that was the
+first minute of Plex scanning the library. Now a lookup that Docker answers without the ID is retried after
+`NAME_SOON` (3 s); only when Docker does not answer at all the wait stays `NAME_RETRY` (60 s), so an
+unreachable Docker still does not cost 2 s per event. Lines already logged with a short ID are not rewritten:
+`containers.json` carries every container's full ID, and the frontend shows the name for a short ID that
+matches one.
+
+## smartctl as the fallback for the spin state
+
+`smartctl -n standby -i` exits with a bit mask (smartctl(8), EXIT STATUS). Only bits 0 (command line) and 1
+(device not opened, no identity, or in a low-power mode, then not asked) mean the drive did not answer. The
+other bits report on what it answered, such as errors in its log (64), which many older drives have: such a
+drive is awake. Asleep is recognised from "in STANDBY" and "in SLEEP" (SCSI: "in STANDBY BY COMMAND"). Not
+yet checked on real SAS hardware (see `todo.md`).

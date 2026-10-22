@@ -1217,6 +1217,39 @@ const DOCK = served({ [today]: [
   `${ep(60)},spin,sdd,standby`,
 ] });
 
+test('a container logged with its short ID gets its name from containers.json, and "/" lines are skipped', async () => {
+  const id = '058f5760bb62' + '7'.repeat(52);
+  const containers = { docker: true, containers: [{ name: 'plex', id, state: 'running', icon: '', mounts: [] }] };
+  const lines = [
+    `${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`,
+    `${ep(121)},who,container,058f5760bb62,7,geopend,/mnt/trunk/Media/films/b.mkv`,   // right after an update
+    `${ep(110)},who,container,plex,7,geopend,/mnt/trunk/Media/films/c.mkv`,
+    `${ep(100)},who,container,prowlarr,8,geschreven,/`,                             // older versions: no file
+    `${ep(90)},cio,058f5760bb62,sdd,2048,0`,
+  ];
+  const dom = await load({ ...served({ [today]: lines }), 'containers.json': JSON.stringify(containers) });
+  const d = dom.window.document;
+  const src = [...d.querySelectorAll('#sources .src')].map(text);
+  assert.equal(src.length, 1, src.join('\n'));                             // one source: plex, no prowlarr without a file
+  assert.match(src[0], /^container: plex .* 2 gelezen/);
+  dom.window.close();
+  // without containers.json the short ID stays (nothing to look it up in)
+  const plain = await load(served({ [today]: lines }));
+  assert.ok([...plain.window.document.querySelectorAll('#sources .src')].some((x) => /058f5760bb62/.test(text(x))));
+  plain.window.close();
+});
+
+test('with every pool unchecked the source cards are empty', async () => {
+  const dom = await load(POOLS3);
+  const d = dom.window.document, w = dom.window;
+  for (const v of ['array', 'frunk', 'trunk']) {
+    const box = d.querySelector(`#srcFilter input[value="${v}"]`);
+    box.checked = false; box.dispatchEvent(new w.Event('change', { bubbles: true }));
+  }
+  assert.equal(d.querySelectorAll('#sources .src').length, 0);
+  dom.window.close();
+});
+
 test('Events has a Process column with the process inside the container and its Unraid icon', async () => {
   const containers = { docker: true, containers: [
     { name: 'plex', state: 'running', icon: 'data/icons/plex.png', mounts: [] },
@@ -1298,6 +1331,20 @@ test('a container restart just before a spin-up is named in the events table', a
   const dom = await load(NEAR);
   const up = rows(dom.window.document).find((x) => /Opgespind/.test(x));
   assert.match(up, /Geen bestandsactiviteit gezien Herstart van radarr 3 min eerder/);
+  dom.window.close();
+});
+
+test('a share with a second pool as secondary storage shows both pools, not the array', async () => {
+  const containers = { docker: true, containers: [
+    { name: 'sab', state: 'running', mounts: [
+      { source: '/mnt/user/downloads', target: '/downloads', rw: true, where: { kind: 'share', share: 'downloads', storage: 'pool>pool2', pool: 'cache', pool2: 'trunk', hdd: true } },
+      { source: '/mnt/user/incoming', target: '/incoming', rw: true, where: { kind: 'share', share: 'incoming', storage: 'pool2>pool', pool: 'cache', pool2: 'trunk', hdd: true } }] },
+  ] };
+  const dom = await load({ ...DOCK, 'containers.json': JSON.stringify(containers) });
+  const d = dom.window.document;
+  d.getElementById('openInfo').click();
+  const maps = [...d.querySelectorAll('#profileBody tr[data-ctr="sab"] .loc')].map((x) => x.textContent);
+  assert.deepEqual(maps, ['cache', 'trunk']);                               // one label per place, in order of the first mapping
   dom.window.close();
 });
 

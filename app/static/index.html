@@ -1021,6 +1021,17 @@ function procAt(idx, pid, t){
   for (const p of l){ if (p.t > t + 1000) break; best = p; }
   return best ? best.comm : null;
 }
+// A container whose name Docker did not give in time (right after it was created or updated) is logged with
+// its short ID. containers.json knows the IDs, so those lines get the name, for display only (the day files stay).
+function nameShortIds(lists){
+  const ids = containers && !containers.failed ? (containers.containers || []).filter(c => c.id) : [];
+  if (!ids.length) return;
+  for (const list of lists) for (const x of list){
+    if (!/^[0-9a-f]{12}$/.test(x.name) || (x.kind && x.kind !== 'container')) continue;
+    const c = ids.find(y => y.id.startsWith(x.name));
+    if (c) x.name = c.name;
+  }
+}
 function setComms(idx, who){ for (const w of who) if (w.kind === 'container') w.comm = procAt(idx, w.pid, w.t); }
 // A die directly followed by a start (within a minute) is a restart
 function ctrEvents(ctrs){
@@ -1621,6 +1632,7 @@ function mergeActivity(act, who){
   const last = new Map();                       // per path the second of the previous who line kept: they come in time order
   const extra = [];
   for (const w of who){
+    if (w.path === '/') continue;                // older versions logged files fatrace could not resolve as "/"
     const s = Math.round(w.t / 1000), np = normPath(w.path), l = last.get(np);
     if (l !== undefined && Math.abs(s - l) <= 2) continue;
     if (seen.size){
@@ -2238,7 +2250,8 @@ function locsOf(w){
   if (w.kind === 'disk') return ['array'];
   if (w.kind === 'pool') return [w.name];
   if (w.kind === 'user') return [null];
-  return {pool: [w.pool], array: ['array'], 'pool>array': [w.pool, 'array'], 'array>pool': ['array', w.pool]}[w.storage] || [undefined];
+  return {pool: [w.pool], array: ['array'], 'pool>array': [w.pool, 'array'], 'array>pool': ['array', w.pool],
+          'pool>pool2': [w.pool, w.pool2], 'pool2>pool': [w.pool2, w.pool]}[w.storage] || [undefined];
 }
 // dark enough for white text (4.5:1) in the light and the dark theme
 const LOC_COLORS = ['#2458C6', '#1F7A4D', '#8A5F00', '#9B2C8F', '#B23A3A', '#136F80', '#5B5FC7', '#6B5B45'];
@@ -3047,6 +3060,7 @@ async function loadParsed(parsed, source, demo=false, keepRange=false, step=null
   const {ev, act, names, kinds, who, procs, ctrs, io, wear, cio} = parsed;
   if (!ev.length && !io.length && !Object.keys(names).length) return false;   // a server with only SSDs has no spin lines
   const pidx = procIndex(procs);
+  nameShortIds([who, cio]);
   setComms(pidx, who);
   if (step) await step(.88, 'loadingProcess');
   const merged = mergeActivity(act, who);

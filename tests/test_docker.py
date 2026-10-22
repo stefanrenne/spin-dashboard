@@ -111,12 +111,26 @@ def unraid(sd):
 def test_read_shares_ini_and_share_storage(unraid):
     sh = unraid.read_shares_ini()
     assert sh["appdata"]["useCache"] == "only"
-    assert unraid.share_storage(sh["appdata"]) == ("pool", "cache")
-    assert unraid.share_storage(sh["Media"]) == ("pool>array", "cache")
-    assert unraid.share_storage(sh["isos"]) == ("array", "cache")
-    assert unraid.share_storage(sh["downloads"]) == ("array>pool", "trunk")
-    assert unraid.share_storage({}) == ("unknown", "cache")
-    assert unraid.share_storage({"shareUseCache": "only", "shareCachePool": "fast"}) == ("pool", "fast")
+    assert unraid.share_storage(sh["appdata"]) == ("pool", "cache", "")
+    assert unraid.share_storage(sh["Media"]) == ("pool>array", "cache", "")
+    assert unraid.share_storage(sh["isos"]) == ("array", "cache", "")
+    assert unraid.share_storage(sh["downloads"]) == ("array>pool", "trunk", "")
+    assert unraid.share_storage({}) == ("unknown", "cache", "")
+    assert unraid.share_storage({"shareUseCache": "only", "shareCachePool": "fast"}) == ("pool", "fast", "")
+
+
+def test_a_second_pool_as_secondary_storage(unraid):
+    """Unraid 7 (webgui sbin/mover): with cachePool2 set the mover moves between the two pools, not the array."""
+    S = unraid.share_storage
+    assert S({"useCache": "yes", "cachePool": "frunk", "cachePool2": "trunk"}) == ("pool>pool2", "frunk", "trunk")
+    assert S({"useCache": "prefer", "cachePool": "frunk", "cachePool2": "trunk"}) == ("pool2>pool", "frunk", "trunk")
+    assert S({"useCache": "only", "cachePool": "frunk", "cachePool2": "trunk"}) == ("pool", "frunk", "")
+    assert S({"useCache": "only", "cachePool": "", "cachePool2": "trunk"}) == ("pool", "trunk", "")   # only cachePool2: the primary
+    shares = {"Media": {"useCache": "yes", "cachePool": "cache", "cachePool2": "trunk"}}
+    where = unraid.locate("/mnt/user/Media/a.mkv", shares, {"trunk"})
+    assert where == {"kind": "share", "share": "Media", "storage": "pool>pool2", "pool": "cache", "pool2": "trunk", "hdd": True}
+    assert unraid.locate("/mnt/user/Media/a.mkv", shares, {"disk1"})["hdd"] is False     # no array involved
+    assert unraid.share_locations("Media", shares) == ["cache", "trunk"]                  # not the array disks
 
 
 def test_locate_says_where_a_path_lives_and_whether_that_is_an_hdd(unraid):
@@ -241,8 +255,20 @@ def test_container_name_resolves_every_container_in_one_call(sd, monkeypatch):
     assert sd.container_name("a" * 64, now=1000) == "plex"
     assert sd.container_name("b" * 64, now=1000) == "radarr"
     assert asked == ["/containers/json?all=1"]
-    assert sd.container_name("c" * 64, now=1000) == "c" * 12       # unknown to Docker: short ID, asked again later
-    assert sd.container_name("c" * 64, now=1030) == "c" * 12 and len(asked) == 2
+    assert sd.container_name("c" * 64, now=1000) == "c" * 12       # unknown to Docker: short ID for now
+    assert sd.container_name("c" * 64, now=1002) == "c" * 12 and len(asked) == 2
+    sd.container_name("c" * 64, now=1004)                           # Docker answered, so it asks again soon
+    assert len(asked) == 3
+
+
+def test_a_container_being_created_gets_its_name_within_seconds(sd, monkeypatch):
+    """Compose recreating a container: the first events come before Docker lists it. Seen on the own server:
+    a minute of plex's events was logged with the short ID while the retry waited 60 s."""
+    cid = "0" * 63 + "1"
+    answers = [[], [{"Id": cid, "Names": ["/plex"]}]]
+    monkeypatch.setattr(sd, "docker_get", lambda path, timeout=2: answers.pop(0))
+    assert sd.container_name(cid, now=1000) == cid[:12]
+    assert sd.container_name(cid, now=1004) == "plex"
 
 
 def icon_file(sd, name, data=b"\x89PNG fake"):
@@ -262,6 +288,16 @@ def test_containers_info_points_to_the_unraid_icon(unraid, monkeypatch):
     finally:
         fake.close()
     assert (plex["icon"], radarr["icon"]) == ("data/icons/plex.png", "")
+    assert plex["id"] == ""                       # the fake gives no Id; Docker does
+
+
+def test_containers_info_gives_the_container_id(unraid, monkeypatch):
+    fake = FakeDocker({"/containers/json": [{"Id": "f" * 64, "Names": ["/plex"], "State": "running", "Labels": {}, "Mounts": []}]})
+    try:
+        monkeypatch.setattr(unraid, "DOCKER_SOCK", fake.path)
+        assert unraid.containers_info(now=1000)["containers"][0]["id"] == "f" * 64
+    finally:
+        fake.close()
 
 
 def test_icons_are_served_from_the_unraid_folder_only(sd):
@@ -317,6 +353,15 @@ def test_dockerd_writing_a_container_log_counts_for_that_container(sd, monkeypat
     sd.handle(f"1.0 dockerd(3): W   /mnt/frunk/appdata/docker/containers/{cid}/{cid}-json.log\n")
     sd.handle("1.0 dockerd(3): W   /mnt/frunk/appdata/docker/image/overlay2/repositories.json\n")   # not one container
     assert [(c[1], c[2]) for c in calls] == [("container", "plex"), ("unraid", "dockerd")]
+
+
+def test_a_path_fatrace_could_not_resolve_is_skipped(sd, monkeypatch):
+    calls = []
+    monkeypatch.setattr(sd, "write_who", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(sd, "classify", lambda pid, comm: ("container", "prowlarr"))
+    sd.handle("1.0 Prowlarr(9): W   /\n")
+    sd.handle("1.0 Prowlarr(9): W   / (deleted)\n")
+    assert calls == []
 
 
 def test_deleted_suffix_is_stripped(sd, monkeypatch):
