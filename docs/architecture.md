@@ -136,7 +136,9 @@ container (Docker API) and, for `/mnt/user/<share>`, where the share lives accor
 `shares.ini`. Whether a path is on an HDD follows from those settings and which disks and pools are
 rotational, never from looking at the disks (that would wake them). The `docker` thread also
 follows Docker's event stream and writes `ctr` lines for start, die and health; container processes
-get a `proc` line with their fatrace name, so the feed and the profile can say "plex › Plex Media Scan".
+get a `proc` line with their fatrace name, so the feed, the profile and the *Process* column of Events can say
+"plex › Plex Media Scan". That column also shows the container's icon: Unraid keeps one per container under
+`/emhttp/plugins/dynamix.docker.manager/images` (tmpfs), which `containers.json` points to and `/data/icons/` serves.
 
 Below the spin-up analysis, *Reads per drive* and *Writes per drive* show per drive the top
 sources and files in that direction over the period (also without spin-ups), and a *Live activity* feed lists the most recent file

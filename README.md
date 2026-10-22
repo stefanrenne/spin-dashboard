@@ -4,7 +4,7 @@ See when your hard drives spin up and down, and **why**.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-dark.png">
-  <img alt="Spin Dashboard: key figures compared with the previous week, a timeline per pool and the array with every spin-up and the data read and written (an NVMe cache pool as a read/write graph with what it writes per day), what the SSDs write per day in the key figures, a timeline per source with every access, spin-ups per day and per hour of day, what wakes the drives and what keeps them awake, spin-ups and activity by source and the rhythm of each source (each with a checkbox per pool), reads and writes per drive with a card per pool, spin duration and rest, live activity and a table of events with the cause of each spin-up" src="docs/images/screenshot-light.png">
+  <img alt="Spin Dashboard: key figures compared with the previous week, a timeline per pool and the array with every spin-up and the data read and written (an NVMe cache pool as a read/write graph with what it writes per day), what the SSDs write per day in the key figures, a timeline per source with every access, spin-ups per day and per hour of day, what wakes the drives and what keeps them awake, spin-ups and activity by source and the rhythm of each source (each with a checkbox per pool), reads and writes per drive with a card per pool, spin duration and rest, live activity and a table of events with the process and the cause of each spin-up" src="docs/images/screenshot-light.png">
 </picture>
 
 - **Key figures** at the top: spin-ups, spinning hours, how much of the time all drives slept and the longest full rest, each compared with the previous period, so you see right away whether a change helped.
@@ -22,7 +22,7 @@ See when your hard drives spin up and down, and **why**.
 - **Quiet hours**: set a window in which the drives should sleep (for example 23:00–07:00, for all drives or chosen pools). Spin-ups inside it are marked, and can be sent to a webhook (ntfy, Gotify, Discord, Slack, Home Assistant); optionally also when a drive or SSD pool reads and writes more than a number of MB inside the window.
 - **CSV export** of the selected period: spin-ups, file access with source and process, container events, reads and writes per drive per hour and the SMART wear, ready for a spreadsheet.
 - **Live activity feed**: the most recent file events stream in as they happen (over Server-Sent Events), newest first, with an R/W marker, source and relative time; checkboxes per pool (and the array) choose which ones it shows.
-- Click a spin-up to see every file that was opened during that session, with time and source.
+- Click a spin-up to see every file that was opened during that session, with time and source. The events table has a **Process** column with the container (and the process inside it) and its Unraid icon.
 - Rankings of what wakes your drives, by folder and by source.
 - Browse back and forward through history: the last hour, a day at a time in the 24-hour view, a week in the 7-day view, a month (30 days) in the 30-day view.
 - Available in English, Dutch, French, German and Spanish. Follows your browser language; pick another one under Settings (the gear at the top right).

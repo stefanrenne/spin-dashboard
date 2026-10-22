@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-10-22: PR #2, Process column in Events (RuudPuts)
+- Built on the current `main` instead of merging the branch (it was based on 18 October and conflicted): the Process column (left of Cause) with the container, the process inside it and its icon; the source label moved there from the cause cell, so it is not shown twice. Hidden without who lines
+- Icons: `docker_icons.xml` from the PR does not exist on the own server; Unraid keeps every icon as `<name>-icon.png` under `/emhttp/plugins/dynamix.docker.manager/images` (tmpfs), so `containers.json` points to `data/icons/<name>.png` and the backend serves them, and the page loads no images from other sites. An icon that fails to load is removed
+- `container_name()` asks Docker for all containers at once (`/containers/json?all=1`), keeping the retry delay for IDs Docker does not know
+- Not taken over: the CI change that pushes a `pr-<n>` image for pull requests (forks cannot push to this repository's registry, and Dependabot PRs would fill it); PRs are built without pushing, as before
+
 ## 2026-10-22: faster processing in the browser (no database)
 - Measured on 25 days of the own server (25 MB, ~33,000 who lines a day): downloading (~0.1 s a day) and parsing the CSV (~30 ms for 30 days) cost little; the time goes to processing in the browser. A database would only help if the server computed the cards, so the CSV files stay
 - Paths are split once per distinct path (`partsOf`), `normPath` skips its regex for paths without a trailing slash, `mergeActivity` looks for duplicates per path instead of with five string keys per who line and only sorts when the lines are out of order, the pools with activity are found once per load, and the lane of an event is looked up once per drive name (`laneFinder`)

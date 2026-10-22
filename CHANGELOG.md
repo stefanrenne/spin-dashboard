@@ -13,6 +13,9 @@ What changed per version, for people who run Spin Dashboard. The detailed log of
 - Activity per source, Rhythm per source, Timeline per source and Events can be filtered per pool with checkboxes, each
   card with its own choice; Events no longer has the drive dropdown.
 
+- Events has a Process column: the container that caused a spin-up, the process inside it and its Unraid icon
+  (based on PR #2 by RuudPuts). Container names are looked up in one Docker call for all containers.
+
 ### Changed
 - Faster with a lot of file activity: on a month of real data, loading 30 days takes about a third less time and
   every redraw about a quarter less.

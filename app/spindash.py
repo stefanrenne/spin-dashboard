@@ -66,6 +66,7 @@ MOUNTS_FILE = "/proc/self/mounts"
 MOUNTINFO = "/proc/self/mountinfo"
 USER_SHARES = "/mnt/user"
 DOCKER_SOCK = "/var/run/docker.sock"
+DOCKER_ICONS = os.path.join(EMHTTP, "plugins", "dynamix.docker.manager", "images")   # <name>-icon.png per container
 HOST_CGROUP = "/proc/1/root/sys/fs/cgroup"     # the host's cgroup v2 tree: pid 1 is the host's init (--pid=host)
 
 DAYS = os.path.join(DATA, "days")
@@ -1043,21 +1044,33 @@ names_failed = {}      # container id -> when Docker last gave no name; asked ag
 NAME_RETRY = 60
 
 
+def container_names():
+    """{container id: name} of every container, running or not, in one Docker API call; {} without an answer."""
+    out, found = {}, docker_get("/containers/json?all=1")
+    for c in found if isinstance(found, list) else []:
+        if not isinstance(c, dict):
+            continue
+        cid, name = c.get("Id") or "", ((c.get("Names") or [""])[0]).lstrip("/")
+        if cid and name:
+            out[cid] = name
+    return out
+
+
 def container_name(cid, now=None):
-    """Name of a container. Only real names are remembered: when Docker does not answer, the short ID is
-    used for now and Docker is asked again after NAME_RETRY (not for every event)."""
+    """Name of a container. An unknown ID asks Docker for the names of all containers at once, so the others
+    are known right away too. Only real names are remembered: when Docker does not know the ID or does not
+    answer, the short ID is used for now and Docker is asked again after NAME_RETRY (not for every event)."""
     if cid in names:
         return names[cid]
     now = time.time() if now is None else now
     if now - names_failed.get(cid, -NAME_RETRY) < NAME_RETRY:
         return cid[:12]
-    name = (docker_get(f"/containers/{cid}/json") or {}).get("Name", "").lstrip("/")
-    if not name:
+    names.update(container_names())
+    if cid not in names:
         names_failed[cid] = now
         return cid[:12]
     names_failed.pop(cid, None)
-    names[cid] = name
-    return name
+    return names[cid]
 
 
 def classify(pid, comm, now=None):
@@ -1599,6 +1612,25 @@ def volume_devices():
     return out
 
 
+# Unraid keeps the icon of every container it manages as <name>-icon.png here (tmpfs under /emhttp: reading
+# it wakes nothing). We serve them ourselves, so the page loads no images from other sites.
+ICON_NAME = re.compile(r"[\w.-]{1,128}")
+ICON_MAX = 1 << 20
+
+
+def icon_path(name):
+    """Path of the Unraid icon of a container, or None for a name that is not a plain file name."""
+    if not ICON_NAME.fullmatch(name) or name.startswith("."):
+        return None
+    return os.path.join(DOCKER_ICONS, name + "-icon.png")
+
+
+def icon_url(name):
+    """URL of the container's icon for containers.json, relative to the page; "" when Unraid has none."""
+    p = icon_path(name)
+    return f"data/icons/{name}.png" if p and os.path.isfile(p) else ""
+
+
 _containers_cache = {"t": 0.0, "body": None}
 
 
@@ -1629,7 +1661,7 @@ def containers_info(now=None):
                 mounts.append(entry)
         out.append({"name": name, "state": c.get("State") or "",
                     "project": (c.get("Labels") or {}).get("com.docker.compose.project") or "",
-                    "mounts": mounts})
+                    "icon": icon_url(name), "mounts": mounts})
     body = {"docker": os.path.exists(DOCKER_SOCK), "containers": sorted(out, key=lambda x: x["name"].lower())}
     _containers_cache.update(t=now, body=body)
     return body
@@ -1978,6 +2010,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if clean == "/data/containers.json":
             self.send_json(containers_info())
             return
+        m = re.fullmatch(r"/data/icons/(.+)\.png", clean)
+        if m:
+            self.send_icon(urllib.parse.unquote(m.group(1)))
+            return
         if clean == "/health":
             ok, body = health_status()
             self.send_json(body, 200 if ok else 503)
@@ -2051,6 +2087,24 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_icon(self, name):
+        """A container's icon from Unraid (PNG), cached by the browser for a day; 404 when there is none."""
+        p = icon_path(name)
+        try:
+            if not p or os.path.getsize(p) > ICON_MAX:
+                raise OSError
+            with open(p, "rb") as f:
+                body = f.read()
+        except OSError:
+            self.send_error(404)
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "max-age=86400")
         self.end_headers()
         self.wfile.write(body)
 

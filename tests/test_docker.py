@@ -224,13 +224,69 @@ def test_a_client_that_hangs_up_leaves_no_traceback(sd, capsys):
 def test_container_name_only_remembers_real_names(sd, monkeypatch):
     """When Docker does not answer once, the container is not stuck with its short ID."""
     cid = "a" * 64
-    answers, asked = [None, {"Name": "/plex"}], []
+    answers, asked = [None, [{"Id": cid, "Names": ["/plex"]}]], []
     monkeypatch.setattr(sd, "docker_get", lambda path, timeout=2: asked.append(path) or answers.pop(0))
     assert sd.container_name(cid, now=1000) == "a" * 12
     assert sd.container_name(cid, now=1030) == "a" * 12        # not asked again within NAME_RETRY
     assert len(asked) == 1
     assert sd.container_name(cid, now=1061) == "plex"
     assert sd.container_name(cid, now=1062) == "plex" and len(asked) == 2
+
+
+def test_container_name_resolves_every_container_in_one_call(sd, monkeypatch):
+    """Based on PR #2 (RuudPuts): one /containers/json call names all containers, also the next ones asked."""
+    asked = []
+    monkeypatch.setattr(sd, "docker_get", lambda path, timeout=2: asked.append(path) or [
+        {"Id": "a" * 64, "Names": ["/plex"]}, {"Id": "b" * 64, "Names": ["/radarr"]}])
+    assert sd.container_name("a" * 64, now=1000) == "plex"
+    assert sd.container_name("b" * 64, now=1000) == "radarr"
+    assert asked == ["/containers/json?all=1"]
+    assert sd.container_name("c" * 64, now=1000) == "c" * 12       # unknown to Docker: short ID, asked again later
+    assert sd.container_name("c" * 64, now=1030) == "c" * 12 and len(asked) == 2
+
+
+def icon_file(sd, name, data=b"\x89PNG fake"):
+    os.makedirs(sd.DOCKER_ICONS, exist_ok=True)
+    with open(os.path.join(sd.DOCKER_ICONS, name + "-icon.png"), "wb") as f:
+        f.write(data)
+
+
+def test_containers_info_points_to_the_unraid_icon(unraid, monkeypatch):
+    icon_file(unraid, "plex")
+    fake = FakeDocker({"/containers/json": [
+        {"Names": ["/plex"], "State": "running", "Labels": {}, "Mounts": []},
+        {"Names": ["/radarr"], "State": "running", "Labels": {}, "Mounts": []}]})
+    try:
+        monkeypatch.setattr(unraid, "DOCKER_SOCK", fake.path)
+        plex, radarr = unraid.containers_info(now=1000)["containers"]
+    finally:
+        fake.close()
+    assert (plex["icon"], radarr["icon"]) == ("data/icons/plex.png", "")
+
+
+def test_icons_are_served_from_the_unraid_folder_only(sd):
+    import threading, urllib.request, urllib.error
+    from functools import partial
+    icon_file(sd, "plex")
+    with open(os.path.join(sd.EMHTTP, "shares.ini"), "w") as f:
+        f.write("secret")
+    srv = sd.http.server.ThreadingHTTPServer(("127.0.0.1", 0), partial(sd.Handler, directory=str(sd._tmp)))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}/data/icons/"
+
+    def status(name):
+        try:
+            r = urllib.request.urlopen(base + name, timeout=5)
+            return r.status, r.read(), r.headers.get("Content-Type")
+        except urllib.error.HTTPError as e:
+            return e.code, b"", None
+    try:
+        assert status("plex.png") == (200, b"\x89PNG fake", "image/png")
+        assert status("radarr.png")[0] == 404
+        for evil in ("..%2F..%2Fshares.ini%00.png", "%2E%2E.png", "..%2Fx.png", ".hidden.png"):
+            assert status(evil)[0] == 404, evil
+    finally:
+        srv.shutdown()
 
 
 def test_ctr_line_for_an_oom_kill():
@@ -256,8 +312,8 @@ def test_dockerd_writing_a_container_log_counts_for_that_container(sd, monkeypat
     calls = []
     monkeypatch.setattr(sd, "write_who", lambda *a, **k: calls.append(a))
     monkeypatch.setattr(sd, "classify", lambda pid, comm: ("unraid", comm))
-    monkeypatch.setattr(sd, "docker_get", lambda path, timeout=2: {"Name": "/plex"})
     cid = "f" * 64
+    monkeypatch.setattr(sd, "docker_get", lambda path, timeout=2: [{"Id": cid, "Names": ["/plex"]}])
     sd.handle(f"1.0 dockerd(3): W   /mnt/frunk/appdata/docker/containers/{cid}/{cid}-json.log\n")
     sd.handle("1.0 dockerd(3): W   /mnt/frunk/appdata/docker/image/overlay2/repositories.json\n")   # not one container
     assert [(c[1], c[2]) for c in calls] == [("container", "plex"), ("unraid", "dockerd")]

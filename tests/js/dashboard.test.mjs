@@ -109,7 +109,7 @@ test('without pool grouping, pool members are grouped into one row with names fr
 test('the cause is the earliest file and shows the container name', async () => {
   const dom = await load(POOL);
   const up = rows(dom.window.document).find((x) => /Opgespind/.test(x));
-  assert.match(up, /Media\/series gelezen: a\.mkv bazarr/);
+  assert.match(up, /bazarr Media\/series gelezen: a\.mkv/);           // the source in its own column, before the cause
   dom.window.close();
 });
 
@@ -1217,6 +1217,42 @@ const DOCK = served({ [today]: [
   `${ep(60)},spin,sdd,standby`,
 ] });
 
+test('Events has a Process column with the process inside the container and its Unraid icon', async () => {
+  const containers = { docker: true, containers: [
+    { name: 'plex', state: 'running', icon: 'data/icons/plex.png', mounts: [] },
+    { name: 'sonarr', state: 'running', icon: '', mounts: [] },
+  ] };
+  const dom = await load({ ...DOCK, 'containers.json': JSON.stringify(containers) });
+  const d = dom.window.document;
+  assert.equal(d.getElementById('procHead').hidden, false);
+  assert.equal(text(d.getElementById('procHead')), 'Proces');
+  const row = [...d.querySelectorAll('#events tr')].find((tr) => /b\.mkv/.test(text(tr)));
+  assert.equal(text(row.querySelector('td.proc')), 'plex › Plex Media Scan');
+  assert.equal(row.querySelector('td.proc img.proc-ic').getAttribute('src'), 'data/icons/plex.png');
+  assert.doesNotMatch(text(row.querySelector('td.cause')), /plex/);                 // not twice
+  const standby = [...d.querySelectorAll('#events tr')].filter((tr) => /Naar standby/.test(text(tr)));
+  assert.ok(standby.length && standby.every((tr) => text(tr.querySelector('td.proc')) === ''));
+  // an icon that does not load is removed, the name stays
+  const img = row.querySelector('img.proc-ic');
+  img.dispatchEvent(new dom.window.Event('error'));
+  assert.equal(row.querySelector('img.proc-ic'), null);
+  assert.equal(text(row.querySelector('td.proc')), 'plex › Plex Media Scan');
+  dom.window.close();
+  // without containers.json (older server): the name without an icon
+  const plain = await load(DOCK);
+  assert.equal(plain.window.document.querySelectorAll('#events .proc-ic').length, 0);
+  const prow = [...plain.window.document.querySelectorAll('#events tr')].find((tr) => /b\.mkv/.test(text(tr)));
+  assert.equal(text(prow.querySelector('td.proc')), 'plex › Plex Media Scan');
+  plain.window.close();
+  // without file activity there is no Process column
+  const bare = await load(served({ [today]: [`${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`, `${ep(120)},spin,sdd,active`, `${ep(60)},spin,sdd,standby`] }));
+  const bd = bare.window.document;
+  assert.equal(bd.getElementById('procHead').hidden, true);
+  assert.equal(bd.querySelectorAll('#events td.proc').length, 0);
+  assert.equal(bd.querySelector('#events tr').children.length, 4);
+  bare.window.close();
+});
+
 test('the process inside a container shows in the feed and the profile', async () => {
   const dom = await load(DOCK);
   const d = dom.window.document;
@@ -1596,8 +1632,8 @@ test('a source name in the live feed and in Events opens its profile too', async
   assert.ok(d.getElementById('profile').hasAttribute('open'));
   assert.equal(text(d.getElementById('profileTitle')), 'plex');
   d.getElementById('profileDone').click();
-  // events: the source label at the cause, keeping its label look
-  const badge = d.querySelector('#events td.cause .srcbtn.who.container');
+  // events: the source label in the Process column, keeping its label look
+  const badge = d.querySelector('#events td.proc .srcbtn.who.container');
   assert.equal(badge.dataset.src, 'container|plex');
   badge.click();
   assert.ok(d.getElementById('profile').hasAttribute('open'));

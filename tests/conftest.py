@@ -34,6 +34,7 @@ def sd(tmp_path, monkeypatch):
     monkeypatch.setenv("TZ", "Europe/Amsterdam")      # fixed days and day start for the tests
     time.tzset()
     monkeypatch.setattr(spindash, "EMHTTP", str(tmp_path / "emhttp"))
+    monkeypatch.setattr(spindash, "DOCKER_ICONS", str(tmp_path / "emhttp" / "plugins" / "dynamix.docker.manager" / "images"))
     monkeypatch.setattr(spindash, "SYS_BLOCK", str(tmp_path / "sys"))
     monkeypatch.setattr(spindash, "PROC", str(tmp_path / "proc"))
     monkeypatch.setattr(spindash, "MOUNTS_FILE", str(tmp_path / "mounts"))
