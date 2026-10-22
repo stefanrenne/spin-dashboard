@@ -188,6 +188,7 @@ dialog.settings::backdrop{background:rgba(10,15,20,.45)}
 td.cause{max-width:360px;overflow:hidden;text-overflow:ellipsis}
 td.proc{max-width:220px}
 .ctr-ic{width:16px;height:16px;border-radius:3px;vertical-align:-3px;margin-right:5px;object-fit:contain}
+.who .ctr-ic{width:14px;height:14px;margin-right:4px}
 .ctr-ic.big{width:24px;height:24px;border-radius:5px;vertical-align:-4px;margin-right:4px}
 td.disks{white-space:normal;min-width:6rem;max-width:14rem}
 tr.has-sess{cursor:pointer}
@@ -1529,16 +1530,21 @@ function iconFor(name){
   const c = containers && !containers.failed && (containers.containers || []).find(x => x.name === name);
   return c && c.icon ? c.icon : '';
 }
-// the icon of a container as an image, or ''; one that does not load is removed (see the error listener)
+// the icon of a container as an image, or ''; one that does not load is removed (see the error listener).
+// Everywhere a container name is shown it comes with its icon: whoIcon for a who line, srcIcon for a source.
 function ctrIcon(name, big = false){
   const icon = iconFor(name);
   return icon ? `<img class="ctr-ic${big ? ' big' : ''}" src="${esc(icon)}" alt="" loading="lazy">` : '';
 }
+const whoIcon = w => w && w.kind === 'container' ? ctrIcon(w.name) : '';
+// a source: its container, or for a Compose project the first member that has an icon
+const srcIcon = (s, big = false) => s.kind !== 'container' ? ''
+  : s.project ? [...s.members].sort().map(n => ctrIcon(n, big)).find(Boolean) || '' : ctrIcon(s.label, big);
 function procCell(first){
   if (!first) return `<span class="muted">—</span>`;
   const w = whoFor(first);
   if (!w) return `<span class="who none">${esc(t('kind_none'))}</span>`;
-  const img = w.kind === 'container' ? ctrIcon(w.name) : '';
+  const img = whoIcon(w);
   const label = whoLabel(w) + procSuffix(w), title = `${t('kind_' + w.kind)}, pid ${w.pid}`;
   return srcLink(w, img + esc(label), `who ${w.kind}`, title)
     || `<span class="who ${esc(w.kind)}" title="${esc(title)}">${img}${esc(label)}</span>`;
@@ -1610,7 +1616,8 @@ const whoLabel = w => w.name.replace(/ \(al gestopt\)$/, ' ' + t('stopped'));
 function whoBadge(w){
   if (!w) return `<span class="who none">${esc(t('kind_none'))}</span>`;
   const title = `${t('kind_' + w.kind)}, pid ${w.pid}`;
-  return srcLink(w, esc(whoLabel(w)), `who ${w.kind}`, title) || `<span class="who ${esc(w.kind)}" title="${esc(title)}">${esc(whoLabel(w))}</span>`;
+  const inner = whoIcon(w) + esc(whoLabel(w));
+  return srcLink(w, inner, `who ${w.kind}`, title) || `<span class="who ${esc(w.kind)}" title="${esc(title)}">${inner}</span>`;
 }
 // Source name as a button to the profile, when that source occurs in the selected period; otherwise null
 function srcLink(w, inner, cls = '', title = ''){
@@ -2033,7 +2040,7 @@ function sourceIndex(a, b, devs, wakeups, hide = null){
   return [...per.values()];
 }
 // Name of a source: the kind as a dot and as text for screen readers, the name opens the profile
-const srcName = s => `<span class="kind-dot ${esc(s.kind)}" title="${esc(t('kind_' + s.kind))}"></span><span class="sr">${esc(t('kind_' + s.kind))}: </span><button type="button" class="srcbtn cn" data-src="${esc(s.k)}" title="${esc(s.project ? t('stackOf', {name: s.label, list: [...s.members].sort().join(', ')}) : t('profOpen', {name: s.label}))}">${esc(s.label)}</button>${s.project ? ` <span class="stack-tag">${esc(t('stackTag'))}</span>` : ''}${infoBtn(s.note)}`;
+const srcName = s => `${srcIcon(s) || `<span class="kind-dot ${esc(s.kind)}" title="${esc(t('kind_' + s.kind))}"></span>`}<span class="sr">${esc(t('kind_' + s.kind))}: </span><button type="button" class="srcbtn cn" data-src="${esc(s.k)}" title="${esc(s.project ? t('stackOf', {name: s.label, list: [...s.members].sort().join(', ')}) : t('profOpen', {name: s.label}))}">${esc(s.label)}</button>${s.project ? ` <span class="stack-tag">${esc(t('stackTag'))}</span>` : ''}${infoBtn(s.note)}`;
 // the lanes of a source as buttons to their detail page (at most three, then "+n")
 const laneList = s => {
   const ls = Object.keys(s.lanes).sort(devOrder).map(d => drvButton(d, nameOf(d)));
@@ -2310,13 +2317,13 @@ function profilePaths(s){
   if (!mine.length) return '';
   const color = locColors();
   return `<div class="actlist prof-paths"><h4>${esc(t('profPaths'))}</h4>${mine.map(c =>
-    (s.project ? `<div class="prof-ctr">${esc(c.name)}</div>` : '') + mountLines(c, color)).join('')}</div>`;
+    (s.project ? `<div class="prof-ctr">${ctrIcon(c.name)}${esc(c.name)}</div>` : '') + mountLines(c, color)).join('')}</div>`;
 }
 function lifeHtml(s, a, b){
   const list = (data.ctr || []).filter(c => c.t >= a && c.t <= b).filter(ctrOf(s, projectMap()));
   if (!list.length) return `<p class="muted">${esc(t('profLifeNone'))}</p>`;
   return '<ul class="life">' + list.slice(-8).reverse().map(c =>
-    `<li><span class="life-ev ${esc(c.ev)}">${esc(t('ctr_' + c.ev))}</span>${s.project ? ` ${esc(c.name)}` : ''} <span class="muted">${esc(fmtFull.format(c.t))}${c.ev === 'die' && c.code ? ' · ' + esc(t('exitCode', {code: c.code})) : ''}</span></li>`).join('') + '</ul>';
+    `<li><span class="life-ev ${esc(c.ev)}">${esc(t('ctr_' + c.ev))}</span>${s.project ? ` ${ctrIcon(c.name)}${esc(c.name)}` : ''} <span class="muted">${esc(fmtFull.format(c.t))}${c.ev === 'die' && c.code ? ' · ' + esc(t('exitCode', {code: c.code})) : ''}</span></li>`).join('') + '</ul>';
 }
 // One dialog for the overview, a source and a drive. Clicking through inside the dialog puts a
 // new view on top; "Back" takes it off. From outside the dialog a new stack starts.
@@ -2384,7 +2391,7 @@ function renderSourceView(k){
   const s = sourceFor(k);
   if (!s){ $('profileTitle').textContent = k.split('|')[1] || k; $('profileBody').innerHTML = `<p class="muted">${esc(t('actNone'))}</p>`; return; }
   // a container with an icon in Unraid shows that instead of the dot; a Compose project the icon of its first member that has one
-  const icon = s.kind !== 'container' ? '' : s.project ? [...s.members].sort().map(n => ctrIcon(n, true)).find(Boolean) || '' : ctrIcon(s.label, true);
+  const icon = srcIcon(s, true);
   $('profileTitle').innerHTML = `${icon || `<span class="kind-dot ${esc(s.kind)}"></span>`} ${esc(s.label)}${s.project ? ` <span class="stack-tag">${esc(t('stackTag'))}</span>` : ''}`;
   $('profileBody').innerHTML = profileHtml(s);
 }
@@ -2518,7 +2525,7 @@ function containersOverview(){
 // containers that map this pool or the array, with the folders after them
 function mappedBy(lane, pm = projectMap()){
   const ctrs = ((containers && containers.containers) || []).filter(c => c.mounts.some(mt => locsOf(mt.where).includes(lane)));
-  return ctrs.length ? ctrs.map(c => `<div class="map"><button type="button" class="srcbtn" data-src="${esc(sourceKey({kind: 'container', name: c.name}, pm))}">${esc(c.name)}</button>
+  return ctrs.length ? ctrs.map(c => `<div class="map"><button type="button" class="srcbtn" data-src="${esc(sourceKey({kind: 'container', name: c.name}, pm))}">${ctrIcon(c.name)}${esc(c.name)}</button>
       <span class="muted">${esc([...new Set(c.mounts.filter(mt => locsOf(mt.where).includes(lane)).map(mt => mt.source))].join(', '))}</span></div>`).join('')
     : `<p class="muted">${esc(t(containers && containers.docker ? 'drvNoContainers' : 'mountsNoDocker'))}</p>`;
 }
@@ -2583,13 +2590,14 @@ function renderDriveView(key){
     return top.map(([k, c]) => actRow(k, c, mx, cls)).join('') || `<p class="muted">${esc(t('actNone'))}</p>`; };
   const whoRows = Object.entries(who).sort((p, q) => (q[1].r + q[1].wr) - (p[1].r + p[1].wr)).slice(0, 8);
   const whoMx = Math.max(1, ...whoRows.map(([, o]) => o.r + o.wr));
-  const whoHtml = whoRows.map(([k, o]) => `<div class="cause-row"><span class="cause-name">${srcLink(o.w, esc(k.split('|')[1]), 'cn') || `<span class="cn">${esc(k.split('|')[1])}</span>`}</span>
-      <span class="cause-bar"><i style="width:${(o.r + o.wr) / whoMx * 100}%"></i></span><b title="${esc(t('srcLine', {r: o.r, w: o.wr}))}">${o.r + o.wr}</b></div>`).join('') || `<p class="muted">${esc(t('actNone'))}</p>`;
+  const whoHtml = whoRows.map(([k, o]) => { const inner = whoIcon(o.w) + esc(k.split('|')[1]);
+    return `<div class="cause-row"><span class="cause-name">${srcLink(o.w, inner, 'cn') || `<span class="cn">${inner}</span>`}</span>
+      <span class="cause-bar"><i style="width:${(o.r + o.wr) / whoMx * 100}%"></i></span><b title="${esc(t('srcLine', {r: o.r, w: o.wr}))}">${o.r + o.wr}</b></div>`; }).join('') || `<p class="muted">${esc(t('actNone'))}</p>`;
   const ctrHtml = mappedBy(lane, pm);
   // which containers read and wrote the most bytes on these drives (cio lines)
   const onDevs = new Set(devs), byCtr = cioSum(a, b, x => x.name, x => onDevs.has(x.dev));
   const cioHtml = Object.keys(byCtr).length ? `<div class="actlist cio-ctrs"><h4>${esc(t('drvBytes'))}</h4>${cioRows(byCtr,
-    n => srcLink({kind: 'container', name: n}, esc(n), 'cn') || `<span class="cn">${esc(n)}</span>`)}<p class="muted cio-note">${esc(t('profBytesNote'))}</p></div>` : '';
+    n => srcLink({kind: 'container', name: n}, ctrIcon(n) + esc(n), 'cn') || `<span class="cn">${ctrIcon(n)}${esc(n)}</span>`)}<p class="muted cio-note">${esc(t('profBytesNote'))}</p></div>` : '';
   // on an SSD pool the file access is only recorded when it is switched on in Settings
   const noFiles = !hasHdd && !whoRows.length && !ssdWatch.includes(lane);
   $('profileBody').innerHTML = `<p class="muted prof-sub">${esc(fmtFull.format(a))} – ${esc(fmtFull.format(b))}${inGroup ? ` · <button type="button" class="drvbtn" data-drive="g:${esc(lane)}">${esc(groupLabel(lane))}</button>` : ''}</p>
@@ -2663,8 +2671,9 @@ function actDrives(a, b, devs){
 const topN = (obj, n) => Object.entries(obj).sort((p, q) => q[1] - p[1]).slice(0, n);
 function actRow(label, n, max, cls, w){
   const isFile = cls === 'muted';   // file rows get a hover overlay with the full path
-  const name = (!isFile && srcLink(w, esc(label), 'cn'))     // a process opens its profile
-    || `<span class="cn${cls ? ' ' + cls : ''}${isFile ? ' haspath' : ''}"${isFile ? ` tabindex="0" aria-label="${esc(label)}"` : ` title="${esc(label)}"`} data-path="${esc(label)}">${esc(label)}</span>`;
+  const inner = (isFile ? '' : whoIcon(w)) + esc(label);
+  const name = (!isFile && srcLink(w, inner, 'cn'))     // a process opens its profile
+    || `<span class="cn${cls ? ' ' + cls : ''}${isFile ? ' haspath' : ''}"${isFile ? ` tabindex="0" aria-label="${esc(label)}"` : ` title="${esc(label)}"`} data-path="${esc(label)}">${inner}</span>`;
   return `<div class="cause-row"><span class="cause-name">${name}</span>
     <span class="cause-bar"><i style="width:${n / max * 100}%"></i></span><b>${n}</b></div>`;
 }
@@ -2801,12 +2810,12 @@ function drawFeed(){
   }
   // show the share-relative path (folders + file); the full path is in the hover overlay
   el.innerHTML = items.map(({e, k, d, src, w, n, fresh}) => {
-    const link = srcLink(w, esc(w ? whoLabel(w) : ''));       // name to the profile, process name behind it
+    const link = srcLink(w, whoIcon(w) + esc(w ? whoLabel(w) : ''));       // name to the profile, process name behind it
     return `<li${fresh ? ' class="fresh"' : ''} data-k="${esc(k)}">
       <span class="dot ${d}"></span>
       <span class="fb ${d}" title="${esc(t(d === 'w' ? 'rwW' : 'rwR'))}">${d.toUpperCase()}</span>
       <span class="fp haspath" tabindex="0" aria-label="${esc(e.path)}" data-path="${esc(e.path)}">${esc(relPath(e))}</span>
-      <span class="fs">${link ? link + esc(procSuffix(w)) : esc(src)}</span>
+      <span class="fs">${link ? link + esc(procSuffix(w)) : whoIcon(w) + esc(src)}</span>
       <time>${n > 1 ? `<span class="fx" title="${esc(t('feedRepeat', {n}))}">×${n}</span> ` : ''}${esc(feedAgo(now, e.t))}</time></li>`;
   }).join('') || `<li class="muted">${esc(t('actNone'))}</li>`;
   $('feedNote').textContent = offset > 0 ? t('feedNote') : '';
@@ -2903,7 +2912,9 @@ function ctrBefore(at){
 }
 function ctrNote(at){
   const c = ctrBefore(at);
-  return c ? ` <span class="ctr-note">${esc(t('ctrBefore', {what: t('ctr_' + c.ev), name: c.name, ago: dur(at - c.t)}))}</span>` : '';
+  if (!c) return '';
+  const [pre, post] = t('ctrBefore', {what: t('ctr_' + c.ev), name: '\u0000', ago: dur(at - c.t)}).split('\u0000');
+  return ` <span class="ctr-note">${esc(pre)}${ctrIcon(c.name)}${esc(c.name)}${esc(post || '')}</span>`;
 }
 function groupCause(items){
   const cs = items.map(r => ({dev:r.dev, c:causeOf(r.dev, r.t)})).filter(x => x.c);
@@ -2964,7 +2975,11 @@ function renderEvents(a, b){
 }
 
 const expanded = new Set();
-const relPath = e => '/' + partsOf(e.path).slice(2).join('/') + (isDir(e) ? '/' : '');
+// the path within its pool or share; the root of a pool itself (read by the webGUI, Cache Dirs) by name, not as "//"
+const relPath = e => {
+  const p = partsOf(e.path);
+  return p.length <= 2 ? t('rootOf', {pool: p[1] || e.disk}) : '/' + p.slice(2).join('/') + (isDir(e) ? '/' : '');
+};
 function sessionRow(files, t0){
   const shown = files.filter(e => !isDir(e) || isSmb(e));
   const list = shown.length ? shown : files;   // only folders seen? then show those

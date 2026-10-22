@@ -2,6 +2,12 @@
 
 Newest first.
 
+## 2026-10-22: container icons on every card
+- One helper (`whoIcon` for a who line, `srcIcon` for a source, `ctrIcon` for a name) puts the icon before every container name: Activity, Kept awake, Rhythm and Timeline per source (instead of the kind dot; other sources keep their dot), Reads and Writes per drive, Live activity, the Events session list and the restart note ("Restart of radarr 3 min before"), the drive page (sources, bytes per container, containers that map the pool) and the members of a Compose project on its page
+
+## 2026-10-22: the root of a pool as "//"
+- `relPath()` cut `/mnt/<pool>` off and added a slash for a folder, so the pool's root itself (read by the webGUI) became `//`; it now shows as "Root of <pool>", as the causes already did
+
 ## 2026-10-22: container icons on the detail page and from labels
 - The icon replaces the kind dot in the title of a container's page (a Compose project: the first member with an icon) and stands before the name in the overview
 - Every container on the own server with a `net.unraid.docker.icon` label already had a file in Unraid's icon folder (Unraid stores label icons too, once its Docker page has shown them); for one that has none yet the server fetches the label's URL itself (http(s), at most 1 MiB, only images, in memory)

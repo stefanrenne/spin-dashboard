@@ -113,6 +113,21 @@ test('the cause is the earliest file and shows the container name', async () => 
   dom.window.close();
 });
 
+test('the root folder of a pool shows by name in the session list, not as "//"', async () => {
+  const dom = await load(served({ [today]: [
+    `${ep(300)},disk,sdd,trunk`, `${ep(300)},state,sdd,standby`,
+    `${ep(121)},who,unraid,webGUI,5,geopend,/mnt/trunk/`,
+    `${ep(120)},spin,sdd,active`, `${ep(60)},spin,sdd,standby`,
+  ] }));
+  const d = dom.window.document;
+  d.querySelector('tr.has-sess .sess').click();
+  const files = [...d.querySelectorAll('.files li')].map(text);
+  assert.equal(files.length, 1);
+  assert.match(files[0], /webGUI Root van trunk$/);
+  assert.doesNotMatch(files[0], /\/\//);
+  dom.window.close();
+});
+
 test('session list collapses SMB access to one entry per share', async () => {
   const dom = await load(POOL);
   const d = dom.window.document;
@@ -1250,6 +1265,34 @@ test('with every pool unchecked the source cards are empty', async () => {
   dom.window.close();
 });
 
+test('every card that names a container shows its icon', async () => {
+  const containers = { docker: true, containers: [
+    { name: 'plex', state: 'running', icon: 'data/icons/plex.png', mounts: [] },
+    { name: 'sonarr', state: 'running', icon: 'data/icons/sonarr.png', mounts: [] },
+    { name: 'radarr', state: 'running', icon: 'data/icons/radarr.png', mounts: [] },
+  ] };
+  const dom = await load({ ...DOCK, 'containers.json': JSON.stringify(containers) });
+  const d = dom.window.document;
+  const icons = (sel) => [...d.querySelectorAll(`${sel} img.ctr-ic`)].map((i) => i.getAttribute('src').replace(/^data\/icons\/|\.png$/g, ''));
+  assert.deepEqual(icons('#sources').sort(), ['plex', 'sonarr']);           // Activity per source
+  assert.deepEqual(icons('#rhythm').sort(), ['plex', 'sonarr']);
+  assert.deepEqual(icons('#srcLaneList').sort(), ['plex', 'sonarr']);
+  assert.ok(icons('#awake').includes('plex'));
+  const plexRow = [...d.querySelectorAll('#sources .src')].find((x) => /plex/.test(text(x)));
+  assert.equal(plexRow.querySelector('.kind-dot'), null);                   // the icon replaces the dot
+  assert.ok([...d.querySelectorAll('#sources .src')].some((x) => x.querySelector('.kind-dot')));   // others keep theirs
+  assert.deepEqual(icons('[data-card="actR:trunk"]'), ['plex']);            // Reads per drive
+  assert.deepEqual(icons('[data-card="actW:trunk"]'), ['sonarr']);
+  assert.ok(icons('#feed').includes('plex') && icons('#feed').includes('sonarr'));
+  assert.ok(icons('#events td.proc').includes('plex'));
+  // the session list and the drive page
+  d.querySelector('tr.has-sess .sess').click();
+  assert.ok(icons('.files').includes('plex'));
+  d.querySelector('#dash .drvbtn').click();
+  assert.ok(icons('#profileBody').length > 0);
+  dom.window.close();
+});
+
 test('the icon of a container shows on its page and in the overview, the dot without one', async () => {
   const containers = { docker: true, containers: [
     { name: 'plex', state: 'running', icon: 'data/icons/plex.png', mounts: [] },
@@ -1354,6 +1397,13 @@ test('a container restart just before a spin-up is named in the events table', a
   const up = rows(dom.window.document).find((x) => /Opgespind/.test(x));
   assert.match(up, /Geen bestandsactiviteit gezien Herstart van radarr 3 min eerder/);
   dom.window.close();
+  // with its icon, when Unraid has one
+  const containers = { docker: true, containers: [{ name: 'radarr', state: 'running', icon: 'data/icons/radarr.png', mounts: [] }] };
+  const withIcon = await load({ ...NEAR, 'containers.json': JSON.stringify(containers) });
+  const note = withIcon.window.document.querySelector('#events .ctr-note');
+  assert.equal(note.querySelector('img.ctr-ic').getAttribute('src'), 'data/icons/radarr.png');
+  assert.equal(text(note), 'Herstart van radarr 3 min eerder');
+  withIcon.window.close();
 });
 
 test('a share with a second pool as secondary storage shows both pools, not the array', async () => {
