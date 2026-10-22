@@ -1380,7 +1380,17 @@ const rwBadge = e => {
   return d ? `<span class="rw ${d}" title="${esc(t(d === 'w' ? 'rwW' : 'rwR'))}">${d.toUpperCase()}</span>` : '';
 };
 // Grouping: /mnt/pool/Media/Series/x.mkv -> Media/Series, /mnt/pool/ -> "Root of pool"
-const partsOf = path => path.split('/').filter(Boolean);
+// The parts of a path, split once per distinct path: the same paths come back tens of thousands of times.
+// Callers only read the array (slice, join), never change it.
+const PARTS = new Map();
+function partsOf(path){
+  let p = PARTS.get(path);
+  if (!p){
+    if (PARTS.size > 200000) PARTS.clear();
+    PARTS.set(path, p = path.split('/').filter(Boolean));
+  }
+  return p;
+}
 const isDir = e => /ISDIR/.test(e.ev);
 const isSmb = e => /SMB/.test(e.ev);
 const isRoot = e => partsOf(e.path).length <= 2;
@@ -1444,6 +1454,16 @@ function devMatcher(dev){
   const base = /^disk\d+$/.test(name) || name.startsWith('disks/') ? name : name.replace(/\d+$/, '');
   return {parity, test: e => parity ? WRITES.test(e.ev) : (e.disk === name || e.disk === base)};
 }
+// Which of `devs` an event belongs to, parity left out (its writes count for the real drive). Without parity a
+// matcher only looks at the drive name, so the answer is looked up once per name.
+function laneFinder(devs){
+  const ms = devs.map(d => [d, matcherFor(d)]).filter(([, mm]) => !mm.parity), memo = new Map();
+  return e => {
+    let d = memo.get(e.disk);
+    if (d === undefined) memo.set(e.disk, d = (ms.find(([, mm]) => mm.test(e)) || [])[0] || null);
+    return d;
+  };
+}
 // A free set of drives (detail page), with the same rule as a group: parity only counts without data drives
 function devsMatcher(devs){
   const ms = devs.map(devMatcher), own = ms.filter(m => !m.parity), use = own.length ? own : ms;
@@ -1493,7 +1513,7 @@ function causeHtml(c){
 }
 
 /* ---------- who: the source of an access (who lines) ---------- */
-const normPath = p => p.replace(/\/+$/, '');
+const normPath = p => p.endsWith('/') ? p.replace(/\/+$/, '') : p;
 // key for the who index: SMB/NFS lines apply to the whole share
 const whoKey = w => normPath(isShareUser(w) ? (shareRootOf(w.path) || w.path) : w.path);
 // Two indexes, every list sorted by time so a lookup can be binary (otherwise quadratic with lots of data):
@@ -1574,32 +1594,36 @@ function srcLink(w, inner, cls = '', title = ''){
 const OP_EV = {geopend:'OPEN', aangemaakt:'CREATE', verwijderd:'DELETE', verplaatst:'MOVED_TO', geschreven:'WRITE'};
 // who lines mark folders with a trailing slash; older lines did not yet,
 // for those: a last part without a dot, or the pool/share root itself, is a folder.
-function whoIsDir(path){
+function whoIsDir(path, p = partsOf(path)){
   if (path.endsWith('/')) return true;
-  const p = path.split('/').filter(Boolean);
   return p.length <= 3 || !p[p.length - 1].includes('.');
 }
 function mergeActivity(act, who){
-  const seen = new Set();
-  const key = (path, t) => normPath(path) + '|' + Math.round(t / 1000);
-  for (const e of act) seen.add(key(e.path, e.t));
+  // the same access is often in both files, or twice in the who lines; within 2 seconds it is the same one
+  const seen = new Set();                       // path|second of the activity lines (older versions only)
+  for (const e of act) seen.add(normPath(e.path) + '|' + Math.round(e.t / 1000));
+  const last = new Map();                       // per path the second of the previous who line kept: they come in time order
   const extra = [];
   for (const w of who){
-    // the same access is often in both files; within 2 seconds it is the same one
-    const s = Math.round(w.t / 1000);
-    let dup = false;
-    for (let d = -2; d <= 2 && !dup; d++) dup = seen.has(normPath(w.path) + '|' + (s + d));
-    if (dup) continue;
-    const dir = whoIsDir(w.path);
-    const parts = w.path.split('/').filter(Boolean);
+    const s = Math.round(w.t / 1000), np = normPath(w.path), l = last.get(np);
+    if (l !== undefined && Math.abs(s - l) <= 2) continue;
+    if (seen.size){
+      let dup = false;
+      for (let d = -2; d <= 2 && !dup; d++) dup = seen.has(np + '|' + (s + d));
+      if (dup) continue;
+    }
+    last.set(np, s);
+    const parts = partsOf(w.path), dir = whoIsDir(w.path, parts);
     const pool = parts[1] === 'disks' && parts[2] ? 'disks/' + parts[2] : parts[1] || '';   // Unassigned Devices: its own drive
     const ev = isShareUser(w) ? 'SMB' : (OP_EV[w.op] || 'OPEN');
     extra.push({t: w.t, disk: pool, ev: ev + (dir || ev === 'SMB' ? '+ISDIR' : ''),
                 path: ev === 'SMB' ? (shareRootOf(w.path) || w.path)
                     : dir && !w.path.endsWith('/') ? w.path + '/' : w.path});
-    seen.add(key(w.path, w.t));
   }
-  return act.concat(extra).sort((p,q) => p.t - q.t);
+  // usually already in time order (no activity lines, who lines as written): then no sort is needed
+  const out = act.length ? act.concat(extra) : extra;
+  for (let i = 1; i < out.length; i++) if (out[i].t < out[i - 1].t) return out.sort((p,q) => p.t - q.t);
+  return out;
 }
 
 /* ---------- range ---------- */
@@ -1941,13 +1965,13 @@ function sourceIndex(a, b, devs, wakeups, hide = null){
     get(u.cause && u.cause.first ? whoFor(u.cause.first) : null).ups++;
   }
   if (!hasAct()) return [...per.values()];
-  const ms = devs.map(d => [d, matcherFor(d)]).filter(([, mm]) => !mm.parity);
+  const laneOf = laneFinder(devs);
   for (let i = lowerBound(data.act, a); i < data.act.length && data.act[i].t <= b; i++){
     const e = data.act[i];
     if (hide && hide.has(actLane(e))) continue;
     const s = get(whoFor(e));
     const dir = (dirOf(e) || (WRITES.test(e.ev) ? 'w' : 'r')) === 'w' ? 'w' : 'r';
-    const lane = (ms.find(([, mm]) => mm.test(e)) || [])[0] || null;   // parity counts for the real drive
+    const lane = laneOf(e);                                              // parity counts for the real drive
     s[dir]++;
     if (lane) s.lanes[lane] = (s.lanes[lane] || 0) + 1;
     s.ev.push({t: e.t, dir, lane, e});
@@ -2583,10 +2607,10 @@ function renderRest(a, b){
 // as the spin-up causes), so also when there were no spin-ups at all.
 function actDrives(a, b, devs){
   if (!hasAct()) return [];
-  const perDev = {}, ms = devs.map(d => [d, matcherFor(d)]).filter(([, mm]) => !mm.parity);
+  const perDev = {}, laneOf = laneFinder(devs);
   for (let i = lowerBound(data.act, a); i < data.act.length && data.act[i].t <= b; i++){
     const e = data.act[i];
-    const m = (ms.find(([, mm]) => mm.test(e)) || [])[0];
+    const m = laneOf(e);
     if (!m) continue;                            // parity writes count for the real drive
     const d = perDev[m] || (perDev[m] = {dev: m, w: 0, r: 0, srcW: {}, srcR: {}, fileW: {}, fileR: {}, who: {}});
     const dir = dirOf(e) || (WRITES.test(e.ev) ? 'w' : 'r');
@@ -2670,7 +2694,16 @@ function poolFilter(id, key, onChange){
 }
 const actLane = e => laneKeyOfName(e.disk || '');
 // the pools with file activity, and for the source cards also the pools whose drives spin up
-const actLanes = () => hasAct() ? data.act.map(actLane) : [];
+let actLanesMemo = {act: null, keys: []};
+const actLanes = () => {
+  if (!hasAct()) return [];
+  if (actLanesMemo.act !== data.act){
+    const keys = new Set();
+    for (const e of data.act) keys.add(actLane(e));
+    actLanesMemo = {act: data.act, keys: [...keys]};
+  }
+  return actLanesMemo.keys;
+};
 const eventsFilter = poolFilter('eventsFilter', 'spindash.eventsHide', () => { const [a, b] = bounds(); renderEvents(a, b); });
 let srcCtx = null;
 const SRC_CARDS = [

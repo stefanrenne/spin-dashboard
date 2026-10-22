@@ -2267,6 +2267,27 @@ test('reads and writes per drive get a card per pool', async () => {
   dom.window.close();
 });
 
+test('the same access within 2 seconds counts once, also across the activity and who lines', async () => {
+  const t = ep(30);
+  const dom = await load(served({ [today]: [
+    `${ep(300)},disk,sdd,trunk,hdd`, `${ep(300)},state,sdd,standby`,
+    `${t},activity,trunk,OPEN,/mnt/trunk/Media/a.mkv`,
+    `${t + 1},who,container,plex,7,geopend,/mnt/trunk/Media/a.mkv`,       // the same open, seen twice
+    `${t + 20},who,container,plex,7,geopend,/mnt/trunk/Media/b.mkv`,
+    `${t + 21},who,container,plex,7,geopend,/mnt/trunk/Media/b.mkv`,      // the same open again
+    `${t + 25},who,container,plex,7,geopend,/mnt/trunk/Media/b.mkv`,      // a new one
+    `${t + 10},who,container,sonarr,8,geschreven,/mnt/trunk/appdata/s.db`, // out of order: still placed by time
+  ] }));
+  const d = dom.window.document;
+  const src = [...d.querySelectorAll('#sources .src')].map(text);
+  assert.ok(src.some((r) => /plex .* 3 gelezen · 0 geschreven/.test(r)), src.join('\n'));
+  assert.ok(src.some((r) => /sonarr .* 0 gelezen · 1 geschreven/.test(r)), src.join('\n'));
+  // the feed is newest first, so time order held after the merge
+  const files = [...d.querySelectorAll('#feed li')].map(text).map((x) => (x.match(/[ab]\.mkv|s\.db/) || [''])[0]);
+  assert.deepEqual(files.filter(Boolean), ['b.mkv', 's.db', 'a.mkv']);
+  dom.window.close();
+});
+
 test('activity, rhythm and timeline per source each have their own pool filter', async () => {
   const dom = await load(POOLS3);
   const d = dom.window.document, w = dom.window;

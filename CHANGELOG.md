@@ -13,6 +13,10 @@ What changed per version, for people who run Spin Dashboard. The detailed log of
 - Activity per source, Rhythm per source, Timeline per source and Events can be filtered per pool with checkboxes, each
   card with its own choice; Events no longer has the drive dropdown.
 
+### Changed
+- Faster with a lot of file activity: on a month of real data, loading 30 days takes about a third less time and
+  every redraw about a quarter less.
+
 ## [0.9.0] - 2026-10-21
 
 The first tagged version: everything up to now. Feature complete for a first release; the tests on a

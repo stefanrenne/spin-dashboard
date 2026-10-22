@@ -2,6 +2,11 @@
 
 Newest first.
 
+## 2026-10-22: faster processing in the browser (no database)
+- Measured on 25 days of the own server (25 MB, ~33,000 who lines a day): downloading (~0.1 s a day) and parsing the CSV (~30 ms for 30 days) cost little; the time goes to processing in the browser. A database would only help if the server computed the cards, so the CSV files stay
+- Paths are split once per distinct path (`partsOf`), `normPath` skips its regex for paths without a trailing slash, `mergeActivity` looks for duplicates per path instead of with five string keys per who line and only sorts when the lines are out of order, the pools with activity are found once per load, and the lane of an event is looked up once per drive name (`laneFinder`)
+- Result (median of 3, headless Chromium): first load 783 → 440 ms, switching to 30 days 1233 → 827 ms, a redraw of 30 days 432 → 328 ms, "All" 449 → 332 ms, 24 hours 181 → 137 ms. What is left when loading is mostly building ~800,000 event objects in `mergeActivity`
+
 ## 2026-10-21: reads and writes per pool, pool filters on more cards
 - Reads per drive and Writes per drive are a card per pool and the array (`actR:<key>`, `actW:<key>`), like the timeline: the pools whose drives spin plus the pools with file activity. A saved layout gets them where the single card stood, with its visibility and size
 - The pool checkboxes of Live activity are a reusable filter, now also on Activity per source, Rhythm per source, Timeline per source and Events (replacing the drive dropdown); each card keeps its own choice per browser (`spindash.srcHide`, `spindash.rhythmHide`, `spindash.srcLanesHide`, `spindash.eventsHide`). Kept awake per source is left as it was
