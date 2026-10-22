@@ -124,6 +124,7 @@ test('the root folder of a pool shows by name in the session list, not as "//"',
   const files = [...d.querySelectorAll('.files li')].map(text);
   assert.equal(files.length, 1);
   assert.match(files[0], /webGUI Root van trunk$/);
+  assert.equal(text(d.querySelector('tr.has-sess .sess')), '▾ 1 map');      // only a folder read: not "0 bestanden"
   assert.doesNotMatch(files[0], /\/\//);
   dom.window.close();
 });
@@ -1310,13 +1311,13 @@ test('where Docker keeps the containers shows for every container, on its page a
   const d = dom.window.document;
   d.getElementById('openInfo').click();
   const store = (n) => [...d.querySelectorAll(`#profileBody tr[data-ctr="${n}"] td:nth-child(3) .loc`)].map(text);
-  assert.deepEqual(store('wud'), ['frunk · Docker']);                         // no "–" any more
-  assert.deepEqual(store('plex'), ['trunk', 'frunk · Docker']);
+  assert.deepEqual(store('wud'), ['frunk']);                                 // no "–" any more
+  assert.deepEqual(store('plex'), ['trunk', 'frunk']);
   const tag = d.querySelector('#profileBody tr[data-ctr="wud"] .loc');
   assert.match(tag.getAttribute('title'), /Docker bewaart hier elke container.*\/mnt\/frunk\/appdata\/docker/);
   // the container page lists it under Paths
   d.querySelector('#profileBody tr[data-ctr="wud"] .srcbtn').click();
-  assert.match(text(d.querySelector('#profileBody .prof-paths')), /\/mnt\/frunk\/appdata\/docker frunk · Docker/);
+  assert.match(text(d.querySelector('#profileBody .prof-paths')), /\/mnt\/frunk\/appdata\/docker frunk$/);
   // the pool page says so
   d.getElementById('profileBack').click();
   d.querySelector('#profileBody tr[data-ctr="wud"] .loc').click();

@@ -2,6 +2,10 @@
 
 Newest first.
 
+## 2026-10-22: one tag per pool; "0 files"
+- "frunk" and "frunk · Docker" became one tag "frunk" per place in Stored on; when Docker's data-root is on it, its hover says so (and the pool page still does)
+- The session toggle in Events counted only files, so a spin-up where only folders were read (the webGUI listing a pool's root, btrfs) said "0 files"; it then counts the folders ("1 folder")
+
 ## 2026-10-22: where Docker keeps the containers; Events always filterable
 - wud, dockerproxy and autoheal map no folder under /mnt, so "Stored on" said "–", while their logs and config were written in `appdata/docker` on frunk. On the own server Docker's data-root `/var/lib/docker` is the folder `/appdata/docker` of frunk's btrfs filesystem (same device `0:44` as `/mnt/frunk` in the host's mountinfo). `containers.json` now gives `docker_root` (from `DockerRootDir` and `/proc/1/mountinfo`; ZFS datasets by their pool, `docker.img` through the loop device's backing file), and every container shows "frunk · Docker" in the overview and under Paths; the pool page says Docker keeps every container there
 - Events always shows the pool checkboxes, every pool and the array (also SSD pools without spin-ups), also when there is only one
