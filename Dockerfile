@@ -1,6 +1,6 @@
 # Spin Dashboard for Unraid
 # Debian trixie: fatrace >= 0.17 (filesystem-wide fanotify marks, also for ZFS datasets)
-FROM python:3.13-slim-trixie
+FROM python:3.15-slim-trixie
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends fatrace hdparm smartmontools \
